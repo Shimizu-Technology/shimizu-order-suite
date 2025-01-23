@@ -21,7 +21,6 @@ class SeatsController < ApplicationController
   def create
     seat_params = params.require(:seat).permit(
       :seat_section_id, :label, :position_x, :position_y, :capacity
-      # We omit :status because we don't use it anymore
     )
     seat = Seat.new(seat_params)
 
@@ -39,7 +38,6 @@ class SeatsController < ApplicationController
 
     update_params = params.require(:seat).permit(
       :label, :position_x, :position_y, :capacity
-      # omit :status
     )
     if seat.update(update_params)
       render json: seat

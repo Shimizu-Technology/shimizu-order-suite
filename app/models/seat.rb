@@ -1,3 +1,4 @@
+# app/models/seat.rb
 class Seat < ApplicationRecord
   belongs_to :seat_section
 
@@ -7,7 +8,10 @@ class Seat < ApplicationRecord
 
   validates :capacity, numericality: { greater_than: 0 }
 
-  # Optional debug callbacks (just removing references to status)
+  # Staff can rename the seat by updating the :label field
+  # Example: seat.update(label: "A1")
+
+  # Debug callbacks (kept as is)
   before_validation :debug_before_validation
   after_validation :debug_after_validation
   after_create :debug_after_create

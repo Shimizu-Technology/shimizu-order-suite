@@ -72,17 +72,21 @@ class ReservationsController < ApplicationController
     end
 
     # Copy the rest of the fields
-    @reservation.restaurant_id     = reservation_params[:restaurant_id]
-    @reservation.party_size       = reservation_params[:party_size]
-    @reservation.contact_name     = reservation_params[:contact_name]
-    @reservation.contact_phone    = reservation_params[:contact_phone]
-    @reservation.contact_email    = reservation_params[:contact_email]
-    @reservation.deposit_amount   = reservation_params[:deposit_amount]
+    @reservation.restaurant_id      = reservation_params[:restaurant_id]
+    @reservation.party_size        = reservation_params[:party_size]
+    @reservation.contact_name      = reservation_params[:contact_name]
+    @reservation.contact_phone     = reservation_params[:contact_phone]
+    @reservation.contact_email     = reservation_params[:contact_email]
+    @reservation.deposit_amount    = reservation_params[:deposit_amount]
     @reservation.reservation_source = reservation_params[:reservation_source]
-    @reservation.special_requests = reservation_params[:special_requests]
-    @reservation.status           = reservation_params[:status]
+    @reservation.special_requests  = reservation_params[:special_requests]
+    @reservation.status            = reservation_params[:status]
 
-    # If current_user is staff/admin, fix the restaurant_id to match them
+    # NEW: seat_preferences
+    # If included in params, it's an array of arrays or array of strings
+    @reservation.seat_preferences  = reservation_params[:seat_preferences] if reservation_params[:seat_preferences]
+
+    # If current_user is staff/admin, fix the restaurant_id
     if current_user && current_user.role != 'super_admin'
       @reservation.restaurant_id = current_user.restaurant_id
     else
@@ -136,6 +140,8 @@ class ReservationsController < ApplicationController
     end
 
     reservation = Reservation.find(params[:id])
+
+    # We'll handle seat_preferences separately or allow the strong params to do so
     if reservation.update(reservation_params)
       render json: reservation
     else
@@ -156,6 +162,7 @@ class ReservationsController < ApplicationController
   private
 
   def reservation_params
+    # The key addition: seat_preferences: [] to permit arrays
     params.require(:reservation).permit(
       :restaurant_id,
       :start_time,
@@ -167,22 +174,21 @@ class ReservationsController < ApplicationController
       :deposit_amount,
       :reservation_source,
       :special_requests,
-      :status
+      :status,
+      seat_preferences: []
     )
   end
 
   # Returns true if adding `new_party_size` at [start_dt..end_dt)
   # would exceed the restaurant’s seat capacity.
   def exceeds_capacity?(restaurant, start_dt, end_dt, new_party_size)
-    # 1) Count total seats
     total_seats = restaurant.current_seats.count
     return true if total_seats.zero?
 
-    # 2) Overlapping reservations
     overlapping = restaurant
-      .reservations
-      .where.not(status: %w[canceled finished no_show])
-      .where("start_time < ? AND end_time > ?", end_dt, start_dt)
+                    .reservations
+                    .where.not(status: %w[canceled finished no_show])
+                    .where("start_time < ? AND end_time > ?", end_dt, start_dt)
 
     already_booked = overlapping.sum(:party_size)
     (already_booked + new_party_size) > total_seats
