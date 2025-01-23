@@ -1,0 +1,8 @@
+<!-- app/views/reservations/confirmation.html.erb -->
+<h1>Reservation Confirmed!</h1>
+<p>Thanks <%= @reservation.contact_name %>, your reservation is confirmed for:</p>
+<ul>
+  <li><strong>Date/Time:</strong> <%= @reservation.start_time.strftime('%B %d, %Y at %I:%M %p') %></li>
+  <li><strong>Party Size:</strong> <%= @reservation.party_size %></li>
+</ul>
+<p>We look forward to seeing you.</p>

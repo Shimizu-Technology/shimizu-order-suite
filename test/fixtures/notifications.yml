@@ -1,0 +1,15 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  reservation: one
+  notification_type: MyString
+  delivery_method: MyString
+  scheduled_for: 2025-01-14 18:05:46
+  status: MyString
+
+two:
+  reservation: two
+  notification_type: MyString
+  delivery_method: MyString
+  scheduled_for: 2025-01-14 18:05:46
+  status: MyString

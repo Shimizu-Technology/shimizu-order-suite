@@ -1,0 +1,12 @@
+<!-- app/views/reservation_mailer/booking_confirmation.html.erb -->
+<h1>Reservation Confirmation</h1>
+<p>Hi <%= @reservation.contact_name %>,</p>
+<p>
+  Thank you for booking a reservation at Rotary Sushi. Here are your details:
+</p>
+<ul>
+  <li>Reservation Date/Time: <%= @reservation.start_time.strftime("%B %d, %Y at %I:%M %p") %></li>
+  <li>Party Size: <%= @reservation.party_size %></li>
+  <li>Restaurant: <%= @reservation.restaurant.name if @reservation.restaurant %></li>
+</ul>
+<p>We look forward to serving you!</p>

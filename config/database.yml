@@ -1,0 +1,23 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  # For local dev, you might not need username/password if you use peer auth
+  username: <%= ENV["POSTGRES_USER"] %>
+  password: <%= ENV["POSTGRES_PASSWORD"] %>
+  host: <%= ENV["POSTGRES_HOST"] || "localhost" %>
+  pool: 5
+
+development:
+  <<: *default
+  database: rotary_reservations_dev
+
+test:
+  <<: *default
+  database: rotary_reservations_test
+
+production:
+  adapter: postgresql
+  encoding: unicode
+  url: <%= ENV["DATABASE_URL"] %>
+  pool: 5
+

@@ -1,0 +1,13 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  reservation: one
+  seat: one
+  allocated_at: 2025-01-14 18:05:07
+  released_at: 2025-01-14 18:05:07
+
+two:
+  reservation: two
+  seat: two
+  allocated_at: 2025-01-14 18:05:07
+  released_at: 2025-01-14 18:05:07

@@ -1,0 +1,27 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  restaurant: one
+  start_time: 2025-01-14 18:04:43
+  end_time: 2025-01-14 18:04:43
+  party_size: 1
+  contact_name: MyString
+  contact_phone: MyString
+  contact_email: MyString
+  deposit_amount: 9.99
+  reservation_source: MyString
+  special_requests: MyText
+  status: MyString
+
+two:
+  restaurant: two
+  start_time: 2025-01-14 18:04:43
+  end_time: 2025-01-14 18:04:43
+  party_size: 1
+  contact_name: MyString
+  contact_phone: MyString
+  contact_email: MyString
+  deposit_amount: 9.99
+  reservation_source: MyString
+  special_requests: MyText
+  status: MyString

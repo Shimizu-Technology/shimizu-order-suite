@@ -1,0 +1,15 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  label: MyString
+  position_x: 1
+  position_y: 1
+  status: MyString
+  seat_section: one
+
+two:
+  label: MyString
+  position_x: 1
+  position_y: 1
+  status: MyString
+  seat_section: two
