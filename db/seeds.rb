@@ -81,12 +81,11 @@ bar_section = SeatSection.find_or_create_by!(
   orientation: "vertical"
 )
 
-# We want 10 seats total, spaced 60px apart vertically
+# We want 10 seats total, spaced 70px apart vertically
 10.times do |i|
   seat_label = "Seat ##{i + 1}"
   Seat.find_or_create_by!(seat_section_id: bar_section.id, label: seat_label) do |seat|
     seat.position_x = 0
-    # Increase this to 80 so each seat is 80px apart
     seat.position_y = 70 * i
     seat.capacity   = 1
   end
@@ -124,19 +123,56 @@ puts "Updated Layout##{main_layout.id} sections_data with 1 seat section + 10 se
 # ------------------------------------------------------------------------------
 puts "Creating sample Reservations..."
 
-# For example: 17:00 is 5pm Guam. We'll create some timeslots “today” + tomorrow.
-today_17     = Time.zone.now.change(hour: 17, min: 0) # e.g. "today at 5 pm local"
+today_17     = Time.zone.now.change(hour: 17, min: 0)
 today_18     = today_17 + 1.hour
 today_19     = today_17 + 2.hours
 tomorrow_17  = today_17 + 1.day
 
 reservation_data = [
-  { name: "Leon Shimizu",    start_time: today_17,    party_size: 2, status: "booked" },
-  { name: "Kami Shimizu",    start_time: today_17,    party_size: 3, status: "booked" },
-  { name: "Group of 2",      start_time: today_18,    party_size: 2, status: "booked" },
-  { name: "Late Night Duo",  start_time: today_19,    party_size: 2, status: "booked" },
-  { name: "Tomorrow Group",  start_time: tomorrow_17, party_size: 4, status: "booked" },
-  { name: "Canceled Ex.",    start_time: tomorrow_17, party_size: 2, status: "canceled" },
+  {
+    name:        "Leon Shimizu",
+    start_time:  today_17,
+    party_size:  2,
+    status:      "booked",
+    # EXAMPLE seat_preferences for demonstration:
+    # up to 3 sets (UI enforces 3, backend can handle more)
+    preferences: [["Seat #1", "Seat #2"], ["Seat #3"]]
+  },
+  {
+    name:        "Kami Shimizu",
+    start_time:  today_17,
+    party_size:  3,
+    status:      "booked",
+    preferences: []
+  },
+  {
+    name:        "Group of 2",
+    start_time:  today_18,
+    party_size:  2,
+    status:      "booked",
+    preferences: [["Seat #4", "Seat #5"]]
+  },
+  {
+    name:        "Late Night Duo",
+    start_time:  today_19,
+    party_size:  2,
+    status:      "booked",
+    preferences: []
+  },
+  {
+    name:        "Tomorrow Group",
+    start_time:  tomorrow_17,
+    party_size:  4,
+    status:      "booked",
+    preferences: [["Seat #6", "Seat #7"], ["Seat #8"]]
+  },
+  {
+    name:        "Canceled Ex.",
+    start_time:  tomorrow_17,
+    party_size:  2,
+    status:      "canceled",
+    preferences: []
+  },
 ]
 
 reservation_data.each do |res_data|
@@ -145,12 +181,18 @@ reservation_data.each do |res_data|
     contact_name:  res_data[:name],
     start_time:    res_data[:start_time]
   ) do |res|
-    res.party_size    = res_data[:party_size]
-    res.contact_phone = "671-#{rand(100..999)}-#{rand(1000..9999)}"
-    res.contact_email = "#{res_data[:name].parameterize}@example.com"
-    res.status        = res_data[:status]
-    # end_time = start_time + 60 minutes
-    res.end_time      = res_data[:start_time] + 60.minutes
+    res.party_size       = res_data[:party_size]
+    res.contact_phone    = "671-#{rand(100..999)}-#{rand(1000..9999)}"
+    res.contact_email    = "#{res_data[:name].parameterize}@example.com"
+    res.status           = res_data[:status]
+    res.end_time         = res_data[:start_time] + 60.minutes
+    # seat_preferences is new
+    if res_data[:preferences].present?
+      res.seat_preferences = res_data[:preferences]
+    else
+      # default to empty array
+      res.seat_preferences = []
+    end
   end
 end
 puts "Reservations seeded."

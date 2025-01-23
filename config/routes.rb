@@ -6,7 +6,13 @@ Rails.application.routes.draw do
   # Standard RESTful
   resources :restaurants, only: [:index, :show, :create, :update, :destroy]
   resources :seat_sections, only: [:index, :show, :create, :update, :destroy]
-  resources :seats, only: [:index, :show, :create, :update, :destroy]
+
+  resources :seats, only: [:index, :show, :create, :update, :destroy] do
+    collection do
+      post :bulk_update
+    end
+  end
+
   resources :reservations, only: [:index, :show, :create, :update, :destroy]
   resources :waitlist_entries, only: [:index, :show, :create, :update, :destroy]
 
