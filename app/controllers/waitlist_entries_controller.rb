@@ -1,5 +1,4 @@
 # app/controllers/waitlist_entries_controller.rb
-
 class WaitlistEntriesController < ApplicationController
   before_action :authorize_request
 
@@ -36,7 +35,24 @@ class WaitlistEntriesController < ApplicationController
     end
 
     waitlist = scope.all
-    render json: waitlist
+
+    ############################
+    ## ADDED/CHANGED
+    render json: waitlist.as_json(
+      only: [
+        :id,
+        :restaurant_id,
+        :contact_name,
+        :party_size,
+        :check_in_time,
+        :status,
+        :contact_phone,
+        :created_at,
+        :updated_at
+      ],
+      methods: :seat_labels
+    )
+    ############################
   end
 
   def show
@@ -45,7 +61,24 @@ class WaitlistEntriesController < ApplicationController
     end
 
     entry = WaitlistEntry.find(params[:id])
-    render json: entry
+
+    ############################
+    ## ADDED/CHANGED
+    render json: entry.as_json(
+      only: [
+        :id,
+        :restaurant_id,
+        :contact_name,
+        :party_size,
+        :check_in_time,
+        :status,
+        :contact_phone,
+        :created_at,
+        :updated_at
+      ],
+      methods: :seat_labels
+    )
+    ############################
   end
 
   def create

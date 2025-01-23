@@ -1,5 +1,4 @@
 # app/controllers/reservations_controller.rb
-
 class ReservationsController < ApplicationController
   before_action :authorize_request, except: [:create]
 
@@ -37,7 +36,30 @@ class ReservationsController < ApplicationController
     end
 
     reservations = scope.all
-    render json: reservations
+
+    ############################
+    ## ADDED/CHANGED
+    ## Render as_json including seat_labels
+    render json: reservations.as_json(
+      only: [
+        :id,
+        :restaurant_id,
+        :start_time,
+        :end_time,
+        :party_size,
+        :contact_name,
+        :contact_phone,
+        :contact_email,
+        :deposit_amount,
+        :reservation_source,
+        :special_requests,
+        :status,
+        :created_at,
+        :updated_at
+      ],
+      methods: :seat_labels
+    )
+    ############################
   end
 
   def show
@@ -46,7 +68,29 @@ class ReservationsController < ApplicationController
     end
 
     reservation = Reservation.find(params[:id])
-    render json: reservation
+
+    ############################
+    ## ADDED/CHANGED
+    render json: reservation.as_json(
+      only: [
+        :id,
+        :restaurant_id,
+        :start_time,
+        :end_time,
+        :party_size,
+        :contact_name,
+        :contact_phone,
+        :contact_email,
+        :deposit_amount,
+        :reservation_source,
+        :special_requests,
+        :status,
+        :created_at,
+        :updated_at
+      ],
+      methods: :seat_labels
+    )
+    ############################
   end
 
   # CREATE = public

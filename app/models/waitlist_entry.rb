@@ -11,4 +11,13 @@ class WaitlistEntry < ApplicationRecord
   # Add validations as desired:
   # validates :contact_name, presence: true
   # validates :party_size, numericality: { greater_than: 0 }, allow_nil: true
+
+  ############################
+  def seat_labels
+    seat_allocations
+      .where(released_at: nil)
+      .includes(:seat)
+      .map { |alloc| alloc.seat.label }
+  end
+  ############################
 end

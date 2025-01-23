@@ -19,6 +19,16 @@ class Reservation < ApplicationRecord
   # OPTIONAL: Make sure seat_preferences is always an array
   before_save :normalize_seat_preferences
 
+  ############################
+  ## Return the labels of currently allocated seats (where released_at is nil).
+  def seat_labels
+    seat_allocations
+      .where(released_at: nil)
+      .includes(:seat)       # prevents N+1 queries
+      .map { |alloc| alloc.seat.label }
+  end
+  ############################
+
   private
 
   def default_status

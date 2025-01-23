@@ -1,7 +1,7 @@
 # db/seeds.rb
 # Run: bin/rails db:seed
-# If you want a fully clean DB each time, do:
-#   rails db:drop db:create db:migrate db:seed
+# (If you want a fully clean DB each time, do:
+#   rails db:drop db:create db:migrate db:seed)
 
 require 'active_record'
 
@@ -15,8 +15,7 @@ puts "== (Optional) Cleaning references =="
 puts "== Seeding the database =="
 
 # ------------------------------------------------------------------------------
-# Force all parse/Time calls to treat times as Pacific/Guam
-# so "17:00" is stored as 5 pm Guam.
+# Force parse/Time calls to treat times as Pacific/Guam
 # ------------------------------------------------------------------------------
 Time.zone = "Pacific/Guam"
 
@@ -29,12 +28,12 @@ restaurant = Restaurant.find_or_create_by!(
   layout_type: "sushi bar"
 )
 
-# Now explicitly parse "17:00" / "21:00" as Guam times.
+# Now explicitly parse "17:00"/"21:00" as Guam times:
 restaurant.update!(
   opening_time:        Time.zone.parse("17:00"),  # 5:00 pm GUAM
   closing_time:        Time.zone.parse("21:00"),  # 9:00 pm GUAM
-  time_slot_interval:  30,                        # e.g., every 30 mins in /availability
-  time_zone:           "Pacific/Guam"             # store that the restaurant is in Guam
+  time_slot_interval:  30,                        # e.g. every 30 mins in /availability
+  time_zone:           "Pacific/Guam"
 )
 
 puts "Created/found Restaurant: #{restaurant.name}"
@@ -81,7 +80,7 @@ bar_section = SeatSection.find_or_create_by!(
   orientation: "vertical"
 )
 
-# We want 10 seats total, spaced 70px apart vertically
+# We want 10 seats total, spaced ~70px apart vertically
 10.times do |i|
   seat_label = "Seat ##{i + 1}"
   Seat.find_or_create_by!(seat_section_id: bar_section.id, label: seat_label) do |seat|
@@ -90,15 +89,14 @@ bar_section = SeatSection.find_or_create_by!(
     seat.capacity   = 1
   end
 end
-
 puts "Created 10 seats for Sushi Bar Front."
 
-# Mark main_layout as the active layout for the restaurant
+# Mark main_layout as the active layout
 restaurant.update!(current_layout_id: main_layout.id)
 puts "Set '#{main_layout.name}' as the current layout for Restaurant #{restaurant.id}."
 
-# Build the sections_data JSON so the layout UI can display it
-bar_section.reload  # ensure seats are loaded
+# Build sections_data JSON for the layout UI
+bar_section.reload
 section_hash = {
   "id"           => "section-bar-front",
   "name"         => bar_section.name,
@@ -119,7 +117,25 @@ main_layout.update!(sections_data: { "sections" => [ section_hash ] })
 puts "Updated Layout##{main_layout.id} sections_data with 1 seat section + 10 seats."
 
 # ------------------------------------------------------------------------------
-# 4) SEED Reservations in the 17:00-21:00 window
+# HELPER: Build seat preference arrays so each sub-array is exactly party_size seats
+# We have up to 10 seats labeled "Seat #1" .. "Seat #10"
+# We'll generate up to 3 sub-arrays if possible.
+# ------------------------------------------------------------------------------
+def build_seat_prefs_for_party_size(party_size, total_seats=10, max_sets=3)
+  seat_labels = (1..total_seats).map{|i| "Seat ##{i}"}
+  results = []
+  idx = 0
+  while idx + party_size <= seat_labels.size && results.size < max_sets
+    # slice out exactly 'party_size' seats
+    subset = seat_labels[idx...(idx + party_size)]
+    results << subset
+    idx += party_size
+  end
+  results
+end
+
+# ------------------------------------------------------------------------------
+# 4) SEED Reservations
 # ------------------------------------------------------------------------------
 puts "Creating sample Reservations..."
 
@@ -134,8 +150,7 @@ reservation_data = [
     start_time:  today_17,
     party_size:  2,
     status:      "booked",
-    # EXAMPLE seat_preferences for demonstration:
-    # up to 3 sets (UI enforces 3, backend can handle more)
+    # e.g. seat_prefs
     preferences: [["Seat #1", "Seat #2"], ["Seat #3"]]
   },
   {
@@ -143,7 +158,7 @@ reservation_data = [
     start_time:  today_17,
     party_size:  3,
     status:      "booked",
-    preferences: []
+    preferences: [] # no prefs => we'll fill them
   },
   {
     name:        "Group of 2",
@@ -157,14 +172,14 @@ reservation_data = [
     start_time:  today_19,
     party_size:  2,
     status:      "booked",
-    preferences: []
+    preferences: [["Seat #3"]] # invalid sub-array => we'll fix
   },
   {
     name:        "Tomorrow Group",
     start_time:  tomorrow_17,
     party_size:  4,
     status:      "booked",
-    preferences: [["Seat #6", "Seat #7"], ["Seat #8"]]
+    preferences: [["Seat #6", "Seat #7"], ["Seat #8"]] # second is only 1 seat => fix
   },
   {
     name:        "Canceled Ex.",
@@ -181,18 +196,33 @@ reservation_data.each do |res_data|
     contact_name:  res_data[:name],
     start_time:    res_data[:start_time]
   ) do |res|
-    res.party_size       = res_data[:party_size]
-    res.contact_phone    = "671-#{rand(100..999)}-#{rand(1000..9999)}"
-    res.contact_email    = "#{res_data[:name].parameterize}@example.com"
-    res.status           = res_data[:status]
-    res.end_time         = res_data[:start_time] + 60.minutes
-    # seat_preferences is new
-    if res_data[:preferences].present?
-      res.seat_preferences = res_data[:preferences]
-    else
-      # default to empty array
-      res.seat_preferences = []
+    res.party_size     = res_data[:party_size]
+    res.contact_phone  = "671-#{rand(100..999)}-#{rand(1000..9999)}"
+    res.contact_email  = "#{res_data[:name].parameterize}@example.com"
+    res.status         = res_data[:status]
+    res.end_time       = res_data[:start_time] + 60.minutes
+
+    # Fix or generate seat_preferences to ensure each sub-array has exactly party_size seats
+    provided_prefs = res_data[:preferences] || []
+    # 1) Filter out any sub-arrays not matching party_size
+    filtered = provided_prefs.select {|arr| arr.size == res_data[:party_size] }
+
+    # 2) If we have fewer than 1–3 sets, fill the remainder
+    if filtered.size < 3
+      auto_prefs = build_seat_prefs_for_party_size(res_data[:party_size])
+      # Merge auto_prefs with the existing filtered, but avoid duplicates
+      # or you could just override if you prefer
+      while filtered.size < 3 && !auto_prefs.empty?
+        # pop the first from auto_prefs
+        candidate = auto_prefs.shift
+        # ensure we haven't used that exact set
+        unless filtered.include?(candidate)
+          filtered << candidate
+        end
+      end
     end
+
+    res.seat_preferences = filtered
   end
 end
 puts "Reservations seeded."
