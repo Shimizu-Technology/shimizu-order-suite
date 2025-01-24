@@ -14,10 +14,11 @@ class LayoutsController < ApplicationController
   end
 
   # GET /layouts/:id
-  # Returns expanded seat data under "seat_sections."
+  # Returns expanded seat data under "seat_sections", including occupant info.
   def show
     seat_sections = @layout.seat_sections.includes(:seats)
 
+    # Grab seat allocations that are still active (released_at = nil).
     seat_allocations = SeatAllocation
       .includes(:reservation, :waitlist_entry)
       .where(seat_id: seat_sections.flat_map(&:seats).pluck(:id), released_at: nil)
@@ -26,10 +27,10 @@ class LayoutsController < ApplicationController
     seat_allocations.each do |alloc|
       occupant = alloc.reservation || alloc.waitlist_entry
       occupant_map[alloc.seat_id] = {
-        occupant_type:      (alloc.reservation_id ? "reservation" : "waitlist"),
-        occupant_name:      occupant.contact_name,
+        occupant_type:       (alloc.reservation_id ? "reservation" : "waitlist"),
+        occupant_name:       occupant.contact_name,
         occupant_party_size: occupant.try(:party_size),
-        occupant_status:    occupant.status
+        occupant_status:     occupant.status
       }
     end
 
@@ -40,11 +41,15 @@ class LayoutsController < ApplicationController
 
       seat_sections: seat_sections.map do |sec|
         {
-          id:         sec.id,
-          name:       sec.name,
-          offset_x:   sec.offset_x,
-          offset_y:   sec.offset_y,
+          id:          sec.id,
+          name:        sec.name,
+          # <-- Make sure to include section_type here:
+          section_type: sec.section_type,  # e.g. "table" or "counter"
+
+          offset_x:    sec.offset_x,
+          offset_y:    sec.offset_y,
           orientation: sec.orientation,
+
           seats: sec.seats.map do |seat|
             occ = occupant_map[seat.id]
             {
@@ -64,7 +69,8 @@ class LayoutsController < ApplicationController
     render json: data
   end
 
-  # POST /layouts => handles optional sections_data with seat_data
+  # POST /layouts
+  # Creates a layout (and optional seat sections & seats if :sections_data is present).
   def create
     assigned_restaurant_id =
       if current_user.role == 'super_admin'
@@ -165,7 +171,7 @@ class LayoutsController < ApplicationController
 
         seat_section ||= @layout.seat_sections.build
         seat_section.name         = sec_data["name"]
-        seat_section.section_type = sec_data["type"]
+        seat_section.section_type = sec_data["type"]        # Include type => sets section_type
         seat_section.orientation  = sec_data["orientation"]
         seat_section.offset_x     = sec_data["offsetX"]
         seat_section.offset_y     = sec_data["offsetY"]
