@@ -1,12 +1,11 @@
 # db/seeds.rb
 # Run: bin/rails db:seed
-# (If you want a fully clean DB each time, do:
-#   rails db:drop db:create db:migrate db:seed)
+# If you need a fully clean DB: rails db:drop db:create db:migrate db:seed
 
 require 'active_record'
 
 puts "== (Optional) Cleaning references =="
-# Uncomment to truncate tables and reset IDs if needed:
+# Uncomment to truncate tables if you want a truly clean slate:
 # ActiveRecord::Base.connection.execute("
 #   TRUNCATE reservations, waitlist_entries, users, restaurants, menus, menu_items,
 #     layouts, seat_sections, seats, seat_allocations RESTART IDENTITY CASCADE
@@ -15,7 +14,7 @@ puts "== (Optional) Cleaning references =="
 puts "== Seeding the database =="
 
 # ------------------------------------------------------------------------------
-# Force parse/Time calls to treat times as Pacific/Guam
+# Time zone
 # ------------------------------------------------------------------------------
 Time.zone = "Pacific/Guam"
 
@@ -27,15 +26,12 @@ restaurant = Restaurant.find_or_create_by!(
   address: "744 N Marine Corps Dr, Harmon Industrial Park, 96913, Guam",
   layout_type: "sushi bar"
 )
-
-# Now explicitly parse "17:00"/"21:00" as Guam times:
 restaurant.update!(
   opening_time:        Time.zone.parse("17:00"),  # 5:00 pm GUAM
   closing_time:        Time.zone.parse("21:00"),  # 9:00 pm GUAM
-  time_slot_interval:  30,                        # e.g. every 30 mins in /availability
+  time_slot_interval:  30,
   time_zone:           "Pacific/Guam"
 )
-
 puts "Created/found Restaurant: #{restaurant.name}"
 puts "   open from #{restaurant.opening_time.strftime("%H:%M")} to #{restaurant.closing_time.strftime("%H:%M")}"
 puts "   time_slot_interval: #{restaurant.time_slot_interval} mins"
@@ -72,15 +68,44 @@ main_layout = Layout.find_or_create_by!(
   restaurant_id: restaurant.id
 )
 
+# --- A helper method to replicate your new "table" seat geometry ---
+def layout_table_seats(seat_count, label_prefix)
+  # Hardcode a simple circle: seat #1 at top, then clockwise
+  angle_offset = -Math::PI / 2  # seat #1 at top
+  angle_step   = (2 * Math::PI) / seat_count
+
+  # As in your React code:
+  table_radius = 40
+  seat_radius  = 32
+  seat_margin  = 10
+  radius       = table_radius + seat_radius + seat_margin  # e.g. 82 px
+
+  seats_data = []
+  seat_count.times do |i|
+    angle = angle_offset + i * angle_step
+    x = radius * Math.cos(angle)
+    y = radius * Math.sin(angle)
+    seats_data << {
+      label: "#{label_prefix}#{i+1}",
+      x: x.round,
+      y: y.round,
+      capacity: 1
+    }
+  end
+  seats_data
+end
+
+# ----------------- SECTION 1: SUSHI BAR (COUNTER) -----------------
 bar_section = SeatSection.find_or_create_by!(
-  layout_id: main_layout.id,
-  name:      "Sushi Bar Front",
-  offset_x:  100,
-  offset_y:  100,
-  orientation: "vertical"
+  layout_id:    main_layout.id,
+  name:         "Sushi Bar Front",
+  section_type: "counter",
+  orientation:  "vertical",
+  offset_x:     100,
+  offset_y:     100
 )
 
-# We want 10 seats total, spaced ~70px apart vertically
+# We want 10 seats spaced ~70px apart vertically
 10.times do |i|
   seat_label = "Seat ##{i + 1}"
   Seat.find_or_create_by!(seat_section_id: bar_section.id, label: seat_label) do |seat|
@@ -91,30 +116,82 @@ bar_section = SeatSection.find_or_create_by!(
 end
 puts "Created 10 seats for Sushi Bar Front."
 
+# ----------------- SECTION 2: TABLE A (NEW CIRCLE GEOMETRY) -----------------
+table_section = SeatSection.find_or_create_by!(
+  layout_id:    main_layout.id,
+  name:         "Table A",
+  section_type: "table",
+  orientation:  "horizontal",
+  offset_x:     400,   # place it on the canvas
+  offset_y:     100
+)
+
+# Let's create 4 seats in a circle so seat #1 is top, seat #2 is right, etc.
+table_seats = layout_table_seats(4, "A")
+table_seats.each do |ts|
+  # find_or_create_by, or just create if you want to always refresh
+  Seat.find_or_create_by!(seat_section_id: table_section.id, label: ts[:label]) do |seat|
+    seat.position_x = ts[:x]
+    seat.position_y = ts[:y]
+    seat.capacity   = ts[:capacity]
+  end
+end
+puts "Created 4 seats (circle) for Table A."
+
 # Mark main_layout as the active layout
 restaurant.update!(current_layout_id: main_layout.id)
 puts "Set '#{main_layout.name}' as the current layout for Restaurant #{restaurant.id}."
 
-# Build sections_data JSON for the layout UI
+# ------------------------------------------------------------------------------
+# Build out the sections_data JSON for the Layout
+# (We fetch from DB, transform it to match your React "sections" array)
+# ------------------------------------------------------------------------------
 bar_section.reload
-section_hash = {
+table_section.reload
+
+bar_section_hash = {
   "id"           => "section-bar-front",
   "name"         => bar_section.name,
-  "type"         => bar_section.section_type.presence || "counter", # or "bar"
+  "type"         => bar_section.section_type || "counter",
   "offsetX"      => bar_section.offset_x,
   "offsetY"      => bar_section.offset_y,
-  "orientation"  => bar_section.orientation.presence || "vertical",
+  "orientation"  => bar_section.orientation || "vertical",
   "seats" => bar_section.seats.map do |s|
     {
       "label"       => s.label,
       "capacity"    => s.capacity,
       "position_x"  => s.position_x,
-      "position_y"  => s.position_y
+      "position_y"  => s.position_y,
     }
   end
 }
-main_layout.update!(sections_data: { "sections" => [ section_hash ] })
-puts "Updated Layout##{main_layout.id} sections_data with 1 seat section + 10 seats."
+
+table_section_hash = {
+  "id"           => "section-table-A",
+  "name"         => table_section.name,
+  "type"         => table_section.section_type || "table",
+  "offsetX"      => table_section.offset_x,
+  "offsetY"      => table_section.offset_y,
+  "orientation"  => table_section.orientation || "horizontal",
+  "seats" => table_section.seats.map do |s|
+    {
+      "label"       => s.label,
+      "capacity"    => s.capacity,
+      "position_x"  => s.position_x,
+      "position_y"  => s.position_y,
+    }
+  end
+}
+
+main_layout.update!(
+  sections_data: {
+    "sections" => [
+      bar_section_hash,
+      table_section_hash
+    ]
+  }
+)
+puts "Updated Layout##{main_layout.id} sections_data with 2 seat sections."
 
 # ------------------------------------------------------------------------------
 # HELPER: Build seat preference arrays so each sub-array is exactly party_size seats
@@ -122,11 +199,10 @@ puts "Updated Layout##{main_layout.id} sections_data with 1 seat section + 10 se
 # We'll generate up to 3 sub-arrays if possible.
 # ------------------------------------------------------------------------------
 def build_seat_prefs_for_party_size(party_size, total_seats=10, max_sets=3)
-  seat_labels = (1..total_seats).map{|i| "Seat ##{i}"}
+  seat_labels = (1..total_seats).map { |i| "Seat ##{i}" }
   results = []
   idx = 0
   while idx + party_size <= seat_labels.size && results.size < max_sets
-    # slice out exactly 'party_size' seats
     subset = seat_labels[idx...(idx + party_size)]
     results << subset
     idx += party_size
@@ -139,10 +215,10 @@ end
 # ------------------------------------------------------------------------------
 puts "Creating sample Reservations..."
 
-today_17     = Time.zone.now.change(hour: 17, min: 0)
-today_18     = today_17 + 1.hour
-today_19     = today_17 + 2.hours
-tomorrow_17  = today_17 + 1.day
+today_17    = Time.zone.now.change(hour: 17, min: 0)  # e.g. 17:00
+today_18    = today_17 + 1.hour
+today_19    = today_17 + 2.hours
+tomorrow_17 = today_17 + 1.day
 
 reservation_data = [
   {
@@ -150,7 +226,6 @@ reservation_data = [
     start_time:  today_17,
     party_size:  2,
     status:      "booked",
-    # e.g. seat_prefs
     preferences: [["Seat #1", "Seat #2"], ["Seat #3"]]
   },
   {
@@ -158,7 +233,7 @@ reservation_data = [
     start_time:  today_17,
     party_size:  3,
     status:      "booked",
-    preferences: [] # no prefs => we'll fill them
+    preferences: []
   },
   {
     name:        "Group of 2",
@@ -172,14 +247,14 @@ reservation_data = [
     start_time:  today_19,
     party_size:  2,
     status:      "booked",
-    preferences: [["Seat #3"]] # invalid sub-array => we'll fix
+    preferences: [["Seat #3"]]
   },
   {
     name:        "Tomorrow Group",
     start_time:  tomorrow_17,
     party_size:  4,
     status:      "booked",
-    preferences: [["Seat #6", "Seat #7"], ["Seat #8"]] # second is only 1 seat => fix
+    preferences: [["Seat #6", "Seat #7"], ["Seat #8"]]
   },
   {
     name:        "Canceled Ex.",
@@ -196,29 +271,21 @@ reservation_data.each do |res_data|
     contact_name:  res_data[:name],
     start_time:    res_data[:start_time]
   ) do |res|
-    res.party_size     = res_data[:party_size]
-    res.contact_phone  = "671-#{rand(100..999)}-#{rand(1000..9999)}"
-    res.contact_email  = "#{res_data[:name].parameterize}@example.com"
-    res.status         = res_data[:status]
-    res.end_time       = res_data[:start_time] + 60.minutes
+    res.party_size    = res_data[:party_size]
+    res.contact_phone = "671-#{rand(100..999)}-#{rand(1000..9999)}"
+    res.contact_email = "#{res_data[:name].parameterize}@example.com"
+    res.status        = res_data[:status]
+    res.end_time      = res_data[:start_time] + 60.minutes
 
-    # Fix or generate seat_preferences to ensure each sub-array has exactly party_size seats
+    # Fix or generate seat_preferences so each sub-array has exactly party_size seats
     provided_prefs = res_data[:preferences] || []
-    # 1) Filter out any sub-arrays not matching party_size
     filtered = provided_prefs.select {|arr| arr.size == res_data[:party_size] }
 
-    # 2) If we have fewer than 1–3 sets, fill the remainder
     if filtered.size < 3
       auto_prefs = build_seat_prefs_for_party_size(res_data[:party_size])
-      # Merge auto_prefs with the existing filtered, but avoid duplicates
-      # or you could just override if you prefer
       while filtered.size < 3 && !auto_prefs.empty?
-        # pop the first from auto_prefs
         candidate = auto_prefs.shift
-        # ensure we haven't used that exact set
-        unless filtered.include?(candidate)
-          filtered << candidate
-        end
+        filtered << candidate unless filtered.include?(candidate)
       end
     end
 

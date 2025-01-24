@@ -1,5 +1,4 @@
 # app/controllers/layouts_controller.rb
-
 class LayoutsController < ApplicationController
   before_action :authorize_request
   before_action :set_layout, only: [:show, :update, :destroy, :activate]
@@ -54,7 +53,7 @@ class LayoutsController < ApplicationController
               position_x: seat.position_x,
               position_y: seat.position_y,
               capacity:   seat.capacity,
-              status:     occ ? "occupied" : "free",  # purely for UI
+              status:     occ ? "occupied" : "free",
               occupant_info: occ
             }
           end
@@ -65,8 +64,7 @@ class LayoutsController < ApplicationController
     render json: data
   end
 
-  # POST /layouts
-  # Creates a Layout plus seat_sections/seats from the sections_data JSON.
+  # POST /layouts => handles optional sections_data with seat_data
   def create
     assigned_restaurant_id =
       if current_user.role == 'super_admin'
@@ -96,7 +94,7 @@ class LayoutsController < ApplicationController
 
           seat_section ||= @layout.seat_sections.build
           seat_section.name         = sec_data["name"]
-          seat_section.section_type = sec_data["type"]  # or sec_data["section_type"]
+          seat_section.section_type = sec_data["type"]  # "table" or "counter"
           seat_section.orientation  = sec_data["orientation"]
           seat_section.offset_x     = sec_data["offsetX"]
           seat_section.offset_y     = sec_data["offsetY"]
@@ -216,18 +214,12 @@ class LayoutsController < ApplicationController
     head :no_content
   end
 
-  # ------------------------------------------------------------------
   # POST /layouts/:id/activate
-  # => sets restaurant.current_layout_id = this layout
-  # ------------------------------------------------------------------
   def activate
-    # Only super_admin or staff of the same restaurant can do this
-    # Adjust authorization as needed
     unless current_user.role.in?(%w[admin staff super_admin])
       return render json: { error: "Forbidden" }, status: :forbidden
     end
 
-    # Ensure this layout belongs to the same restaurant
     if @layout.restaurant_id != current_user.restaurant_id && current_user.role != 'super_admin'
       return render json: { error: "Layout does not belong to your restaurant" }, status: :forbidden
     end

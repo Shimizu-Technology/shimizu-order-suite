@@ -1,11 +1,24 @@
+# app/models/seat_section.rb
+
 class SeatSection < ApplicationRecord
   belongs_to :layout
   has_many :seats, dependent: :destroy
 
+  # For example, we allow these types:
+  VALID_SECTION_TYPES = %w[counter table bar booth].freeze
+
   validates :name, presence: true
   validates :capacity, numericality: { greater_than: 0 }, allow_nil: true
 
-  # Example debug callbacks (optional)
+  # If you want to enforce only recognized types:
+  validates :section_type,
+            inclusion: {
+              in: VALID_SECTION_TYPES,
+              message: "%{value} is not a valid section_type"
+            },
+            allow_blank: true
+
+  # Debug callbacks (optional, as you have them)
   before_validation :debug_before_validation
   after_validation :debug_after_validation
   after_create :debug_after_create
