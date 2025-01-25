@@ -18,11 +18,11 @@ class Reservation < ApplicationRecord
   # Ensure seat_preferences is always an array
   before_save :normalize_seat_preferences
 
-  # NEW: Auto-calculate end_time from duration_minutes
+  # Auto-calculate end_time from duration_minutes
   before_save :update_end_time_from_duration
 
   ############################
-  ## Return the labels of currently allocated seats (where released_at is nil).
+  ## Return the labels of currently allocated seats
   def seat_labels
     seat_allocations
       .where(released_at: nil)
@@ -38,12 +38,12 @@ class Reservation < ApplicationRecord
   end
 
   def normalize_seat_preferences
-    # If seat_preferences is somehow nil or not an Array, reset to []
+    Rails.logger.debug "DEBUG: in normalize_seat_preferences, before: seat_preferences=#{seat_preferences.inspect}"
+    # Only reset if it's NOT an Array at all
     self.seat_preferences = [] unless seat_preferences.is_a?(Array)
+    Rails.logger.debug "DEBUG: in normalize_seat_preferences, after: seat_preferences=#{seat_preferences.inspect}"
   end
 
-  # Calculates end_time from start_time + duration_minutes
-  # If no duration_minutes, we fall back to 60.
   def update_end_time_from_duration
     return if start_time.blank?
 
