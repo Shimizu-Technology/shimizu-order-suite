@@ -74,11 +74,11 @@ def layout_table_seats(seat_count, label_prefix)
   angle_offset = -Math::PI / 2  # seat #1 at top
   angle_step   = (2 * Math::PI) / seat_count
 
-  # As in your React code:
+  # For example:
   table_radius = 40
   seat_radius  = 32
   seat_margin  = 10
-  radius       = table_radius + seat_radius + seat_margin  # e.g. 82 px
+  radius       = table_radius + seat_radius + seat_margin  # ~82 px from center
 
   seats_data = []
   seat_count.times do |i|
@@ -86,23 +86,24 @@ def layout_table_seats(seat_count, label_prefix)
     x = radius * Math.cos(angle)
     y = radius * Math.sin(angle)
     seats_data << {
-      label: "#{label_prefix}#{i+1}",
-      x: x.round,
-      y: y.round,
+      label:    "#{label_prefix}#{i+1}",
+      x:        x.round,
+      y:        y.round,
       capacity: 1
     }
   end
   seats_data
 end
 
-# ----------------- SECTION 1: SUSHI BAR (COUNTER) -----------------
+# ----------------- SECTION 1: SUSHI BAR (COUNTER, FLOOR 1) -----------------
 bar_section = SeatSection.find_or_create_by!(
   layout_id:    main_layout.id,
   name:         "Sushi Bar Front",
   section_type: "counter",
   orientation:  "vertical",
   offset_x:     100,
-  offset_y:     100
+  offset_y:     100,
+  floor_number: 1  # <--- ensures it's on floor 1
 )
 
 # We want 10 seats spaced ~70px apart vertically
@@ -114,29 +115,51 @@ bar_section = SeatSection.find_or_create_by!(
     seat.capacity   = 1
   end
 end
-puts "Created 10 seats for Sushi Bar Front."
+puts "Created 10 seats for Sushi Bar Front (Floor 1)."
 
-# ----------------- SECTION 2: TABLE A (NEW CIRCLE GEOMETRY) -----------------
+# ----------------- SECTION 2: TABLE A (CIRCLE GEOMETRY, FLOOR 1) -----------------
 table_section = SeatSection.find_or_create_by!(
   layout_id:    main_layout.id,
   name:         "Table A",
   section_type: "table",
   orientation:  "horizontal",
-  offset_x:     400,   # place it on the canvas
-  offset_y:     100
+  offset_x:     400,
+  offset_y:     100,
+  floor_number: 1  # <--- also floor 1
 )
 
-# Let's create 4 seats in a circle so seat #1 is top, seat #2 is right, etc.
+# Create 4 seats in a circle so seat #1 is top, seat #2 is right, etc.
 table_seats = layout_table_seats(4, "A")
 table_seats.each do |ts|
-  # find_or_create_by, or just create if you want to always refresh
   Seat.find_or_create_by!(seat_section_id: table_section.id, label: ts[:label]) do |seat|
     seat.position_x = ts[:x]
     seat.position_y = ts[:y]
     seat.capacity   = ts[:capacity]
   end
 end
-puts "Created 4 seats (circle) for Table A."
+puts "Created 4 seats (circle) for Table A (Floor 1)."
+
+# ----------------- SECTION 3: 2ND FLOOR LOUNGE (FLOOR 2) -----------------
+lounge_section = SeatSection.find_or_create_by!(
+  layout_id:    main_layout.id,
+  name:         "2nd Floor Lounge",
+  section_type: "table",
+  orientation:  "horizontal",
+  offset_x:     600,
+  offset_y:     100,
+  floor_number: 2  # <--- a second floor
+)
+
+# Create 4 seats in a line
+4.times do |i|
+  seat_label = "Lounge ##{i + 1}"
+  Seat.find_or_create_by!(seat_section_id: lounge_section.id, label: seat_label) do |seat|
+    seat.position_x = 70 * i
+    seat.position_y = 0
+    seat.capacity   = 1
+  end
+end
+puts "Created 4 seats for 2nd Floor Lounge (Floor 2)."
 
 # Mark main_layout as the active layout
 restaurant.update!(current_layout_id: main_layout.id)
@@ -144,10 +167,11 @@ puts "Set '#{main_layout.name}' as the current layout for Restaurant #{restauran
 
 # ------------------------------------------------------------------------------
 # Build out the sections_data JSON for the Layout
-# (We fetch from DB, transform it to match your React "sections" array)
+# We fetch from DB, transform it to match your React "sections" array
 # ------------------------------------------------------------------------------
 bar_section.reload
 table_section.reload
+lounge_section.reload
 
 bar_section_hash = {
   "id"           => "section-bar-front",
@@ -161,7 +185,7 @@ bar_section_hash = {
       "label"       => s.label,
       "capacity"    => s.capacity,
       "position_x"  => s.position_x,
-      "position_y"  => s.position_y,
+      "position_y"  => s.position_y
     }
   end
 }
@@ -178,7 +202,24 @@ table_section_hash = {
       "label"       => s.label,
       "capacity"    => s.capacity,
       "position_x"  => s.position_x,
-      "position_y"  => s.position_y,
+      "position_y"  => s.position_y
+    }
+  end
+}
+
+lounge_section_hash = {
+  "id"           => "section-lounge",
+  "name"         => lounge_section.name,
+  "type"         => lounge_section.section_type || "table",
+  "offsetX"      => lounge_section.offset_x,
+  "offsetY"      => lounge_section.offset_y,
+  "orientation"  => lounge_section.orientation || "horizontal",
+  "seats" => lounge_section.seats.map do |s|
+    {
+      "label"       => s.label,
+      "capacity"    => s.capacity,
+      "position_x"  => s.position_x,
+      "position_y"  => s.position_y
     }
   end
 }
@@ -187,15 +228,15 @@ main_layout.update!(
   sections_data: {
     "sections" => [
       bar_section_hash,
-      table_section_hash
+      table_section_hash,
+      lounge_section_hash
     ]
   }
 )
-puts "Updated Layout##{main_layout.id} sections_data with 2 seat sections."
+puts "Updated Layout##{main_layout.id} sections_data with 3 seat sections (2 floors)."
 
 # ------------------------------------------------------------------------------
 # HELPER: Build seat preference arrays so each sub-array is exactly party_size seats
-# We have up to 10 seats labeled "Seat #1" .. "Seat #10"
 # We'll generate up to 3 sub-arrays if possible.
 # ------------------------------------------------------------------------------
 def build_seat_prefs_for_party_size(party_size, total_seats=10, max_sets=3)
@@ -279,7 +320,7 @@ reservation_data.each do |res_data|
 
     # Fix or generate seat_preferences so each sub-array has exactly party_size seats
     provided_prefs = res_data[:preferences] || []
-    filtered = provided_prefs.select {|arr| arr.size == res_data[:party_size] }
+    filtered = provided_prefs.select { |arr| arr.size == res_data[:party_size] }
 
     if filtered.size < 3
       auto_prefs = build_seat_prefs_for_party_size(res_data[:party_size])

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_23_010718) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_24_231116) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -112,6 +112,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_23_010718) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.bigint "layout_id", null: false
+    t.integer "floor_number", default: 1, null: false
     t.index ["layout_id"], name: "index_seat_sections_on_layout_id"
   end
 

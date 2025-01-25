@@ -18,7 +18,15 @@ class SeatSection < ApplicationRecord
             },
             allow_blank: true
 
-  # Debug callbacks (optional, as you have them)
+  # ---------------------------------------
+  # Floor number or label
+  # ---------------------------------------
+  # If you store floors as an integer:
+  validates :floor_number, numericality: {
+    only_integer: true, greater_than_or_equal_to: 1
+  }
+
+  # Debug callbacks (optional)
   before_validation :debug_before_validation
   after_validation :debug_after_validation
   after_create :debug_after_create

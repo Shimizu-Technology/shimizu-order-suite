@@ -26,7 +26,14 @@ class SeatSectionsController < ApplicationController
   #-------------------------------------------------------------------
   def create
     section_params = params.require(:seat_section).permit(
-      :layout_id, :name, :section_type, :orientation, :offset_x, :offset_y, :capacity
+      :layout_id,
+      :name,
+      :section_type,
+      :orientation,
+      :offset_x,
+      :offset_y,
+      :capacity,
+      :floor_number      # <-- Added here
     )
 
     seat_section = SeatSection.new(section_params)
@@ -35,7 +42,10 @@ class SeatSectionsController < ApplicationController
       # --------------------------------------------------------------
       # [OPTIONAL] Auto-create seats if it's a table with capacity>1
       # --------------------------------------------------------------
-      if seat_section.section_type == "table" && seat_section.capacity.present? && seat_section.capacity > 1
+      if seat_section.section_type == "table" &&
+         seat_section.capacity.present? &&
+         seat_section.capacity > 1
+
         auto_generate_table_seats(seat_section)
       end
 
@@ -50,7 +60,13 @@ class SeatSectionsController < ApplicationController
     return render json: { error: "Seat section not found" }, status: :not_found unless seat_section
 
     update_params = params.require(:seat_section).permit(
-      :name, :section_type, :orientation, :offset_x, :offset_y, :capacity
+      :name,
+      :section_type,
+      :orientation,
+      :offset_x,
+      :offset_y,
+      :capacity,
+      :floor_number      # <-- Added here as well
     )
 
     if seat_section.update(update_params)
@@ -59,6 +75,7 @@ class SeatSectionsController < ApplicationController
       # seat_section.seats.destroy_all
       # auto_generate_table_seats(seat_section)
       # (But that might nuke user-labeled seats, so be cautious.)
+
       render json: seat_section
     else
       render json: { errors: seat_section.errors.full_messages }, status: :unprocessable_entity
@@ -88,7 +105,7 @@ class SeatSectionsController < ApplicationController
     (1..seat_section.capacity).each do |i|
       seat_section.seats.create!(
         label: "#{seat_section.name}#{i}",
-        position_x: base_x + 40 * (i-1),  # e.g. horizontally spaced
+        position_x: base_x + 40 * (i - 1),  # e.g. horizontally spaced
         position_y: base_y,
         capacity: 1
       )

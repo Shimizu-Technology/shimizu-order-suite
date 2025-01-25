@@ -14,11 +14,10 @@ class LayoutsController < ApplicationController
   end
 
   # GET /layouts/:id
-  # Returns expanded seat data under "seat_sections", including occupant info.
   def show
     seat_sections = @layout.seat_sections.includes(:seats)
 
-    # Grab seat allocations that are still active (released_at = nil).
+    # Grab seat allocations still active.
     seat_allocations = SeatAllocation
       .includes(:reservation, :waitlist_entry)
       .where(seat_id: seat_sections.flat_map(&:seats).pluck(:id), released_at: nil)
@@ -27,28 +26,51 @@ class LayoutsController < ApplicationController
     seat_allocations.each do |alloc|
       occupant = alloc.reservation || alloc.waitlist_entry
       occupant_map[alloc.seat_id] = {
-        occupant_type:       (alloc.reservation_id ? "reservation" : "waitlist"),
+        occupant_type:       alloc.reservation_id ? "reservation" : "waitlist",
         occupant_name:       occupant.contact_name,
         occupant_party_size: occupant.try(:party_size),
         occupant_status:     occupant.status
       }
     end
 
-    data = {
-      id:   @layout.id,
-      name: @layout.name,
-      sections_data: @layout.sections_data,
+    # Re-build a consistent 'sections_data' that includes floor_number
+    # so the front-end sees it in the "sections_data" JSON.
+    rebuilt_sections_data = {
+      sections: seat_sections.map do |sec|
+        {
+          id:          sec.id.to_s, # or just sec.id if you prefer
+          name:        sec.name,
+          type:        sec.section_type,  # "table" or "counter"
+          orientation: sec.orientation,
+          offsetX:     sec.offset_x,
+          offsetY:     sec.offset_y,
+          floorNumber: sec.floor_number,
+          seats: sec.seats.map do |seat|
+            {
+              id:         seat.id,
+              label:      seat.label,
+              position_x: seat.position_x,
+              position_y: seat.position_y,
+              capacity:   seat.capacity
+            }
+          end
+        }
+      end
+    }
 
+    data = {
+      id:            @layout.id,
+      name:          @layout.name,
+      sections_data: rebuilt_sections_data,  # replace raw @layout.sections_data
       seat_sections: seat_sections.map do |sec|
         {
-          id:          sec.id,
-          name:        sec.name,
-          # <-- Make sure to include section_type here:
-          section_type: sec.section_type,  # e.g. "table" or "counter"
-
-          offset_x:    sec.offset_x,
-          offset_y:    sec.offset_y,
-          orientation: sec.orientation,
+          id:           sec.id,
+          name:         sec.name,
+          section_type: sec.section_type,
+          offset_x:     sec.offset_x,
+          offset_y:     sec.offset_y,
+          orientation:  sec.orientation,
+          floor_number: sec.floor_number,
 
           seats: sec.seats.map do |seat|
             occ = occupant_map[seat.id]
@@ -70,9 +92,8 @@ class LayoutsController < ApplicationController
   end
 
   # POST /layouts
-  # Creates a layout (and optional seat sections & seats if :sections_data is present).
   def create
-    assigned_restaurant_id =
+    assigned_restaurant_id = 
       if current_user.role == 'super_admin'
         layout_params[:restaurant_id]
       else
@@ -92,34 +113,30 @@ class LayoutsController < ApplicationController
 
         sections_array.each do |sec_data|
           existing_section_id = sec_data["id"].to_i if sec_data["id"].to_s.match?(/^\d+$/)
-          seat_section = nil
-
-          if existing_section_id && existing_section_id > 0
-            seat_section = @layout.seat_sections.find_by(id: existing_section_id)
-          end
-
+          seat_section = existing_section_id && existing_section_id > 0 ? 
+                           @layout.seat_sections.find_by(id: existing_section_id) : nil
           seat_section ||= @layout.seat_sections.build
+
           seat_section.name         = sec_data["name"]
-          seat_section.section_type = sec_data["type"]  # "table" or "counter"
+          seat_section.section_type = sec_data["type"]       # "table" or "counter"
           seat_section.orientation  = sec_data["orientation"]
           seat_section.offset_x     = sec_data["offsetX"]
           seat_section.offset_y     = sec_data["offsetY"]
-          seat_section.save!
 
+          # Always set floor_number if the client sends it:
+          seat_section.floor_number = sec_data["floorNumber"] if sec_data.key?("floorNumber")
+
+          seat_section.save!
           section_ids_in_use << seat_section.id
 
-          seats_array = sec_data["seats"] || []
+          seats_array    = sec_data["seats"] || []
           seat_ids_in_use = []
-
           seats_array.each do |seat_data|
             existing_seat_id = seat_data["id"].to_i if seat_data["id"].to_s.match?(/^\d+$/)
-            seat = nil
-
-            if existing_seat_id && existing_seat_id > 0
-              seat = seat_section.seats.find_by(id: existing_seat_id)
-            end
-
+            seat = existing_seat_id && existing_seat_id > 0 ? 
+                     seat_section.seats.find_by(id: existing_seat_id) : nil
             seat ||= seat_section.seats.build
+
             seat.label       = seat_data["label"]
             seat.position_x  = seat_data["position_x"]
             seat.position_y  = seat_data["position_y"]
@@ -129,12 +146,14 @@ class LayoutsController < ApplicationController
             seat_ids_in_use << seat.id
           end
 
+          # remove any seats that are no longer in the incoming array
           seat_section.seats.where.not(id: seat_ids_in_use).destroy_all
         end
 
+        # Clean up old sections not in use
         @layout.seat_sections.where.not(id: section_ids_in_use).destroy_all
-
         @layout.save!
+
         render json: @layout, status: :created
       else
         render json: { errors: @layout.errors.full_messages }, status: :unprocessable_entity
@@ -149,8 +168,8 @@ class LayoutsController < ApplicationController
   def update
     if current_user.role != 'super_admin'
       @layout.restaurant_id = current_user.restaurant_id
-    else
-      @layout.restaurant_id = layout_params[:restaurant_id] if layout_params[:restaurant_id]
+    elsif layout_params[:restaurant_id].present?
+      @layout.restaurant_id = layout_params[:restaurant_id]
     end
 
     @layout.name = layout_params[:name] if layout_params[:name]
@@ -163,34 +182,29 @@ class LayoutsController < ApplicationController
 
       sections_array.each do |sec_data|
         existing_section_id = sec_data["id"].to_i if sec_data["id"].to_s.match?(/^\d+$/)
-        seat_section = nil
-
-        if existing_section_id && existing_section_id > 0
-          seat_section = @layout.seat_sections.find_by(id: existing_section_id)
-        end
-
+        seat_section = existing_section_id && existing_section_id > 0 ? 
+                         @layout.seat_sections.find_by(id: existing_section_id) : nil
         seat_section ||= @layout.seat_sections.build
+
         seat_section.name         = sec_data["name"]
-        seat_section.section_type = sec_data["type"]        # Include type => sets section_type
+        seat_section.section_type = sec_data["type"]
         seat_section.orientation  = sec_data["orientation"]
         seat_section.offset_x     = sec_data["offsetX"]
         seat_section.offset_y     = sec_data["offsetY"]
-        seat_section.save!
+        # Always set floor_number if the client sends it
+        seat_section.floor_number = sec_data["floorNumber"] if sec_data.key?("floorNumber")
 
+        seat_section.save!
         section_ids_in_use << seat_section.id
 
-        seats_array = sec_data["seats"] || []
+        seats_array   = sec_data["seats"] || []
         seat_ids_in_use = []
-
         seats_array.each do |seat_data|
           existing_seat_id = seat_data["id"].to_i if seat_data["id"].to_s.match?(/^\d+$/)
-          seat = nil
-
-          if existing_seat_id && existing_seat_id > 0
-            seat = seat_section.seats.find_by(id: existing_seat_id)
-          end
-
+          seat = existing_seat_id && existing_seat_id > 0 ? 
+                   seat_section.seats.find_by(id: existing_seat_id) : nil
           seat ||= seat_section.seats.build
+
           seat.label       = seat_data["label"]
           seat.position_x  = seat_data["position_x"]
           seat.position_y  = seat_data["position_y"]
@@ -203,8 +217,8 @@ class LayoutsController < ApplicationController
         seat_section.seats.where.not(id: seat_ids_in_use).destroy_all
       end
 
+      # remove old seat_sections not in use
       @layout.seat_sections.where.not(id: section_ids_in_use).destroy_all
-
       @layout.save!
     end
 
