@@ -13,12 +13,9 @@ class ReservationsController < ApplicationController
     if params[:date].present?
       begin
         date_filter = Date.parse(params[:date])
-
-        # If you want to load the actual restaurant and use its time_zone:
         restaurant = Restaurant.find(current_user.restaurant_id)
         tz = restaurant.time_zone.presence || "Pacific/Guam"
 
-        # Build local start_of_day..end_of_day, then convert to UTC
         start_local = Time.use_zone(tz) do
           Time.zone.local(date_filter.year, date_filter.month, date_filter.day, 0, 0, 0)
         end
@@ -27,19 +24,14 @@ class ReservationsController < ApplicationController
         start_utc = start_local.utc
         end_utc   = end_local.utc
 
-        # Return only reservations whose start_time is within [start_utc..end_utc)
         scope = scope.where("start_time >= ? AND start_time < ?", start_utc, end_utc)
       rescue ArgumentError
         Rails.logger.warn "[ReservationsController#index] invalid date param=#{params[:date]}"
-        # optionally: scope = scope.none
       end
     end
 
     reservations = scope.all
 
-    ############################
-    ## ADDED/CHANGED
-    ## Render as_json including seat_labels
     render json: reservations.as_json(
       only: [
         :id,
@@ -55,11 +47,11 @@ class ReservationsController < ApplicationController
         :special_requests,
         :status,
         :created_at,
-        :updated_at
+        :updated_at,
+        :duration_minutes
       ],
       methods: :seat_labels
     )
-    ############################
   end
 
   def show
@@ -69,8 +61,6 @@ class ReservationsController < ApplicationController
 
     reservation = Reservation.find(params[:id])
 
-    ############################
-    ## ADDED/CHANGED
     render json: reservation.as_json(
       only: [
         :id,
@@ -86,19 +76,18 @@ class ReservationsController < ApplicationController
         :special_requests,
         :status,
         :created_at,
-        :updated_at
+        :updated_at,
+        :duration_minutes
       ],
       methods: :seat_labels
     )
-    ############################
   end
 
   # CREATE = public
   def create
-    # Build from strong params
     @reservation = Reservation.new
 
-    # Parse incoming start_time/end_time as local times (Guam)
+    # Parse incoming start_time as local times (Guam)
     if reservation_params[:start_time].present?
       parsed_start = Time.zone.parse(reservation_params[:start_time])
       if parsed_start.nil?
@@ -107,28 +96,32 @@ class ReservationsController < ApplicationController
       @reservation.start_time = parsed_start
     end
 
+    # Parse optional end_time if you want to override model logic
+    # (But typically we rely on the model callback, so you can omit this)
     if reservation_params[:end_time].present?
       parsed_end = Time.zone.parse(reservation_params[:end_time])
-      if parsed_end.nil?
-        return render json: { error: "Invalid end_time format" }, status: :unprocessable_entity
-      end
+      return render json: { error: "Invalid end_time format" }, status: :unprocessable_entity if parsed_end.nil?
       @reservation.end_time = parsed_end
     end
 
-    # Copy the rest of the fields
-    @reservation.restaurant_id      = reservation_params[:restaurant_id]
-    @reservation.party_size        = reservation_params[:party_size]
-    @reservation.contact_name      = reservation_params[:contact_name]
-    @reservation.contact_phone     = reservation_params[:contact_phone]
-    @reservation.contact_email     = reservation_params[:contact_email]
-    @reservation.deposit_amount    = reservation_params[:deposit_amount]
+    # Copy other fields
+    @reservation.restaurant_id       = reservation_params[:restaurant_id]
+    @reservation.party_size         = reservation_params[:party_size]
+    @reservation.contact_name       = reservation_params[:contact_name]
+    @reservation.contact_phone      = reservation_params[:contact_phone]
+    @reservation.contact_email      = reservation_params[:contact_email]
+    @reservation.deposit_amount     = reservation_params[:deposit_amount]
     @reservation.reservation_source = reservation_params[:reservation_source]
-    @reservation.special_requests  = reservation_params[:special_requests]
-    @reservation.status            = reservation_params[:status]
+    @reservation.special_requests   = reservation_params[:special_requests]
+    @reservation.status             = reservation_params[:status]
 
-    # NEW: seat_preferences
-    # If included in params, it's an array of arrays or array of strings
-    @reservation.seat_preferences  = reservation_params[:seat_preferences] if reservation_params[:seat_preferences]
+    # NEW: read duration_minutes
+    @reservation.duration_minutes   = reservation_params[:duration_minutes] if reservation_params[:duration_minutes]
+
+    # seat_preferences
+    if reservation_params[:seat_preferences]
+      @reservation.seat_preferences = reservation_params[:seat_preferences]
+    end
 
     # If current_user is staff/admin, fix the restaurant_id
     if current_user && current_user.role != 'super_admin'
@@ -143,16 +136,13 @@ class ReservationsController < ApplicationController
       return render json: { error: "start_time is required" }, status: :unprocessable_entity
     end
 
-    # If no end_time given, default to start_time + 60 minutes
-    @reservation.end_time ||= (@reservation.start_time + 60.minutes)
-
-    # Capacity check
+    # Check capacity
     restaurant = Restaurant.find(@reservation.restaurant_id)
     if exceeds_capacity?(restaurant, @reservation.start_time, @reservation.end_time, @reservation.party_size)
       return render json: { error: "Not enough seats for that timeslot" }, status: :unprocessable_entity
     end
 
-    # Save if capacity is okay
+    # Save
     if @reservation.save
       # Example: send confirmation emails/texts
       if @reservation.contact_email.present?
@@ -161,14 +151,14 @@ class ReservationsController < ApplicationController
 
       if @reservation.contact_phone.present?
         message_body = <<~MSG.squish
-          Hi #{@reservation.contact_name}, your Rotary Sushi reservation is confirmed
+          Hi #{@reservation.contact_name}, your Hafaloha reservation is confirmed
           on #{@reservation.start_time.strftime("%B %d at %I:%M %p")}.
           We look forward to seeing you!
         MSG
         ClicksendClient.send_text_message(
           to:   @reservation.contact_phone,
           body: message_body,
-          from: 'RotarySushi'
+          from: 'Hafaloha'
         )
       end
 
@@ -185,9 +175,8 @@ class ReservationsController < ApplicationController
 
     reservation = Reservation.find(params[:id])
 
-    # We'll handle seat_preferences separately or allow the strong params to do so
     if reservation.update(reservation_params)
-      render json: reservation
+      render json: reservation, status: :ok
     else
       render json: { errors: reservation.errors.full_messages }, status: :unprocessable_entity
     end
@@ -206,11 +195,11 @@ class ReservationsController < ApplicationController
   private
 
   def reservation_params
-    # The key addition: seat_preferences: [] to permit arrays
+    # Now we permit :duration_minutes
     params.require(:reservation).permit(
       :restaurant_id,
       :start_time,
-      :end_time,
+      :end_time,         # optional if the admin wants to override
       :party_size,
       :contact_name,
       :contact_phone,
@@ -219,7 +208,8 @@ class ReservationsController < ApplicationController
       :reservation_source,
       :special_requests,
       :status,
-      seat_preferences: []
+      :duration_minutes,
+      seat_preferences: [] # seat_preferences is an array
     )
   end
 

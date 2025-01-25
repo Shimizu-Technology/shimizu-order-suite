@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_24_231116) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_25_103013) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -69,6 +69,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_24_231116) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.jsonb "seat_preferences", default: [], null: false
+    t.integer "duration_minutes", default: 60
     t.index ["restaurant_id"], name: "index_reservations_on_restaurant_id"
     t.check_constraint "status::text = ANY (ARRAY['booked'::character varying, 'reserved'::character varying, 'seated'::character varying, 'finished'::character varying, 'canceled'::character varying, 'no_show'::character varying]::text[])", name: "check_reservation_status"
   end
