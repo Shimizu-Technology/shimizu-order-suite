@@ -266,17 +266,17 @@ tomorrow_17 = today_17 + 1.day
 
 reservation_data = [
   {
-    name:        "Leon Shimizu",
+    name:        "Leon",
     start_time:  today_17,
     party_size:  2,
-    status:      "seated",
+    status:      "booked",
     preferences: [["Seat #5", "Seat #6"]]
   },
   {
-    name:        "Kami Shimizu",
+    name:        "Kami",
     start_time:  today_17,
     party_size:  3,
-    status:      "reserved",
+    status:      "booked",
     preferences: [["Seat #7", "Seat #8", "Seat #9"]]
   },
   {
@@ -348,7 +348,7 @@ puts "Creating sample Waitlist Entries..."
 waitlist_data = [
   { name: "Walk-in Joe",       time: now,                party_size: 3, status: "waiting" },
   { name: "Party of Six",      time: now - 30*60,        party_size: 6, status: "waiting" },
-  { name: "Seated Sarah",      time: now - 1.hour,       party_size: 2, status: "seated" },
+  { name: "Sarah",      time: now - 1.hour,       party_size: 2, status: "waiting" },
   { name: "Walk-in Solo",      time: now - 15*60,        party_size: 1, status: "waiting" }
 ]
 

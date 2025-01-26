@@ -78,48 +78,37 @@ class SeatAllocationsController < ApplicationController
 
   # POST /seat_allocations/multi_create
   def multi_create
-    sa_params = params.require(:seat_allocation)
-                      .permit(:occupant_type, :occupant_id,
-                              :start_time, :end_time, seat_ids: [])
+    sa_params = params.require(:seat_allocation).permit(:occupant_type, :occupant_id, :start_time, :end_time, seat_ids: [])
 
     occupant_type = sa_params[:occupant_type]
     occupant_id   = sa_params[:occupant_id]
     seat_ids      = sa_params[:seat_ids] || []
-
     st = parse_time(sa_params[:start_time]) || Time.current
     en = parse_time(sa_params[:end_time])
 
     if occupant_type.blank? || occupant_id.blank? || seat_ids.empty?
-      return render json: { error: "Must provide occupant_type, occupant_id, seat_ids" },
-                    status: :unprocessable_entity
+      return render json: { error: "Must provide occupant_type, occupant_id, seat_ids" }, status: :unprocessable_entity
     end
 
     occupant = find_occupant(occupant_type, occupant_id)
     return unless occupant
 
     en ||= default_end_time(occupant, st)
-
     if st >= en
-      return render json: { error: "start_time must be before end_time" },
-                    status: :unprocessable_entity
+      return render json: { error: "start_time must be before end_time" }, status: :unprocessable_entity
     end
 
     ActiveRecord::Base.transaction do
+      # occupant => "seated" unless it’s already finished, canceled, etc.
       occupant.update!(status: "seated") unless %w[seated finished canceled no_show removed].include?(occupant.status)
 
       seat_ids.each do |sid|
-        seat = Seat.find_by(id: sid)
-        raise ActiveRecord::RecordNotFound, "Seat #{sid} not found" unless seat
+        seat = Seat.find_by(id: sid) or raise ActiveRecord::RecordNotFound, "Seat #{sid} not found"
 
-        # Overlap check
-        conflict = SeatAllocation
-                     .where(seat_id: sid, released_at: nil)
-                     .where("start_time < ? AND end_time > ?", en, st)
-                     .exists?
-
-        if conflict
-          raise StandardError, "Seat #{sid} is not free from #{st} to #{en}"
-        end
+        # *** Overlap check *** 
+        conflict = SeatAllocation.where(seat_id: sid, released_at: nil)
+                                 .where("start_time < ? AND end_time > ?", en, st).exists?
+        raise StandardError, "Seat #{sid} is not free" if conflict
 
         SeatAllocation.create!(
           seat_id:           seat.id,
@@ -132,7 +121,7 @@ class SeatAllocationsController < ApplicationController
       end
     end
 
-    msg = "Seats allocated from #{st.strftime('%H:%M')} to #{en.strftime('%H:%M')} for occupant #{occupant.id}"
+    msg = "Seats allocated (seated) from #{st.strftime('%H:%M')} to #{en.strftime('%H:%M')} for occupant #{occupant.id}"
     render json: { message: msg }, status: :created
 
   rescue ActiveRecord::RecordNotFound, StandardError => e
@@ -141,48 +130,39 @@ class SeatAllocationsController < ApplicationController
 
   # POST /seat_allocations/reserve
   def reserve
-    ra_params = params.require(:seat_allocation)
-                      .permit(:occupant_type, :occupant_id,
-                              :start_time, :end_time, seat_ids: [])
+    ra_params = params.require(:seat_allocation).permit(:occupant_type, :occupant_id, :start_time, :end_time, seat_ids: [], seat_labels: [])
 
     occupant_type = ra_params[:occupant_type]
     occupant_id   = ra_params[:occupant_id]
     seat_ids      = ra_params[:seat_ids] || []
+    seat_labels   = ra_params[:seat_labels] || []
 
     st = parse_time(ra_params[:start_time]) || Time.current
     en = parse_time(ra_params[:end_time])
 
+    # Convert seat_labels -> seat_ids if seat_ids is empty
+    if seat_ids.empty? && seat_labels.any?
+      seat_ids = seat_labels.map {|lbl| Seat.find_by(label: lbl)&.id }.compact
+    end
+
     if occupant_type.blank? || occupant_id.blank? || seat_ids.empty?
-      return render json: { error: "Must provide occupant_type, occupant_id, seat_ids" },
-                    status: :unprocessable_entity
+      return render json: { error: "Must provide occupant_type, occupant_id, and at least one seat" }, status: :unprocessable_entity
     end
 
-    occupant = find_occupant(occupant_type, occupant_id)
-    return unless occupant
-
+    occupant = find_occupant(occupant_type, occupant_id) or return
     en ||= default_end_time(occupant, st)
-
-    if st >= en
-      return render json: { error: "start_time must be before end_time" },
-                    status: :unprocessable_entity
-    end
+    return render json: { error: "start_time must be before end_time" }, status: :unprocessable_entity if st >= en
 
     ActiveRecord::Base.transaction do
+      # occupant => "reserved" unless it’s already seated, finished, etc.
       occupant.update!(status: "reserved") unless %w[seated finished canceled no_show removed].include?(occupant.status)
 
       seat_ids.each do |sid|
-        seat = Seat.find_by(id: sid)
-        raise ActiveRecord::RecordNotFound, "Seat #{sid} not found" unless seat
+        seat = Seat.find_by(id: sid) or raise ActiveRecord::RecordNotFound, "Seat #{sid} not found"
 
-        # Overlap check
-        conflict = SeatAllocation
-                     .where(seat_id: sid, released_at: nil)
-                     .where("start_time < ? AND end_time > ?", en, st)
-                     .exists?
-
-        if conflict
-          raise StandardError, "Seat #{sid} not free from #{st} to #{en}"
-        end
+        conflict = SeatAllocation.where(seat_id: sid, released_at: nil)
+                                 .where("start_time < ? AND end_time > ?", en, st).exists?
+        raise StandardError, "Seat #{sid} not free" if conflict
 
         SeatAllocation.create!(
           seat_id:           seat.id,
@@ -325,32 +305,21 @@ class SeatAllocationsController < ApplicationController
 
   private
 
-  # Safely parse time or return nil if invalid
   def parse_time(time_str)
     return nil unless time_str.present?
-    # Use Time.zone.parse so naive strings are read as "Pacific/Guam" (from config.time_zone)
-    Time.zone.parse(time_str)
-  rescue ArgumentError
-    nil
+    Time.zone.parse(time_str) rescue nil
   end
 
-  # Return occupant (Reservation or WaitlistEntry) or render 404 if not found
   def find_occupant(occupant_type, occupant_id)
     occupant = case occupant_type
-               when "reservation"
-                 Reservation.find_by(id: occupant_id)
-               when "waitlist"
-                 WaitlistEntry.find_by(id: occupant_id)
-               else
-                 nil
+               when "reservation" then Reservation.find_by(id: occupant_id)
+               when "waitlist"    then WaitlistEntry.find_by(id: occupant_id)
+               else nil
                end
-    unless occupant
-      render json: { error: "Could not find occupant" }, status: :not_found
-    end
+    render(json: { error: "Could not find occupant" }, status: :not_found) unless occupant
     occupant
   end
 
-  # Default end_time if none provided
   def default_end_time(occupant, start_time)
     if occupant.is_a?(Reservation)
       (start_time || Time.current) + 60.minutes
