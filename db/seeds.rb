@@ -44,9 +44,8 @@ puts "   admin_settings: #{restaurant.admin_settings.inspect}"
 # ------------------------------------------------------------------------------
 # 1B) SEED OPERATING HOURS (Sunday..Saturday)
 # ------------------------------------------------------------------------------
-# Example schedule: Sunday closed, Mon-Fri = 9:00–21:00, Sat = 10:00–22:00
 oh_data = [
-  { day_of_week: 0, open_time: nil,       close_time: nil,       closed: true  },  # Sunday
+  { day_of_week: 0, open_time: nil,        close_time: nil,        closed: true  },  # Sunday (closed)
   { day_of_week: 1, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Monday
   { day_of_week: 2, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Tuesday
   { day_of_week: 3, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Wed
@@ -65,11 +64,14 @@ oh_data.each do |row|
     oh_record.closed     = row[:closed]
   end
 
-  # If the record already existed, update it to match new times if needed
-  oh.update!(open_time: row[:open_time], close_time: row[:close_time], closed: row[:closed]) unless oh.new_record?
+  # If the record already existed, update it
+  oh.update!(
+    open_time:  row[:open_time],
+    close_time: row[:close_time],
+    closed:     row[:closed]
+  ) unless oh.new_record?
 
-  # Print summary
-  day_name = Date::DAYNAMES[row[:day_of_week]]  # e.g. "Sunday"
+  day_name = Date::DAYNAMES[row[:day_of_week]]
   if oh.closed?
     puts " - #{day_name} => CLOSED"
   else
@@ -108,12 +110,10 @@ main_layout = Layout.find_or_create_by!(
   restaurant_id: restaurant.id
 )
 
-# --- A helper method to replicate a simple table geometry in a circle ---
+# --- Helper method: place seats in a circle around a table ---
 def layout_table_seats(seat_count, label_prefix)
-  # seat #1 at top, then clockwise
   angle_offset = -Math::PI / 2
   angle_step   = (2 * Math::PI) / seat_count
-
   table_radius = 40
   seat_radius  = 32
   seat_margin  = 10
@@ -122,8 +122,8 @@ def layout_table_seats(seat_count, label_prefix)
   seats_data = []
   seat_count.times do |i|
     angle = angle_offset + i * angle_step
-    x = radius * Math.cos(angle)
-    y = radius * Math.sin(angle)
+    x     = radius * Math.cos(angle)
+    y     = radius * Math.sin(angle)
     seats_data << {
       label:    "#{label_prefix}#{i+1}",
       x:        x.round,
@@ -134,7 +134,7 @@ def layout_table_seats(seat_count, label_prefix)
   seats_data
 end
 
-# ----------------- SECTION 1: SUSHI BAR FRONT (COUNTER, FLOOR 1) -----------------
+# SECTION 1: SUSHI BAR FRONT (COUNTER, FLOOR 1)
 bar_section = SeatSection.find_or_create_by!(
   layout_id:    main_layout.id,
   name:         "Sushi Bar Front",
@@ -145,18 +145,18 @@ bar_section = SeatSection.find_or_create_by!(
   floor_number: 1
 )
 
-# We create 10 seats spaced ~70px vertically
 10.times do |i|
   seat_label = "Seat ##{i + 1}"
   Seat.find_or_create_by!(seat_section_id: bar_section.id, label: seat_label) do |seat|
     seat.position_x = 0
     seat.position_y = 70 * i
     seat.capacity   = 1
+    # No :status here – it was removed by a migration
   end
 end
 puts "Created 10 seats for Sushi Bar Front (Floor 1)."
 
-# ----------------- SECTION 2: TABLE A (CIRCLE, FLOOR 1) -----------------
+# SECTION 2: TABLE A (CIRCLE, FLOOR 1)
 table_a = SeatSection.find_or_create_by!(
   layout_id:    main_layout.id,
   name:         "Table A",
@@ -167,7 +167,7 @@ table_a = SeatSection.find_or_create_by!(
   floor_number: 1
 )
 
-table_seats = layout_table_seats(4, "A")  # e.g. A1, A2, A3, A4
+table_seats = layout_table_seats(4, "A")
 table_seats.each do |ts|
   Seat.find_or_create_by!(seat_section_id: table_a.id, label: ts[:label]) do |seat|
     seat.position_x = ts[:x]
@@ -177,7 +177,7 @@ table_seats.each do |ts|
 end
 puts "Created 4 seats in a circle for Table A (Floor 1)."
 
-# ----------------- SECTION 3: TABLE 4 (FLOOR 2) -----------------
+# SECTION 3: TABLE 4 (FLOOR 2)
 table_4 = SeatSection.find_or_create_by!(
   layout_id:    main_layout.id,
   name:         "Table 4",
@@ -188,7 +188,6 @@ table_4 = SeatSection.find_or_create_by!(
   floor_number: 2
 )
 
-# Another circle of 4 seats
 table_4_seats = layout_table_seats(4, "T4-")
 table_4_seats.each do |ts|
   Seat.find_or_create_by!(seat_section_id: table_4.id, label: ts[:label]) do |seat|
@@ -203,10 +202,7 @@ puts "Created 4 seats in a circle for Table 4 (Floor 2)."
 restaurant.update!(current_layout_id: main_layout.id)
 puts "Set '#{main_layout.name}' as the current layout for Restaurant #{restaurant.id}."
 
-# ------------------------------------------------------------------------------
 # Build sections_data JSON for the Layout
-# So your React front-end can read the floorNumber, seats, etc.
-# ------------------------------------------------------------------------------
 bar_section.reload
 table_a.reload
 table_4.reload
@@ -221,11 +217,11 @@ bar_section_hash = {
   "orientation"  => bar_section.orientation,
   "seats" => bar_section.seats.map do |s|
     {
-      "id"          => s.id,
-      "label"       => s.label,
-      "capacity"    => s.capacity,
-      "position_x"  => s.position_x,
-      "position_y"  => s.position_y
+      "id"         => s.id,
+      "label"      => s.label,
+      "capacity"   => s.capacity,
+      "position_x" => s.position_x,
+      "position_y" => s.position_y
     }
   end
 }
@@ -240,11 +236,11 @@ table_a_hash = {
   "orientation"  => table_a.orientation,
   "seats" => table_a.seats.map do |s|
     {
-      "id"          => s.id,
-      "label"       => s.label,
-      "capacity"    => s.capacity,
-      "position_x"  => s.position_x,
-      "position_y"  => s.position_y
+      "id"         => s.id,
+      "label"      => s.label,
+      "capacity"   => s.capacity,
+      "position_x" => s.position_x,
+      "position_y" => s.position_y
     }
   end
 }
@@ -259,10 +255,10 @@ table_4_hash = {
   "orientation"  => table_4.orientation,
   "seats" => table_4.seats.map do |s|
     {
-      "label"       => s.label,
-      "capacity"    => s.capacity,
-      "position_x"  => s.position_x,
-      "position_y"  => s.position_y
+      "label"      => s.label,
+      "capacity"   => s.capacity,
+      "position_x" => s.position_x,
+      "position_y" => s.position_y
     }
   end
 }
@@ -279,8 +275,7 @@ main_layout.update!(
 puts "Updated Layout##{main_layout.id} sections_data with 3 seat sections (2 floors)."
 
 # ------------------------------------------------------------------------------
-# HELPER: Build seat preference arrays so each sub-array is exactly party_size seats
-# We'll generate up to 3 sub-arrays if possible.
+# HELPER: seat preference arrays
 # ------------------------------------------------------------------------------
 def build_seat_prefs_for_party_size(party_size, total_seats=10, max_sets=3)
   seat_labels = (1..total_seats).map { |i| "Seat ##{i}" }
@@ -362,9 +357,7 @@ reservation_data.each do |res_data|
     res.status        = res_data[:status]
     res.end_time      = res_data[:start_time] + 60.minutes
 
-    # Possibly auto-generate more seat sets
     provided_prefs = res_data[:preferences] || []
-    # only keep valid sets that match the party_size exactly
     filtered = provided_prefs.select { |arr| arr.size == res_data[:party_size] }
 
     if filtered.size < 3
