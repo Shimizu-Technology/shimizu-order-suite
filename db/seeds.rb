@@ -28,12 +28,21 @@ restaurant.update!(
   opening_time:        Time.zone.parse("17:00"),  # 5:00 pm GUAM
   closing_time:        Time.zone.parse("21:00"),  # 9:00 pm GUAM
   time_slot_interval:  30,
-  time_zone:           "Pacific/Guam"
+  time_zone:           "Pacific/Guam",
+  default_reservation_length: 60,  # newly added column
+  admin_settings: {
+    "require_deposit" => false,
+    "deposit_amount"  => 0
+    # add any other placeholders if you want
+  }
 )
+
 puts "Created/found Restaurant: #{restaurant.name}"
 puts "   open from #{restaurant.opening_time.strftime("%H:%M")} to #{restaurant.closing_time.strftime("%H:%M")}"
 puts "   time_slot_interval: #{restaurant.time_slot_interval} mins"
 puts "   time_zone: #{restaurant.time_zone}"
+puts "   default_reservation_length: #{restaurant.default_reservation_length}"
+puts "   admin_settings: #{restaurant.admin_settings.inspect}"
 
 # ------------------------------------------------------------------------------
 # 2) USERS
@@ -259,7 +268,7 @@ puts "Creating sample Reservations..."
 
 # Example times
 now         = Time.current
-today_17    = now.change(hour: 17, min: 0)  
+today_17    = now.change(hour: 17, min: 0)
 today_18    = today_17 + 1.hour
 today_19    = today_17 + 2.hours
 tomorrow_17 = today_17 + 1.day
@@ -348,7 +357,7 @@ puts "Creating sample Waitlist Entries..."
 waitlist_data = [
   { name: "Walk-in Joe",       time: now,                party_size: 3, status: "waiting" },
   { name: "Party of Six",      time: now - 30*60,        party_size: 6, status: "waiting" },
-  { name: "Sarah",      time: now - 1.hour,       party_size: 2, status: "waiting" },
+  { name: "Sarah",             time: now - 1.hour,       party_size: 2, status: "waiting" },
   { name: "Walk-in Solo",      time: now - 15*60,        party_size: 1, status: "waiting" }
 ]
 

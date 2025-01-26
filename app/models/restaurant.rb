@@ -13,8 +13,10 @@ class Restaurant < ApplicationRecord
 
   belongs_to :current_layout, class_name: "Layout", optional: true
 
-  # NEW: we require a time_zone string
   validates :time_zone, presence: true
+
+  validates :default_reservation_length, 
+            numericality: { only_integer: true, greater_than: 0 }
 
   #--------------------------------------------------------------------------
   # Example helper if you only want seats from the "active" layout:

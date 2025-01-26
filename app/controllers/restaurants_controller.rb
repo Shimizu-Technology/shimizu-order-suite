@@ -12,7 +12,7 @@ class RestaurantsController < ApplicationController
       @restaurants = Restaurant.where(id: current_user.restaurant_id)
     end
 
-    # Return an array of restaurants in JSON, each with current_layout_id
+    # Return an array of restaurants in JSON
     render json: @restaurants.map { |r| restaurant_json(r) }
   end
 
@@ -73,25 +73,34 @@ class RestaurantsController < ApplicationController
   end
 
   def restaurant_params
-    # Permit whichever fields you allow. Note current_layout_id for setting active layout, if desired.
+    # Only permit the fields that actually exist in your DB schema
     params.require(:restaurant).permit(
       :name,
       :address,
-      :opening_hours,
       :layout_type,
-      :current_layout_id
+      :current_layout_id,
+      :opening_time,
+      :closing_time,
+      :default_reservation_length,
+      :time_slot_interval,
+      :time_zone,            # If you store a time_zone
+      admin_settings: {}     # JSONB field for additional settings
     )
   end
 
-  # Helper: convert a Restaurant model to a JSON structure that includes current_layout_id
   def restaurant_json(restaurant)
     {
-      id:                restaurant.id,
-      name:              restaurant.name,
-      address:           restaurant.address,
-      opening_hours:     restaurant.opening_hours,
-      layout_type:       restaurant.layout_type,
-      current_layout_id: restaurant.current_layout_id
+      id:                         restaurant.id,
+      name:                       restaurant.name,
+      address:                    restaurant.address,
+      layout_type:                restaurant.layout_type,
+      current_layout_id:          restaurant.current_layout_id,
+      opening_time:               restaurant.opening_time,
+      closing_time:               restaurant.closing_time,
+      default_reservation_length: restaurant.default_reservation_length,
+      time_slot_interval:         restaurant.time_slot_interval,
+      time_zone:                  restaurant.time_zone,
+      admin_settings:             restaurant.admin_settings
     }
   end
 end

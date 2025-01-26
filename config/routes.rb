@@ -1,9 +1,11 @@
+# config/routes.rb
+
 Rails.application.routes.draw do
   # Authentication
   post '/signup', to: 'users#create'
   post '/login',  to: 'sessions#create'
 
-  # Standard RESTful
+  # Standard RESTful resources
   resources :restaurants, only: [:index, :show, :create, :update, :destroy]
   resources :seat_sections, only: [:index, :show, :create, :update, :destroy]
 
@@ -38,6 +40,14 @@ Rails.application.routes.draw do
     end
   end
 
-  # Availability route
+  # Availability endpoint
   get '/availability', to: 'availability#index'
+
+  # Admin namespace: custom settings routes
+  namespace :admin do
+    resource :settings, only: [:show, :update]
+    # => GET /admin/settings    => admin/settings#show
+    # => PATCH /admin/settings  => admin/settings#update
+    # => PUT /admin/settings    => admin/settings#update
+  end
 end

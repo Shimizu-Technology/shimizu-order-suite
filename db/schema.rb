@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_25_103013) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_26_005057) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -77,7 +77,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_25_103013) do
   create_table "restaurants", force: :cascade do |t|
     t.string "name"
     t.string "address"
-    t.string "opening_hours"
     t.string "layout_type"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
@@ -86,6 +85,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_25_103013) do
     t.time "closing_time"
     t.integer "time_slot_interval", default: 30
     t.string "time_zone", default: "Pacific/Guam", null: false
+    t.integer "default_reservation_length", default: 60, null: false
+    t.jsonb "admin_settings", default: {}, null: false
     t.index ["current_layout_id"], name: "index_restaurants_on_current_layout_id"
   end
 
