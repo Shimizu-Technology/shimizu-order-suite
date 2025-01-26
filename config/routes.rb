@@ -45,11 +45,13 @@ Rails.application.routes.draw do
 
   # Admin namespace => special endpoints
   namespace :admin do
+    # Restaurant settings
     resource :settings, only: [:show, :update]
-    # => GET /admin/settings    => admin/settings#show
-    # => PATCH/PUT /admin/settings => admin/settings#update
 
     # Operating Hours
     resources :operating_hours, only: [:index, :update]
+
+    # Special Events
+    resources :special_events, only: [:index, :show, :create, :update, :destroy]
   end
 end

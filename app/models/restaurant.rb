@@ -6,6 +6,7 @@ class Restaurant < ApplicationRecord
   has_many :waitlist_entries, dependent: :destroy
   has_many :menus,            dependent: :destroy
   has_many :operating_hours, dependent: :destroy
+  has_many :special_events,   dependent: :destroy
 
   # Layout-related associations
   has_many :layouts,          dependent: :destroy
