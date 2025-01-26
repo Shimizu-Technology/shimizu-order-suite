@@ -12,13 +12,11 @@ class RestaurantsController < ApplicationController
       @restaurants = Restaurant.where(id: current_user.restaurant_id)
     end
 
-    # Return an array of restaurants in JSON
     render json: @restaurants.map { |r| restaurant_json(r) }
   end
 
   # GET /restaurants/:id
   def show
-    # Staff/admin can only see their own restaurant (unless super_admin)
     unless current_user.role == "super_admin" || current_user.restaurant_id == @restaurant.id
       return render json: { error: "Forbidden" }, status: :forbidden
     end
@@ -28,7 +26,6 @@ class RestaurantsController < ApplicationController
 
   # POST /restaurants
   def create
-    # Typically only super_admin can create new restaurants, but adjust as needed
     unless current_user.role.in?(%w[super_admin])
       return render json: { error: "Forbidden" }, status: :forbidden
     end
@@ -43,7 +40,6 @@ class RestaurantsController < ApplicationController
 
   # PATCH/PUT /restaurants/:id
   def update
-    # Let super_admin or staff/admin of that restaurant update it
     unless current_user.role.in?(%w[admin super_admin]) || current_user.restaurant_id == @restaurant.id
       return render json: { error: "Forbidden" }, status: :forbidden
     end
@@ -57,7 +53,6 @@ class RestaurantsController < ApplicationController
 
   # DELETE /restaurants/:id
   def destroy
-    # Typically only super_admin can delete a restaurant
     unless current_user.role == "super_admin"
       return render json: { error: "Forbidden" }, status: :forbidden
     end
@@ -73,18 +68,16 @@ class RestaurantsController < ApplicationController
   end
 
   def restaurant_params
-    # Only permit the fields that actually exist in your DB schema
+    # Only permit fields that actually exist. If we removed opening_time,closing_time columns => drop them
     params.require(:restaurant).permit(
       :name,
       :address,
       :layout_type,
       :current_layout_id,
-      :opening_time,
-      :closing_time,
       :default_reservation_length,
       :time_slot_interval,
-      :time_zone,            # If you store a time_zone
-      admin_settings: {}     # JSONB field for additional settings
+      :time_zone,
+      admin_settings: {}
     )
   end
 
@@ -95,8 +88,7 @@ class RestaurantsController < ApplicationController
       address:                    restaurant.address,
       layout_type:                restaurant.layout_type,
       current_layout_id:          restaurant.current_layout_id,
-      opening_time:               restaurant.opening_time,
-      closing_time:               restaurant.closing_time,
+      # Removed opening_time/closing_time
       default_reservation_length: restaurant.default_reservation_length,
       time_slot_interval:         restaurant.time_slot_interval,
       time_zone:                  restaurant.time_zone,

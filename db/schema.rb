@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_26_005057) do
+ActiveRecord::Schema[7.2].define(version: 2025_01_26_030755) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -54,6 +54,18 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_26_005057) do
     t.index ["reservation_id"], name: "index_notifications_on_reservation_id"
   end
 
+  create_table "operating_hours", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.integer "day_of_week", null: false
+    t.time "open_time"
+    t.time "close_time"
+    t.boolean "closed", default: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["restaurant_id", "day_of_week"], name: "index_operating_hours_on_restaurant_id_and_day_of_week", unique: true
+    t.index ["restaurant_id"], name: "index_operating_hours_on_restaurant_id"
+  end
+
   create_table "reservations", force: :cascade do |t|
     t.bigint "restaurant_id", null: false
     t.datetime "start_time"
@@ -81,8 +93,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_26_005057) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.bigint "current_layout_id"
-    t.time "opening_time"
-    t.time "closing_time"
     t.integer "time_slot_interval", default: 30
     t.string "time_zone", default: "Pacific/Guam", null: false
     t.integer "default_reservation_length", default: 60, null: false
@@ -129,6 +139,18 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_26_005057) do
     t.index ["seat_section_id"], name: "index_seats_on_seat_section_id"
   end
 
+  create_table "special_events", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.date "event_date", null: false
+    t.boolean "exclusive_booking", default: false
+    t.integer "max_capacity", default: 0
+    t.string "description"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["restaurant_id", "event_date"], name: "index_special_events_on_restaurant_id_and_event_date", unique: true
+    t.index ["restaurant_id"], name: "index_special_events_on_restaurant_id"
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "email", null: false
     t.string "password_digest", null: false
@@ -157,6 +179,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_26_005057) do
   add_foreign_key "menu_items", "menus"
   add_foreign_key "menus", "restaurants"
   add_foreign_key "notifications", "reservations"
+  add_foreign_key "operating_hours", "restaurants"
   add_foreign_key "reservations", "restaurants"
   add_foreign_key "restaurants", "layouts", column: "current_layout_id", on_delete: :nullify
   add_foreign_key "seat_allocations", "reservations"
@@ -164,6 +187,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_26_005057) do
   add_foreign_key "seat_allocations", "waitlist_entries"
   add_foreign_key "seat_sections", "layouts"
   add_foreign_key "seats", "seat_sections"
+  add_foreign_key "special_events", "restaurants"
   add_foreign_key "users", "restaurants"
   add_foreign_key "waitlist_entries", "restaurants"
 end

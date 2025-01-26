@@ -40,14 +40,16 @@ Rails.application.routes.draw do
     end
   end
 
-  # Availability endpoint
+  # Availability
   get '/availability', to: 'availability#index'
 
-  # Admin namespace: custom settings routes
+  # Admin namespace => special endpoints
   namespace :admin do
     resource :settings, only: [:show, :update]
     # => GET /admin/settings    => admin/settings#show
-    # => PATCH /admin/settings  => admin/settings#update
-    # => PUT /admin/settings    => admin/settings#update
+    # => PATCH/PUT /admin/settings => admin/settings#update
+
+    # Operating Hours
+    resources :operating_hours, only: [:index, :update]
   end
 end

@@ -6,7 +6,7 @@ puts "== (Optional) Cleaning references =="
 # Uncomment to truly reset all data (use with caution in production):
 # ActiveRecord::Base.connection.execute("
 #   TRUNCATE reservations, waitlist_entries, users, restaurants, menus, menu_items,
-#     layouts, seat_sections, seats, seat_allocations RESTART IDENTITY CASCADE
+#     layouts, seat_sections, seats, seat_allocations, operating_hours RESTART IDENTITY CASCADE
 # ")
 
 puts "== Seeding the database =="
@@ -25,11 +25,9 @@ restaurant = Restaurant.find_or_create_by!(
   layout_type: "sushi bar"
 )
 restaurant.update!(
-  opening_time:        Time.zone.parse("17:00"),  # 5:00 pm GUAM
-  closing_time:        Time.zone.parse("21:00"),  # 9:00 pm GUAM
-  time_slot_interval:  30,
-  time_zone:           "Pacific/Guam",
-  default_reservation_length: 60,  # newly added column
+  time_slot_interval:         30,
+  time_zone:                  "Pacific/Guam",
+  default_reservation_length: 60,
   admin_settings: {
     "require_deposit" => false,
     "deposit_amount"  => 0
@@ -38,11 +36,46 @@ restaurant.update!(
 )
 
 puts "Created/found Restaurant: #{restaurant.name}"
-puts "   open from #{restaurant.opening_time.strftime("%H:%M")} to #{restaurant.closing_time.strftime("%H:%M")}"
 puts "   time_slot_interval: #{restaurant.time_slot_interval} mins"
 puts "   time_zone: #{restaurant.time_zone}"
 puts "   default_reservation_length: #{restaurant.default_reservation_length}"
 puts "   admin_settings: #{restaurant.admin_settings.inspect}"
+
+# ------------------------------------------------------------------------------
+# 1B) SEED OPERATING HOURS (Sunday..Saturday)
+# ------------------------------------------------------------------------------
+# Example schedule: Sunday closed, Mon-Fri = 9:00–21:00, Sat = 10:00–22:00
+oh_data = [
+  { day_of_week: 0, open_time: nil,       close_time: nil,       closed: true  },  # Sunday
+  { day_of_week: 1, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Monday
+  { day_of_week: 2, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Tuesday
+  { day_of_week: 3, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Wed
+  { day_of_week: 4, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Thu
+  { day_of_week: 5, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Fri
+  { day_of_week: 6, open_time: "10:00:00", close_time: "22:00:00", closed: false }  # Saturday
+]
+
+oh_data.each do |row|
+  oh = OperatingHour.find_or_create_by!(
+    restaurant_id: restaurant.id,
+    day_of_week:   row[:day_of_week]
+  ) do |oh_record|
+    oh_record.open_time  = row[:open_time]
+    oh_record.close_time = row[:close_time]
+    oh_record.closed     = row[:closed]
+  end
+
+  # If the record already existed, update it to match new times if needed
+  oh.update!(open_time: row[:open_time], close_time: row[:close_time], closed: row[:closed]) unless oh.new_record?
+
+  # Print summary
+  day_name = Date::DAYNAMES[row[:day_of_week]]  # e.g. "Sunday"
+  if oh.closed?
+    puts " - #{day_name} => CLOSED"
+  else
+    puts " - #{day_name} => #{oh.open_time.strftime("%H:%M")} to #{oh.close_time.strftime("%H:%M")}"
+  end
+end
 
 # ------------------------------------------------------------------------------
 # 2) USERS
@@ -266,7 +299,6 @@ end
 # ------------------------------------------------------------------------------
 puts "Creating sample Reservations..."
 
-# Example times
 now         = Time.current
 today_17    = now.change(hour: 17, min: 0)
 today_18    = today_17 + 1.hour
