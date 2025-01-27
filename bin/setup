@@ -2,7 +2,7 @@
 require "fileutils"
 
 APP_ROOT = File.expand_path("..", __dir__)
-APP_NAME = "rotary-reservations-api"
+APP_NAME = "hafaloha-api"
 
 def system!(*args)
   system(*args, exception: true)

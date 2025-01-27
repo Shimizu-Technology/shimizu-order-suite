@@ -8,7 +8,7 @@ class ReservationMailer < ApplicationMailer
 
     mail(
       to:    @reservation.contact_email,
-      subject: "Your Rotary Sushi Reservation Confirmation"
+      subject: "Your Hafaloha Reservation Confirmation"
     )
   end
 end

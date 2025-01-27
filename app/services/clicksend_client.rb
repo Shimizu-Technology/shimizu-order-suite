@@ -24,7 +24,7 @@ class ClicksendClient
       messages: [
         {
           source: 'ruby_app',
-          from:   from, # e.g. 'RotarySushi'
+          from:   from, # e.g. 'Hafaloha'
           body:   body,
           to:     to
         }

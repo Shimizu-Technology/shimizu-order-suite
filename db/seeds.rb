@@ -20,51 +20,68 @@ Time.zone = "Pacific/Guam"
 # 1) RESTAURANT
 # ------------------------------------------------------------------------------
 restaurant = Restaurant.find_or_create_by!(
-  name: "Rotary Sushi",
-  address: "744 N Marine Corps Dr, Harmon Industrial Park, 96913, Guam",
-  layout_type: "sushi bar"
-)
+  name: "Hafaloha"
+) do |r|
+  r.address     = "955 Pale San Vitores Rd, Tamuning, Guam 96913"
+  r.layout_type = "seat-based"
+end
+
 restaurant.update!(
-  time_slot_interval:         30,
-  time_zone:                  "Pacific/Guam",
+  address:                   "955 Pale San Vitores Rd, Tamuning, Guam 96913",
+  time_slot_interval:        30,
+  time_zone:                 "Pacific/Guam",
   default_reservation_length: 60,
   admin_settings: {
     "require_deposit" => false,
     "deposit_amount"  => 0
-    # add any other placeholders if you want
   }
 )
 
 puts "Created/found Restaurant: #{restaurant.name}"
+puts "   Address:  #{restaurant.address}"
 puts "   time_slot_interval: #{restaurant.time_slot_interval} mins"
 puts "   time_zone: #{restaurant.time_zone}"
 puts "   default_reservation_length: #{restaurant.default_reservation_length}"
 puts "   admin_settings: #{restaurant.admin_settings.inspect}"
 
 # ------------------------------------------------------------------------------
-# 1B) SEED OPERATING HOURS (Sunday..Saturday)
+# 1B) SEED OPERATING HOURS
+#
+# Sunday is day_of_week=0, Monday=1, Tuesday=2, etc.
+# Requested hours:
+#   * Tues–Thu: 11AM–9PM
+#   * Fri–Sat: 11AM–10PM
+#   * Sun: 11AM–9PM
+#   * Mon: closed
 # ------------------------------------------------------------------------------
 oh_data = [
-  { day_of_week: 0, open_time: nil,        close_time: nil,        closed: true  },  # Sunday (closed)
-  { day_of_week: 1, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Monday
-  { day_of_week: 2, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Tuesday
-  { day_of_week: 3, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Wed
-  { day_of_week: 4, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Thu
-  { day_of_week: 5, open_time: "09:00:00", close_time: "21:00:00", closed: false }, # Fri
-  { day_of_week: 6, open_time: "10:00:00", close_time: "22:00:00", closed: false }  # Saturday
+  # Sunday (day_of_week=0) => 11:00–21:00
+  { day_of_week: 0, open_time: "11:00:00", close_time: "21:00:00", closed: false },
+  # Monday (1) => closed
+  { day_of_week: 1, open_time: nil,        close_time: nil,        closed: true },
+  # Tuesday (2) => 11:00–21:00
+  { day_of_week: 2, open_time: "11:00:00", close_time: "21:00:00", closed: false },
+  # Wednesday (3) => 11:00–21:00
+  { day_of_week: 3, open_time: "11:00:00", close_time: "21:00:00", closed: false },
+  # Thursday (4) => 11:00–21:00
+  { day_of_week: 4, open_time: "11:00:00", close_time: "21:00:00", closed: false },
+  # Friday (5) => 11:00–22:00
+  { day_of_week: 5, open_time: "11:00:00", close_time: "22:00:00", closed: false },
+  # Saturday (6) => 11:00–22:00
+  { day_of_week: 6, open_time: "11:00:00", close_time: "22:00:00", closed: false }
 ]
 
 oh_data.each do |row|
   oh = OperatingHour.find_or_create_by!(
     restaurant_id: restaurant.id,
     day_of_week:   row[:day_of_week]
-  ) do |oh_record|
-    oh_record.open_time  = row[:open_time]
-    oh_record.close_time = row[:close_time]
-    oh_record.closed     = row[:closed]
-  end
+    ) do |oh_record|
+      oh_record.open_time  = row[:open_time]
+      oh_record.close_time = row[:close_time]
+      oh_record.closed     = row[:closed]
+    end
 
-  # If the record already existed, update it
+    # If the record already existed, update it
   oh.update!(
     open_time:  row[:open_time],
     close_time: row[:close_time],
@@ -106,18 +123,18 @@ puts "Created Regular User: #{regular_user.email} / password"
 # 3) LAYOUT / SEAT SECTIONS / SEATS
 # ------------------------------------------------------------------------------
 main_layout = Layout.find_or_create_by!(
-  name: "Main Sushi Layout",
+  name: "Main Layout",
   restaurant_id: restaurant.id
 )
 
-# --- Helper method: place seats in a circle around a table ---
+# Example circle‐table helper:
 def layout_table_seats(seat_count, label_prefix)
   angle_offset = -Math::PI / 2
   angle_step   = (2 * Math::PI) / seat_count
   table_radius = 40
   seat_radius  = 32
   seat_margin  = 10
-  radius       = table_radius + seat_radius + seat_margin  # ~82 from center
+  radius       = table_radius + seat_radius + seat_margin
 
   seats_data = []
   seat_count.times do |i|
@@ -134,10 +151,10 @@ def layout_table_seats(seat_count, label_prefix)
   seats_data
 end
 
-# SECTION 1: SUSHI BAR FRONT (COUNTER, FLOOR 1)
+# SECTION 1
 bar_section = SeatSection.find_or_create_by!(
   layout_id:    main_layout.id,
-  name:         "Sushi Bar Front",
+  name:         "Front Counter",
   section_type: "counter",
   orientation:  "vertical",
   offset_x:     100,
@@ -151,12 +168,11 @@ bar_section = SeatSection.find_or_create_by!(
     seat.position_x = 0
     seat.position_y = 70 * i
     seat.capacity   = 1
-    # No :status here – it was removed by a migration
   end
 end
-puts "Created 10 seats for Sushi Bar Front (Floor 1)."
+puts "Created 10 seats for Front Counter (Floor 1)."
 
-# SECTION 2: TABLE A (CIRCLE, FLOOR 1)
+# SECTION 2: Table A (circle)
 table_a = SeatSection.find_or_create_by!(
   layout_id:    main_layout.id,
   name:         "Table A",
@@ -166,9 +182,7 @@ table_a = SeatSection.find_or_create_by!(
   offset_y:     100,
   floor_number: 1
 )
-
-table_seats = layout_table_seats(4, "A")
-table_seats.each do |ts|
+layout_table_seats(4, "A").each do |ts|
   Seat.find_or_create_by!(seat_section_id: table_a.id, label: ts[:label]) do |seat|
     seat.position_x = ts[:x]
     seat.position_y = ts[:y]
@@ -177,38 +191,36 @@ table_seats.each do |ts|
 end
 puts "Created 4 seats in a circle for Table A (Floor 1)."
 
-# SECTION 3: TABLE 4 (FLOOR 2)
-table_4 = SeatSection.find_or_create_by!(
+# SECTION 3: Another table on Floor 2
+table_2 = SeatSection.find_or_create_by!(
   layout_id:    main_layout.id,
-  name:         "Table 4",
+  name:         "Table 2 (Upstairs)",
   section_type: "table",
   orientation:  "horizontal",
   offset_x:     237,
   offset_y:     223,
   floor_number: 2
 )
-
-table_4_seats = layout_table_seats(4, "T4-")
-table_4_seats.each do |ts|
-  Seat.find_or_create_by!(seat_section_id: table_4.id, label: ts[:label]) do |seat|
+layout_table_seats(4, "T2-").each do |ts|
+  Seat.find_or_create_by!(seat_section_id: table_2.id, label: ts[:label]) do |seat|
     seat.position_x = ts[:x]
     seat.position_y = ts[:y]
     seat.capacity   = ts[:capacity]
   end
 end
-puts "Created 4 seats in a circle for Table 4 (Floor 2)."
+puts "Created 4 seats in a circle for Table 2 (Floor 2)."
 
-# Mark main_layout as the active layout
+# Mark main_layout as active
 restaurant.update!(current_layout_id: main_layout.id)
 puts "Set '#{main_layout.name}' as the current layout for Restaurant #{restaurant.id}."
 
 # Build sections_data JSON for the Layout
 bar_section.reload
 table_a.reload
-table_4.reload
+table_2.reload
 
 bar_section_hash = {
-  "id"           => "1",
+  "id"           => bar_section.id.to_s,
   "name"         => bar_section.name,
   "type"         => bar_section.section_type,
   "offsetX"      => bar_section.offset_x,
@@ -227,7 +239,7 @@ bar_section_hash = {
 }
 
 table_a_hash = {
-  "id"           => "2",
+  "id"           => table_a.id.to_s,
   "name"         => table_a.name,
   "type"         => table_a.section_type,
   "offsetX"      => table_a.offset_x,
@@ -245,15 +257,15 @@ table_a_hash = {
   end
 }
 
-table_4_hash = {
-  "id"           => "section-4",
-  "name"         => table_4.name,
-  "type"         => table_4.section_type,
-  "offsetX"      => table_4.offset_x,
-  "offsetY"      => table_4.offset_y,
-  "floorNumber"  => table_4.floor_number,
-  "orientation"  => table_4.orientation,
-  "seats" => table_4.seats.map do |s|
+table_2_hash = {
+  "id"           => table_2.id.to_s,
+  "name"         => table_2.name,
+  "type"         => table_2.section_type,
+  "offsetX"      => table_2.offset_x,
+  "offsetY"      => table_2.offset_y,
+  "floorNumber"  => table_2.floor_number,
+  "orientation"  => table_2.orientation,
+  "seats" => table_2.seats.map do |s|
     {
       "label"      => s.label,
       "capacity"   => s.capacity,
@@ -265,14 +277,10 @@ table_4_hash = {
 
 main_layout.update!(
   sections_data: {
-    "sections" => [
-      bar_section_hash,
-      table_a_hash,
-      table_4_hash
-    ]
+    "sections" => [bar_section_hash, table_a_hash, table_2_hash]
   }
 )
-puts "Updated Layout##{main_layout.id} sections_data with 3 seat sections (2 floors)."
+puts "Updated Layout##{main_layout.id} sections_data with seat sections."
 
 # ------------------------------------------------------------------------------
 # HELPER: seat preference arrays
@@ -364,7 +372,7 @@ reservation_data.each do |res_data|
       auto_prefs = build_seat_prefs_for_party_size(res_data[:party_size], 10)
       while filtered.size < 3 && !auto_prefs.empty?
         candidate = auto_prefs.shift
-        # only add it if not already included
+        # only add if not already included
         filtered << candidate unless filtered.any? { |pref| pref.sort == candidate.sort }
       end
     end
@@ -380,10 +388,10 @@ puts "Reservations seeded."
 puts "Creating sample Waitlist Entries..."
 
 waitlist_data = [
-  { name: "Walk-in Joe",       time: now,                party_size: 3, status: "waiting" },
-  { name: "Party of Six",      time: now - 30*60,        party_size: 6, status: "waiting" },
-  { name: "Sarah",             time: now - 1.hour,       party_size: 2, status: "waiting" },
-  { name: "Walk-in Solo",      time: now - 15*60,        party_size: 1, status: "waiting" }
+  { name: "Walk-in Joe",       time: now,          party_size: 3, status: "waiting" },
+  { name: "Party of Six",      time: now - 30*60,  party_size: 6, status: "waiting" },
+  { name: "Sarah",             time: now - 1.hour, party_size: 2, status: "waiting" },
+  { name: "Walk-in Solo",      time: now - 15*60,  party_size: 1, status: "waiting" }
 ]
 
 waitlist_data.each do |wl_data|
@@ -409,27 +417,27 @@ main_menu.update!(active: true)
 
 if main_menu.menu_items.empty?
   MenuItem.create!(
-    name: "Salmon Nigiri",
-    description: "Fresh salmon on sushi rice",
-    price: 3.50,
-    menu: main_menu
-  )
-  MenuItem.create!(
-    name: "Tuna Roll",
-    description: "Classic tuna roll (6 pieces)",
+    name: "Shaved Ice",
+    description: "Island-style shaved ice with tropical flavors",
     price: 5.00,
     menu: main_menu
   )
   MenuItem.create!(
-    name: "Dragon Roll",
-    description: "Eel, cucumber, avocado on top",
-    price: 12.00,
+    name: "Poke Bowl",
+    description: "Fresh poke with rice, veggies, and sauce",
+    price: 10.50,
     menu: main_menu
   )
   MenuItem.create!(
-    name: "Tempura Udon",
-    description: "Udon noodle soup with shrimp tempura",
-    price: 10.50,
+    name: "Island Burger",
+    description: "Burger with a tropical twist, pineapple slice optional",
+    price: 8.00,
+    menu: main_menu
+  )
+  MenuItem.create!(
+    name: "Chamorro BBQ Plate",
+    description: "Local marinade, red rice, finadene sauce",
+    price: 12.00,
     menu: main_menu
   )
   puts "Created sample menu items on the Main Menu."

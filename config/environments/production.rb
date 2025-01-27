@@ -70,7 +70,7 @@ Rails.application.configure do
   config.action_mailer.smtp_settings = {
     user_name: 'apikey',                # This is required by SendGrid
     password:  ENV['SENDGRID_API_KEY'], # Make sure you set this in Render/Heroku/wherever
-    domain:    'rotary-sushi.netlify.app', 
+    domain:    'hafaloha-reservations.netlify.app', 
       # or your own custom domain if you have one
     address:   'smtp.sendgrid.net',
     port:      587,
@@ -82,7 +82,7 @@ Rails.application.configure do
   # Typically, you'd use your production frontend host if that's where
   # users land to confirm or reset password, etc.
   config.action_mailer.default_url_options = {
-    host:     'rotary-sushi.netlify.app',
+    host:     'hafaloha-reservations.netlify.app',
     protocol: 'https'  # ensures links are https://...
   }
 
