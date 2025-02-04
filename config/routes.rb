@@ -59,6 +59,10 @@ Rails.application.routes.draw do
   resources :orders, only: [:index, :show, :create, :update, :destroy]
   resources :promo_codes, only: [:index, :show, :create, :update, :destroy]
   resources :menus, only: [:index, :show, :create, :update, :destroy]
-  resources :menu_items, only: [:index, :show, :create, :update, :destroy]
+  resources :menu_items do
+    member do
+      post :upload_image  # => POST /menu_items/:id/upload_image
+    end
+  end
   resources :inventory_statuses, only: [:index, :show, :update]
 end

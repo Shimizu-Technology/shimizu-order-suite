@@ -14,6 +14,8 @@ gem 'jwt', '~> 2.2'
 gem 'faker'
 # Allow rails to use the .env file
 gem 'dotenv-rails'
+# AWS S3
+gem 'aws-sdk-s3', require: false
 # Use the Puma web server [https://github.com/puma/puma]
 gem "puma", ">= 5.0"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]

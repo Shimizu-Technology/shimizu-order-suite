@@ -1,22 +1,20 @@
 # app/models/order.rb
 class Order < ApplicationRecord
   belongs_to :restaurant
-  belongs_to :user, optional: true  # e.g. if “guest checkout” is allowed
-  
-  # JSON array of line items in `items` field:
-  #   [
-  #     { "id": "omg-lumpia", "name": "O.M.G. Lumpia", "quantity": 2, "price": 11.95, "customizations": { ... } },
-  #     ...
-  #   ]
-  #
-  # Alternatively, you could create an `order_items` join table, but storing
-  # items in JSON is simpler for now.
+  belongs_to :user, optional: true
+
+  # Example: items is JSON column with line items
+  # items: [
+  #   { "id": "omg-lumpia", "name": "O.M.G. Lumpia", "quantity": 2, "price": 11.95, "customizations": { ... } },
+  #   ...
+  # ]
 
   validates :status, inclusion: { in: %w[pending preparing ready completed cancelled] }
 
-  # Helper to sum up total if you want to ensure total is consistent with line items:
-  # def recalc_total
-  #   sum = items.sum { |item| item['price'].to_f * item['quantity'].to_i }
-  #   update!(total: sum)
-  # end
+  # Override as_json to convert `total` to float
+  def as_json(options = {})
+    # Call super to keep default keys (id, created_at, etc.)
+    # Then merge a new key "total" => total.to_f
+    super(options).merge("total" => total.to_f)
+  end
 end

@@ -1,35 +1,23 @@
+# app/controllers/menus_controller.rb
 class MenusController < ApplicationController
   before_action :authorize_request, except: [:index, :show]
 
   # GET /menus
   def index
-    # If you only want active menus, do `.where(active: true)`
-    menus = Menu.all.includes(:menu_items)
-    render json: menus.as_json(
-      include: {
-        menu_items: {
-          only: [:id, :name, :description, :price, :available, :image_url, :category]
-        }
-      }
-    )
+    menus = Menu.includes(:menu_items)
+    # No need for complicated includes now that we override as_json
+    render json: menus
   end
 
   # GET /menus/:id
   def show
     menu = Menu.find(params[:id])
-    render json: menu.as_json(
-      include: {
-        menu_items: {
-          only: [:id, :name, :description, :price, :available, :image_url, :category]
-        }
-      }
-    )
+    render json: menu
   end
 
   # POST /menus
   def create
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
-
     menu = Menu.new(menu_params)
     if menu.save
       render json: menu, status: :created

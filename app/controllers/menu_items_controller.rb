@@ -1,14 +1,14 @@
+# app/controllers/menu_items_controller.rb
 class MenuItemsController < ApplicationController
   before_action :authorize_request, except: [:index, :show]
 
   # GET /menu_items
   def index
-    # Possibly filter by category if params[:category] is passed
-    if params[:category].present?
-      items = MenuItem.where(category: params[:category]).where(available: true)
-    else
-      items = MenuItem.where(available: true)
-    end
+    items = if params[:category].present?
+              MenuItem.where(category: params[:category], available: true)
+            else
+              MenuItem.where(available: true)
+            end
     render json: items
   end
 
@@ -20,39 +20,93 @@ class MenuItemsController < ApplicationController
 
   # POST /menu_items
   def create
+    Rails.logger.info "=== MenuItemsController#create ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
-    item = MenuItem.new(menu_item_params)
-    if item.save
-      render json: item, status: :created
+
+    menu_item = MenuItem.new(menu_item_params)
+    if menu_item.save
+      Rails.logger.info "Created MenuItem => #{menu_item.inspect}"
+      render json: menu_item, status: :created
     else
-      render json: { errors: item.errors.full_messages }, status: :unprocessable_entity
+      Rails.logger.info "Failed to create => #{menu_item.errors.full_messages.inspect}"
+      render json: { errors: menu_item.errors.full_messages }, status: :unprocessable_entity
     end
   end
 
   # PATCH/PUT /menu_items/:id
   def update
+    Rails.logger.info "=== MenuItemsController#update ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
-    item = MenuItem.find(params[:id])
-    if item.update(menu_item_params)
-      render json: item
+
+    menu_item = MenuItem.find(params[:id])
+    Rails.logger.info "Updating MenuItem => #{menu_item.id}"
+    if menu_item.update(menu_item_params)
+      Rails.logger.info "Update success => #{menu_item.inspect}"
+      render json: menu_item
     else
-      render json: { errors: item.errors.full_messages }, status: :unprocessable_entity
+      Rails.logger.info "Update failed => #{menu_item.errors.full_messages.inspect}"
+      render json: { errors: menu_item.errors.full_messages }, status: :unprocessable_entity
     end
   end
 
   # DELETE /menu_items/:id
   def destroy
+    Rails.logger.info "=== MenuItemsController#destroy ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
-    item = MenuItem.find(params[:id])
-    item.destroy
+
+    menu_item = MenuItem.find(params[:id])
+    Rails.logger.info "Destroying MenuItem => #{menu_item.id}, current image_url => #{menu_item.image_url.inspect}"
+
+    if menu_item.image_url.present?
+      old_filename = File.basename(menu_item.image_url)
+      S3Uploader.delete(old_filename)
+    end
+    menu_item.destroy
+    Rails.logger.info "Destroyed MenuItem => #{menu_item.id}"
     head :no_content
+  end
+
+  # POST /menu_items/:id/upload_image (admin only)
+  def upload_image
+    Rails.logger.info "=== MenuItemsController#upload_image ==="
+    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
+
+    menu_item = MenuItem.find(params[:id])
+    Rails.logger.info "Found MenuItem => #{menu_item.id}"
+    file = params[:image]
+    unless file
+      Rails.logger.info "No file param"
+      return render json: { error: 'No image file uploaded' }, status: :unprocessable_entity
+    end
+
+    Rails.logger.info "Incoming file => original_filename: #{file.original_filename.inspect}, content_type: #{file.content_type.inspect}"
+    
+    if menu_item.image_url.present?
+      old_filename = File.basename(menu_item.image_url)
+      Rails.logger.info "Deleting old file => #{old_filename.inspect}"
+      S3Uploader.delete(old_filename)
+    end
+
+    ext = File.extname(file.original_filename)
+    new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
+    Rails.logger.info "new_filename => #{new_filename.inspect}"
+
+    public_url = S3Uploader.upload(file, new_filename)
+    Rails.logger.info "Uploaded => public_url: #{public_url.inspect}"
+
+    menu_item.update!(image_url: public_url)
+    Rails.logger.info "menu_item updated => image_url: #{menu_item.image_url.inspect}"
+
+    render json: menu_item, status: :ok
   end
 
   private
 
   def menu_item_params
-    params.require(:menu_item).permit(:name, :description, :price, :available,
-                                      :menu_id, :image_url, :category)
+    params.require(:menu_item).permit(
+      :name, :description, :price, :available,
+      :menu_id, :category, :image_url
+    )
   end
 
   def is_admin?

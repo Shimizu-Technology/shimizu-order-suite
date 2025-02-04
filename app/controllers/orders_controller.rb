@@ -13,6 +13,7 @@ class OrdersController < ApplicationController
       return render json: { error: "Unauthorized" }, status: :unauthorized
     end
 
+    # This will automatically use Order#as_json, so `total` is numeric.
     render json: @orders, status: :ok
   end
 
@@ -21,7 +22,7 @@ class OrdersController < ApplicationController
     order = Order.find(params[:id])
     # Ensure only admin or user who created the order can view it
     if current_user&.role.in?(%w[admin super_admin]) || current_user&.id == order.user_id
-      render json: order
+      render json: order  # calls as_json => numeric total
     else
       render json: { error: "Forbidden" }, status: :forbidden
     end
@@ -43,15 +44,7 @@ class OrdersController < ApplicationController
     @order.status = "pending"  # or 'preparing' if paid, etc.
 
     if @order.save
-      # e.g., check if we need to reduce inventory here
-      #  handle_inventory_for(@order)
-
-      # If a promo code was applied, you might do:
-      #  apply_promo(@order)
-      #
-      # If you want to send email confirmation:
-      #  OrderMailer.confirmation(@order).deliver_later
-
+      # Overridden as_json => numeric total
       render json: @order, status: :created
     else
       render json: { errors: @order.errors.full_messages }, status: :unprocessable_entity
@@ -65,7 +58,7 @@ class OrdersController < ApplicationController
     return render json: { error: "Forbidden" }, status: :forbidden unless can_edit?(order)
 
     if order.update(order_params)
-      render json: order
+      render json: order  # calls as_json => numeric total
     else
       render json: { errors: order.errors.full_messages }, status: :unprocessable_entity
     end
@@ -94,7 +87,7 @@ class OrdersController < ApplicationController
       :promo_code,
       :special_instructions,
       :estimated_pickup_time,
-      items: [:id, :name, :price, :quantity, :customizations => {}]
+      items: [:id, :name, :price, :quantity, customizations: {}]
     )
   end
 
