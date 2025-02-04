@@ -54,4 +54,11 @@ Rails.application.routes.draw do
     # Special Events
     resources :special_events, only: [:index, :show, :create, :update, :destroy]
   end
+
+  # For ordering
+  resources :orders, only: [:index, :show, :create, :update, :destroy]
+  resources :promo_codes, only: [:index, :show, :create, :update, :destroy]
+  resources :menus, only: [:index, :show, :create, :update, :destroy]
+  resources :menu_items, only: [:index, :show, :create, :update, :destroy]
+  resources :inventory_statuses, only: [:index, :show, :update]
 end
