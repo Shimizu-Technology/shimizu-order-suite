@@ -1,5 +1,8 @@
 # app/models/seat.rb
 class Seat < ApplicationRecord
+  # Even if you see status in an attribute hash, don’t treat it as a DB column
+  self.ignored_columns = [:status]
+
   belongs_to :seat_section
 
   has_many :seat_allocations, dependent: :destroy
