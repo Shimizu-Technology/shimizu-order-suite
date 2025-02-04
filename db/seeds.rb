@@ -437,7 +437,7 @@ categories_data = [
 ]
 
 # Hardcode all images to this single S3 URL:
-s3_image_url = "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_43_1738645607.webp"
+s3_image_url = "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_40_1738639966.webp"
 
 menu_items_data = [
   # APPETIZERS
