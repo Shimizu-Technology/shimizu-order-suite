@@ -84,7 +84,7 @@ oh_data.each do |row|
     oh_record.closed     = row[:closed]
   end
 
-  # If the record already existed, update it
+    # If the record already existed, update it
   oh.update!(
     open_time:  row[:open_time],
     close_time: row[:close_time],
@@ -168,7 +168,6 @@ bar_section = SeatSection.find_or_create_by!(
     seat.position_x = 0
     seat.position_y = 70 * i
     seat.capacity   = 1
-    # Removed any `seat.status` references, as that column no longer exists
   end
 end
 puts "Created 10 seats for Front Counter (Floor 1)."
@@ -444,8 +443,294 @@ categories_data = [
 s3_image_url = "https://hafaloha.s3.ap-southeast-2.amazonaws.com/Hafaloha_Burger.webp"
 
 menu_items_data = [
-  # (Data omitted for brevity—no change, just removing seat.status lines)
-  # ...
+  # APPETIZERS
+  {
+    id: 'tinkak-attach-gyoza',
+    name: 'Tinkak-Attach Gyoza (6 pcs)',
+    description: '(6 pieces) A familiar local dish with seasoned beef and vegetables, steamed and fried with our denanche finadene.',
+    price: 13.95,
+    category: 'appetizers'
+  },
+  {
+    id: 'omg-lumpia',
+    name: 'O.M.G. (Oh My Gollai) Lumpia (6 pcs)',
+    description: '(6 pieces) The wholesome local style spinach and cream cheese side dish wrapped as a spring roll and fried into a savory crisp. Served with our denanche finadene.',
+    price: 11.95,
+    category: 'appetizers'
+  },
+  {
+    id: 'spicy-wings',
+    name: 'Spicy Wings',
+    description: 'Seasoned fried chicken wings, served along side our house blend spices and our homemade denanche ranch.',
+    price: 13.95,
+    category: 'appetizers'
+  },
+  {
+    id: 'garlic-fries',
+    name: 'Garlic Fries',
+    description: '',
+    price: 8.95,
+    category: 'appetizers'
+  },
+  {
+    id: 'french-fries',
+    name: 'French Fries',
+    description: '',
+    price: 5.95,
+    category: 'appetizers'
+  },
+  {
+    id: 'cheezy-bugdilla',
+    name: 'The-Cheesy-Pig-Quesadilla',
+    description: 'Kalua pulled pork wrapped in a flour tortilla with lomi tomatoes and our special cheesy blend.',
+    price: 13.95,
+    category: 'appetizers'
+  },
+  {
+    id: 'onion-wrings',
+    name: 'Onion Rings',
+    description: '',
+    price: 13.95,
+    category: 'appetizers'
+  },
+
+  # POKE
+  {
+    id: 'aloha-poke',
+    name: 'Aloha Poke',
+    description: 'A classic hawaiian style poke seasoned with hawaiian salt, tossed with onions, green onions, soy sauce, sesame oil, seasme seeds, inamona**, and limu**.',
+    price: 16.95,
+    category: 'poke'
+  },
+  {
+    id: 'spizy-tuna-poke',
+    name: 'Spizy Tuna Poke',
+    description: 'Tuna poke tossed with our homemade spicy mayo and tobiko.',
+    price: 17.95,
+    category: 'poke'
+  },
+  {
+    id: 'tofu-poke',
+    name: 'Tofu Poke',
+    description: 'Cubed tofu, fried and marinated in our homemade teriyaki sauce, tossed with avocados**, cucumbers, tomatoes, onions, green onions.',
+    price: 15.95,
+    category: 'poke'
+  },
+  {
+    id: 'shoyu-poke',
+    name: 'Shoyu Poke',
+    description: 'Sweetend poke glazed in our homemade soysauce.',
+    price: 15.95,
+    category: 'poke'
+  },
+  {
+    id: 'cali-poke',
+    name: 'Cali Poke',
+    description: 'A california roll in a bowl filled with ahi poke, crab, avocados**, and cucumbers tossed with our homemade creamy sauce.',
+    price: 16.95,
+    category: 'poke'
+  },
+  {
+    id: 'pika-poke',
+    name: 'Pika Poke',
+    description: 'Seasoned ahi poke tossed in our homemade denanche sauce.',
+    price: 15.95,
+    category: 'poke'
+  },
+  {
+    id: 'kelaguen-poke',
+    name: 'Kelaguen Poke',
+    description: 'Ahi poke tossed with coconut milk, lemon powder, tomatoes, red onions, green bell peppers, and cucumbers.',
+    price: 16.95,
+    category: 'poke'
+  },
+
+  # BURGERS
+  {
+    id: 'hafaloha-burger',
+    name: 'Hafaloha Burger',
+    description: 'Signature burger with grilled pineapple & teriyaki glaze',
+    price: 13.95,
+    category: 'burgers'
+  },
+  {
+    id: 'big-cheeseburger',
+    name: "Da' Big Cheeseburger",
+    description: 'Double patty with three types of cheese',
+    price: 15.95,
+    category: 'burgers'
+  },
+  {
+    id: 'shroom-burger',
+    name: 'Shroom Burger',
+    description: 'Portobello mushroom & Swiss cheese',
+    price: 13.95,
+    category: 'burgers'
+  },
+  {
+    id: 'blue-cheese-bacon-burger',
+    name: 'Blue Cheese Bacon Burger',
+    description: 'Rich blue cheese & crispy bacon',
+    price: 17.95,
+    category: 'burgers'
+  },
+  {
+    id: 'ahi-burger',
+    name: 'Ahi Burger',
+    description: 'Seared ahi tuna patty with island sauce',
+    price: 14.95,
+    category: 'burgers'
+  },
+  {
+    id: 'tori-chicken-burger',
+    name: 'Tori Chicken Burger',
+    description: 'Grilled chicken with island spices',
+    price: 15.95,
+    category: 'burgers'
+  },
+  {
+    id: 'pepper-pineapple-burger',
+    name: 'Pepper Pineapple Burger',
+    description: 'Pepper-crusted patty with sweet pineapple',
+    price: 16.95,
+    category: 'burgers'
+  },
+  {
+    id: 'torresueno-burger',
+    name: 'Torresueno Burger',
+    description: 'Ultimate burger loaded with special toppings',
+    price: 18.95,
+    category: 'burgers'
+  },
+
+  # DESSERTS
+  # Shave Ice
+  {
+    id: 'shave-ice-diki',
+    name: 'Shave Ice (Diki)',
+    description: 'Smaller portion of classic shave ice (up to 3 flavors)',
+    price: 4.50,
+    category: 'desserts'
+  },
+  {
+    id: 'shave-ice-regular',
+    name: 'Shave Ice (Regular)',
+    description: 'Regular size shave ice (up to 3 flavors)',
+    price: 7.50,
+    category: 'desserts'
+  },
+  {
+    id: 'shave-ice-kahuna',
+    name: 'Shave Ice (Kahuna)',
+    description: 'Large “Kahuna” size shave ice (up to 3 flavors)',
+    price: 9.50,
+    category: 'desserts'
+  },
+  # Shave Ice Specials
+  {
+    id: 'shave-ice-special',
+    name: 'Shave Ice Special',
+    description: 'One size (includes vanilla soft-serve + 2 flavors)',
+    price: 8.50,
+    category: 'desserts'
+  },
+  {
+    id: 'halo-halo',
+    name: 'Halo Halo',
+    description: 'Island-style halo halo with coconut jelly & ice cream',
+    price: 9.00,
+    category: 'desserts'
+  },
+  # Ice Keki
+  {
+    id: 'ice-keki-single',
+    name: 'Ice Keki (Single)',
+    description: 'Japanese-inspired ice cream treat (single)',
+    price: 3.20,
+    category: 'desserts'
+  },
+  {
+    id: 'ice-keki-case',
+    name: 'Ice Keki (Case of 12)',
+    description: 'Box of 12 ice keki—save $10 overall',
+    price: 30.00,
+    category: 'desserts'
+  },
+  # Build-a-Bowl
+  {
+    id: 'build-a-bowl',
+    name: 'Build-a-Bowl',
+    description: 'Custom acai bowl—pick your fruit, granola, and honey drizzle',
+    price: 9.25,
+    category: 'desserts'
+  },
+  # Soft-Serve
+  {
+    id: 'soft-serve',
+    name: 'Soft-Serve',
+    description: 'Creamy soft-serve ice cream (one size)',
+    price: 6.25,
+    category: 'desserts'
+  },
+  {
+    id: 'soft-serve-special',
+    name: 'Soft-Serve Special',
+    description: 'One size — loaded with toppings (e.g., fruity pebbles, drizzle)',
+    price: 8.50,
+    category: 'desserts'
+  },
+  # Frozen Fruit Cakes
+  {
+    id: 'frozen-fruit-cake-8',
+    name: 'Frozen Fruit Cake (8")',
+    description: '8-inch frozen fruit cake with choice of crust & toppings',
+    price: 28.00,
+    category: 'desserts'
+  },
+  {
+    id: 'frozen-fruit-cake-10',
+    name: 'Frozen Fruit Cake (10")',
+    description: '10-inch frozen fruit cake—serves a crowd',
+    price: 45.00,
+    category: 'desserts'
+  },
+  {
+    id: 'frozen-fruit-cake-quarter',
+    name: 'Frozen Fruit Cake (1/4 Cake)',
+    description: 'Quarter-sheet frozen fruit cake',
+    price: 58.00,
+    category: 'desserts'
+  },
+  {
+    id: 'frozen-fruit-cake-half',
+    name: 'Frozen Fruit Cake (1/2 Cake)',
+    description: 'Half-sheet frozen fruit cake',
+    price: 69.00,
+    category: 'desserts'
+  },
+
+  # DRINKS
+  {
+    id: 'breeze',
+    name: 'Breeze',
+    description: 'Vanilla soft-serve + real fruit juice (one size)',
+    price: 8.25,
+    category: 'drinks'
+  },
+  {
+    id: 'smoothies',
+    name: 'Smoothies',
+    description: 'One size (20 oz) made with real fruit & juice',
+    price: 8.00,
+    category: 'drinks'
+  },
+  {
+    id: 'soda-pop',
+    name: 'Soda Pop (20 oz)',
+    description: 'Choice of flavors, 20 oz cup',
+    price: 4.75,
+    category: 'drinks'
+  }
 ]
 
 puts "Creating Main Menu with categories & items..."
@@ -472,15 +757,106 @@ puts "Seeded #{MenuItem.count} menu items under '#{main_menu.name}'."
 puts "Creating some sample Orders..."
 
 orders_data = [
-  # ...
+  {
+    id: 'ORD-001',
+    # user_id: 'user1', # We'll ignore this and attach to our "regular_user" below
+    items: [
+      {
+        id: 'aloha-poke',
+        name: 'Aloha Poke',
+        quantity: 2,
+        price: 15.99,
+        customizations: {
+          'Base' => ['Brown Rice'],
+          'Add-ons' => ['Avocado', 'Masago']
+        }
+      },
+      {
+        id: 'tropical-smoothie',
+        name: 'Tropical Smoothie',
+        quantity: 1,
+        price: 7.99,
+        customizations: {
+          'Base' => ['Mango'],
+          'Add-ins' => ['Protein']
+        }
+      }
+    ],
+    status: 'completed',
+    total: 39.97,
+    createdAt: '2024-03-14T10:30:00Z',
+    estimatedPickupTime: '2024-03-14T11:00:00Z'
+  },
+  {
+    id: 'ORD-002',
+    # user_id: 'user1', # We'll ignore this and attach to our "regular_user" below
+    items: [
+      {
+        id: 'hafaloha-burger',
+        name: 'Hafaloha Burger',
+        quantity: 1,
+        price: 13.99,
+        customizations: {
+          'Temperature' => ['Medium'],
+          'Add-ons'     => ['Bacon', 'Avocado']
+        }
+      },
+      {
+        id: 'shave-ice',
+        name: 'Island Shave Ice',
+        quantity: 2,
+        price: 6.99,
+        customizations: {
+          'Flavors' => ['Mango', 'Lychee'],
+          'Toppings'=> ['Mochi', 'Condensed Milk']
+        }
+      }
+    ],
+    status: 'completed',
+    total: 27.97,
+    createdAt: '2024-03-13T15:45:00Z',
+    estimatedPickupTime: '2024-03-13T16:15:00Z'
+  },
+  {
+    id: 'ORD-003',
+    user_id: 'user1',
+    items: [
+      {
+        id: 'spicy-wings',
+        name: 'Spicy Wings',
+        quantity: 2,
+        price: 12.99,
+        customizations: {
+          'Sauce' => ['Buffalo']
+        }
+      },
+      {
+        id: 'soda-pop',
+        name: 'Island Soda Pop',
+        quantity: 2,
+        price: 2.99,
+        customizations: {
+          'Flavor' => ['Cola'],
+          'Size'   => ['Large']
+        }
+      }
+    ],
+    status: 'preparing',
+    total: 31.96,
+    createdAt: '2024-03-15T12:00:00Z',
+    estimatedPickupTime: '2024-03-15T12:30:00Z',
+    specialInstructions: 'Extra napkins please'
+  }
 ]
 
 regular_user = User.find_by(email: "user@example.com")
 
 orders_data.each do |order_data|
+  # Convert the mock "createdAt" string to a Ruby Time
   created_at_time = Time.zone.parse(order_data[:createdAt]) rescue Time.current
   pickup_time     = Time.zone.parse(order_data[:estimatedPickupTime]) rescue (created_at_time + 30.minutes)
 
+  # If re-running seeds, you might create duplicates. If you want a simple guard:
   if Order.exists?(total: order_data[:total], created_at: created_at_time)
     puts "Order with total=#{order_data[:total]} at #{created_at_time} already exists; skipping."
     next
@@ -493,8 +869,10 @@ orders_data.each do |order_data|
     status:                order_data[:status],
     total:                 order_data[:total],
     estimated_pickup_time: pickup_time
+    # created_at & updated_at are handled by AR normally
   )
 
+  # If you really want to preserve the "createdAt" from mock data in DB:
   new_order.update_column(:created_at, created_at_time)
 
   puts "Created Order: #{new_order.id}, status=#{new_order.status}, total=#{new_order.total}"
