@@ -10,9 +10,47 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_01_26_040231) do
+ActiveRecord::Schema[7.2].define(version: 2025_02_04_005536) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+
+  create_table "active_storage_attachments", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "record_type", null: false
+    t.bigint "record_id", null: false
+    t.bigint "blob_id", null: false
+    t.datetime "created_at", null: false
+    t.index ["blob_id"], name: "index_active_storage_attachments_on_blob_id"
+    t.index ["record_type", "record_id", "name", "blob_id"], name: "index_active_storage_attachments_uniqueness", unique: true
+  end
+
+  create_table "active_storage_blobs", force: :cascade do |t|
+    t.string "key", null: false
+    t.string "filename", null: false
+    t.string "content_type"
+    t.text "metadata"
+    t.string "service_name", null: false
+    t.bigint "byte_size", null: false
+    t.string "checksum"
+    t.datetime "created_at", null: false
+    t.index ["key"], name: "index_active_storage_blobs_on_key", unique: true
+  end
+
+  create_table "active_storage_variant_records", force: :cascade do |t|
+    t.bigint "blob_id", null: false
+    t.string "variation_digest", null: false
+    t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
+  end
+
+  create_table "inventory_statuses", force: :cascade do |t|
+    t.bigint "menu_item_id", null: false
+    t.integer "quantity", default: 0
+    t.boolean "in_stock", default: true
+    t.boolean "low_stock", default: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["menu_item_id"], name: "index_inventory_statuses_on_menu_item_id"
+  end
 
   create_table "layouts", force: :cascade do |t|
     t.string "name"
@@ -31,6 +69,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_26_040231) do
     t.bigint "menu_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "image_url"
+    t.string "category"
     t.index ["menu_id"], name: "index_menu_items_on_menu_id"
   end
 
@@ -64,6 +104,33 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_26_040231) do
     t.datetime "updated_at", null: false
     t.index ["restaurant_id", "day_of_week"], name: "index_operating_hours_on_restaurant_id_and_day_of_week", unique: true
     t.index ["restaurant_id"], name: "index_operating_hours_on_restaurant_id"
+  end
+
+  create_table "orders", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.bigint "user_id"
+    t.jsonb "items", default: []
+    t.string "status", default: "pending", null: false
+    t.decimal "total", precision: 10, scale: 2, default: "0.0", null: false
+    t.string "promo_code"
+    t.text "special_instructions"
+    t.datetime "estimated_pickup_time"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
+    t.index ["user_id"], name: "index_orders_on_user_id"
+  end
+
+  create_table "promo_codes", force: :cascade do |t|
+    t.string "code", null: false
+    t.integer "discount_percent", default: 0, null: false
+    t.datetime "valid_from", default: -> { "now()" }, null: false
+    t.datetime "valid_until"
+    t.integer "max_uses"
+    t.integer "current_uses", default: 0
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["code"], name: "index_promo_codes_on_code", unique: true
   end
 
   create_table "reservations", force: :cascade do |t|
@@ -178,11 +245,16 @@ ActiveRecord::Schema[7.2].define(version: 2025_01_26_040231) do
     t.index ["restaurant_id"], name: "index_waitlist_entries_on_restaurant_id"
   end
 
+  add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "inventory_statuses", "menu_items"
   add_foreign_key "layouts", "restaurants"
   add_foreign_key "menu_items", "menus"
   add_foreign_key "menus", "restaurants"
   add_foreign_key "notifications", "reservations"
   add_foreign_key "operating_hours", "restaurants"
+  add_foreign_key "orders", "restaurants"
+  add_foreign_key "orders", "users"
   add_foreign_key "reservations", "restaurants"
   add_foreign_key "restaurants", "layouts", column: "current_layout_id", on_delete: :nullify
   add_foreign_key "seat_allocations", "reservations"
