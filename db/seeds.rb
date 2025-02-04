@@ -75,11 +75,11 @@ oh_data.each do |row|
   oh = OperatingHour.find_or_create_by!(
     restaurant_id: restaurant.id,
     day_of_week:   row[:day_of_week]
-    ) do |oh_record|
-      oh_record.open_time  = row[:open_time]
-      oh_record.close_time = row[:close_time]
-      oh_record.closed     = row[:closed]
-    end
+  ) do |oh_record|
+    oh_record.open_time  = row[:open_time]
+    oh_record.close_time = row[:close_time]
+    oh_record.closed     = row[:closed]
+  end
 
     # If the record already existed, update it
   oh.update!(
@@ -114,7 +114,7 @@ regular_user = User.find_or_create_by!(email: "user@example.com") do |u|
   u.last_name  = "User"
   u.phone      = "671-555-1111"
   u.password   = "password"
-  u.role       = "customer"   # or 'staff'
+  u.role       = "customer"
   u.restaurant_id = restaurant.id
 end
 puts "Created Regular User: #{regular_user.email} / password"
@@ -122,10 +122,7 @@ puts "Created Regular User: #{regular_user.email} / password"
 # ------------------------------------------------------------------------------
 # 3) LAYOUT / SEAT SECTIONS / SEATS
 # ------------------------------------------------------------------------------
-main_layout = Layout.find_or_create_by!(
-  name: "Main Layout",
-  restaurant_id: restaurant.id
-)
+main_layout = Layout.find_or_create_by!(name: "Main Layout", restaurant_id: restaurant.id)
 
 # Example circle‐table helper:
 def layout_table_seats(seat_count, label_prefix)
@@ -182,6 +179,7 @@ table_a = SeatSection.find_or_create_by!(
   offset_y:     100,
   floor_number: 1
 )
+
 layout_table_seats(4, "A").each do |ts|
   Seat.find_or_create_by!(seat_section_id: table_a.id, label: ts[:label]) do |seat|
     seat.position_x = ts[:x]
@@ -201,6 +199,7 @@ table_2 = SeatSection.find_or_create_by!(
   offset_y:     223,
   floor_number: 2
 )
+
 layout_table_seats(4, "T2-").each do |ts|
   Seat.find_or_create_by!(seat_section_id: table_2.id, label: ts[:label]) do |seat|
     seat.position_x = ts[:x]
@@ -437,6 +436,9 @@ categories_data = [
   }
 ]
 
+# Hardcode all images to this single S3 URL:
+s3_image_url = "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_43_1738645607.webp"
+
 menu_items_data = [
   # APPETIZERS
   {
@@ -444,56 +446,49 @@ menu_items_data = [
     name: 'Tinkak-Attach Gyoza (6 pcs)',
     description: '(6 pieces) A familiar local dish with seasoned beef and vegetables, steamed and fried with our denanche finadene.',
     price: 13.95,
-    category: 'appetizers',
-    image: 'src/assets/Tinak-Attack-Gyoza.jpeg'
+    category: 'appetizers'
   },
   {
     id: 'omg-lumpia',
     name: 'O.M.G. (Oh My Gollai) Lumpia (6 pcs)',
     description: '(6 pieces) The wholesome local style spinach and cream cheese side dish wrapped as a spring roll and fried into a savory crisp. Served with our denanche finadene.',
     price: 11.95,
-    category: 'appetizers',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'appetizers'
   },
   {
     id: 'spicy-wings',
     name: 'Spicy Wings',
     description: 'Seasoned fried chicken wings, served along side our house blend spices and our homemade denanche ranch.',
     price: 13.95,
-    category: 'appetizers',
-    image: 'src/assets/Spicy-Wings.webp'
+    category: 'appetizers'
   },
   {
     id: 'garlic-fries',
     name: 'Garlic Fries',
     description: '',
     price: 8.95,
-    category: 'appetizers',
-    image: 'src/assets/Garlic-Fries.webp'
+    category: 'appetizers'
   },
   {
     id: 'french-fries',
     name: 'French Fries',
     description: '',
     price: 5.95,
-    category: 'appetizers',
-    image: 'src/assets/French-Fries.webp'
+    category: 'appetizers'
   },
   {
     id: 'cheezy-bugdilla',
     name: 'The-Cheesy-Pig-Quesadilla',
     description: 'Kalua pulled pork wrapped in a flour tortilla with lomi tomatoes and our special cheesy blend.',
     price: 13.95,
-    category: 'appetizers',
-    image: 'src/assets/The-Cheesy-Pig-Quesadilla.webp'
+    category: 'appetizers'
   },
   {
     id: 'onion-wrings',
     name: 'Onion Rings',
     description: '',
     price: 13.95,
-    category: 'appetizers',
-    image: 'src/assets/The-Cheesy-Pig-Quesadilla.webp'
+    category: 'appetizers'
   },
 
   # POKE
@@ -502,56 +497,49 @@ menu_items_data = [
     name: 'Aloha Poke',
     description: 'A classic hawaiian style poke seasoned with hawaiian salt, tossed with onions, green onions, soy sauce, sesame oil, seasme seeds, inamona**, and limu**.',
     price: 16.95,
-    category: 'poke',
-    image: 'src/assets/Aloha-Poke.webp'
+    category: 'poke'
   },
   {
     id: 'spizy-tuna-poke',
     name: 'Spizy Tuna Poke',
     description: 'Tuna poke tossed with our homemade spicy mayo and tobiko.',
     price: 17.95,
-    category: 'poke',
-    image: 'src/assets/Spizy-Tuna-Poke.webp'
+    category: 'poke'
   },
   {
     id: 'tofu-poke',
     name: 'Tofu Poke',
     description: 'Cubed tofu, fried and marinated in our homemade teriyaki sauce, tossed with avocados**, cucumbers, tomatoes, onions, green onions.',
     price: 15.95,
-    category: 'poke',
-    image: 'src/assets/Tofu-Poke.webp'
+    category: 'poke'
   },
   {
     id: 'shoyu-poke',
     name: 'Shoyu Poke',
     description: 'Sweetend poke glazed in our homemade soysauce.',
     price: 15.95,
-    category: 'poke',
-    image: 'src/assets/Shoyu-Poke.webp'
+    category: 'poke'
   },
   {
     id: 'cali-poke',
     name: 'Cali Poke',
     description: 'A california roll in a bowl filled with ahi poke, crab, avocados**, and cucumbers tossed with our homemade creamy sauce.',
     price: 16.95,
-    category: 'poke',
-    image: 'src/assets/Cali-Poke.webp'
+    category: 'poke'
   },
   {
     id: 'pika-poke',
     name: 'Pika Poke',
     description: 'Seasoned ahi poke tossed in our homemade denanche sauce.',
     price: 15.95,
-    category: 'poke',
-    image: 'src/assets/Pika-Poke.webp'
+    category: 'poke'
   },
   {
     id: 'kelaguen-poke',
     name: 'Kelaguen Poke',
     description: 'Ahi poke tossed with coconut milk, lemon powder, tomatoes, red onions, green bell peppers, and cucumbers.',
     price: 16.95,
-    category: 'poke',
-    image: 'src/assets/Kelaguen-Poke.webp'
+    category: 'poke'
   },
 
   # BURGERS
@@ -560,64 +548,56 @@ menu_items_data = [
     name: 'Hafaloha Burger',
     description: 'Signature burger with grilled pineapple & teriyaki glaze',
     price: 13.95,
-    category: 'burgers',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'burgers'
   },
   {
     id: 'big-cheeseburger',
     name: "Da' Big Cheeseburger",
     description: 'Double patty with three types of cheese',
     price: 15.95,
-    category: 'burgers',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'burgers'
   },
   {
     id: 'shroom-burger',
     name: 'Shroom Burger',
     description: 'Portobello mushroom & Swiss cheese',
     price: 13.95,
-    category: 'burgers',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'burgers'
   },
   {
     id: 'blue-cheese-bacon-burger',
     name: 'Blue Cheese Bacon Burger',
     description: 'Rich blue cheese & crispy bacon',
     price: 17.95,
-    category: 'burgers',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'burgers'
   },
   {
     id: 'ahi-burger',
     name: 'Ahi Burger',
     description: 'Seared ahi tuna patty with island sauce',
     price: 14.95,
-    category: 'burgers',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'burgers'
   },
   {
     id: 'tori-chicken-burger',
     name: 'Tori Chicken Burger',
     description: 'Grilled chicken with island spices',
     price: 15.95,
-    category: 'burgers',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'burgers'
   },
   {
     id: 'pepper-pineapple-burger',
     name: 'Pepper Pineapple Burger',
     description: 'Pepper-crusted patty with sweet pineapple',
     price: 16.95,
-    category: 'burgers',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'burgers'
   },
   {
     id: 'torresueno-burger',
     name: 'Torresueno Burger',
     description: 'Ultimate burger loaded with special toppings',
     price: 18.95,
-    category: 'burgers',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'burgers'
   },
 
   # DESSERTS
@@ -627,24 +607,21 @@ menu_items_data = [
     name: 'Shave Ice (Diki)',
     description: 'Smaller portion of classic shave ice (up to 3 flavors)',
     price: 4.50,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   {
     id: 'shave-ice-regular',
     name: 'Shave Ice (Regular)',
     description: 'Regular size shave ice (up to 3 flavors)',
     price: 7.50,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   {
     id: 'shave-ice-kahuna',
     name: 'Shave Ice (Kahuna)',
     description: 'Large “Kahuna” size shave ice (up to 3 flavors)',
     price: 9.50,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   # Shave Ice Specials
   {
@@ -652,16 +629,14 @@ menu_items_data = [
     name: 'Shave Ice Special',
     description: 'One size (includes vanilla soft-serve + 2 flavors)',
     price: 8.50,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   {
     id: 'halo-halo',
     name: 'Halo Halo',
     description: 'Island-style halo halo with coconut jelly & ice cream',
     price: 9.00,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   # Ice Keki
   {
@@ -669,16 +644,14 @@ menu_items_data = [
     name: 'Ice Keki (Single)',
     description: 'Japanese-inspired ice cream treat (single)',
     price: 3.20,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   {
     id: 'ice-keki-case',
     name: 'Ice Keki (Case of 12)',
     description: 'Box of 12 ice keki—save $10 overall',
     price: 30.00,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   # Build-a-Bowl
   {
@@ -686,8 +659,7 @@ menu_items_data = [
     name: 'Build-a-Bowl',
     description: 'Custom acai bowl—pick your fruit, granola, and honey drizzle',
     price: 9.25,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   # Soft-Serve
   {
@@ -695,16 +667,14 @@ menu_items_data = [
     name: 'Soft-Serve',
     description: 'Creamy soft-serve ice cream (one size)',
     price: 6.25,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   {
     id: 'soft-serve-special',
     name: 'Soft-Serve Special',
     description: 'One size — loaded with toppings (e.g., fruity pebbles, drizzle)',
     price: 8.50,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   # Frozen Fruit Cakes
   {
@@ -712,32 +682,28 @@ menu_items_data = [
     name: 'Frozen Fruit Cake (8")',
     description: '8-inch frozen fruit cake with choice of crust & toppings',
     price: 28.00,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   {
     id: 'frozen-fruit-cake-10',
     name: 'Frozen Fruit Cake (10")',
     description: '10-inch frozen fruit cake—serves a crowd',
     price: 45.00,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   {
     id: 'frozen-fruit-cake-quarter',
     name: 'Frozen Fruit Cake (1/4 Cake)',
     description: 'Quarter-sheet frozen fruit cake',
     price: 58.00,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
   {
     id: 'frozen-fruit-cake-half',
     name: 'Frozen Fruit Cake (1/2 Cake)',
     description: 'Half-sheet frozen fruit cake',
     price: 69.00,
-    category: 'desserts',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'desserts'
   },
 
   # DRINKS
@@ -746,24 +712,21 @@ menu_items_data = [
     name: 'Breeze',
     description: 'Vanilla soft-serve + real fruit juice (one size)',
     price: 8.25,
-    category: 'drinks',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'drinks'
   },
   {
     id: 'smoothies',
     name: 'Smoothies',
     description: 'One size (20 oz) made with real fruit & juice',
     price: 8.00,
-    category: 'drinks',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'drinks'
   },
   {
     id: 'soda-pop',
     name: 'Soda Pop (20 oz)',
     description: 'Choice of flavors, 20 oz cup',
     price: 4.75,
-    category: 'drinks',
-    image: 'src/assets/O.M.G-(Oh-My-Gollai)-Lumpia.webp'
+    category: 'drinks'
   }
 ]
 
@@ -774,13 +737,11 @@ main_menu.update!(active: true)
 
 menu_items_data.each do |item_data|
   MenuItem.find_or_create_by!(menu_id: main_menu.id, name: item_data[:name]) do |mi|
-    # Typically you don’t store the same "id" as the primary key, but you could store
-    # it in a separate column if needed. We'll ignore the 'id' from front-end data
-    # or store it as a `slug` if you like.
     mi.description = item_data[:description]
     mi.price       = item_data[:price]
     mi.category    = item_data[:category]
-    mi.image_url   = item_data[:image]
+    # Force the same S3 URL for all seeds:
+    mi.image_url   = s3_image_url
     mi.available   = true
   end
 end
@@ -795,7 +756,7 @@ puts "Creating some sample Orders..."
 orders_data = [
   {
     id: 'ORD-001',
-    user_id: 'user1', # We'll ignore this and attach to our "regular_user" below
+    # user_id: 'user1', # We'll ignore this and attach to our "regular_user" below
     items: [
       {
         id: 'aloha-poke',
@@ -825,7 +786,7 @@ orders_data = [
   },
   {
     id: 'ORD-002',
-    user_id: 'user1',
+    # user_id: 'user1', # We'll ignore this and attach to our "regular_user" below
     items: [
       {
         id: 'hafaloha-burger',
@@ -890,21 +851,20 @@ regular_user = User.find_by(email: "user@example.com")
 orders_data.each do |order_data|
   # Convert the mock "createdAt" string to a Ruby Time
   created_at_time = Time.zone.parse(order_data[:createdAt]) rescue Time.current
-  pickup_time = Time.zone.parse(order_data[:estimatedPickupTime]) rescue (created_at_time + 30.minutes)
+  pickup_time     = Time.zone.parse(order_data[:estimatedPickupTime]) rescue (created_at_time + 30.minutes)
 
   # If re-running seeds, you might create duplicates. If you want a simple guard:
   if Order.exists?(total: order_data[:total], created_at: created_at_time)
-    puts "Order with total=#{order_data[:total]} at created_at=#{created_at_time} already exists; skipping."
+    puts "Order with total=#{order_data[:total]} at #{created_at_time} already exists; skipping."
     next
   end
 
   new_order = Order.create!(
-    restaurant: restaurant,
-    user:       regular_user,    # or nil if guest
-    items:      order_data[:items],  # JSONB
-    status:     order_data[:status],
-    total:      order_data[:total],
-    special_instructions: order_data[:specialInstructions],
+    restaurant:            restaurant,
+    user:                  regular_user,
+    items:                 order_data[:items],
+    status:                order_data[:status],
+    total:                 order_data[:total],
     estimated_pickup_time: pickup_time
     # created_at & updated_at are handled by AR normally
   )
