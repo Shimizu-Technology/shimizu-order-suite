@@ -1,8 +1,7 @@
 class Reservation < ApplicationRecord
-  # Make sure AR recognizes seat_preferences as a JSON (or text) attribute.
-  # The :json type is available since Rails 7, or :jsonb if you’re on 7.1+ 
-  # but :json works the same for actual DB storage.
+  # Force ActiveRecord to treat them as real columns:
   attribute :seat_preferences, :json, default: []
+  attribute :duration_minutes, :integer, default: 60
   
   belongs_to :restaurant
   has_many :seat_allocations, dependent: :nullify

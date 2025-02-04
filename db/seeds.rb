@@ -2,6 +2,9 @@
 
 require 'active_record'
 
+# Tell Rails to reload the actual DB columns from scratch
+Reservation.reset_column_information
+
 puts "== (Optional) Cleaning references =="
 # Uncomment to truly reset all data (use with caution in production):
 # ActiveRecord::Base.connection.execute("
