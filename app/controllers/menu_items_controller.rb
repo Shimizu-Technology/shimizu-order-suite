@@ -23,17 +23,18 @@ class MenuItemsController < ApplicationController
     Rails.logger.info "=== MenuItemsController#create ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
-    # 1) Build item without the :image param
+    # Build item without the :image param
     @menu_item = MenuItem.new(menu_item_params.except(:image))
 
     if @menu_item.save
       Rails.logger.info "Created MenuItem => #{@menu_item.inspect}"
 
-      # 2) If file is present and it's a real upload => do S3 upload + set image_url
+      # If file is present and it's a real upload => do S3 upload + set image_url
       file = menu_item_params[:image]
       if file.present? && file.respond_to?(:original_filename)
         ext = File.extname(file.original_filename)
-        new_filename = "menu_item_#{@menu_item.id}_#{Time.now.to_i}#{ext}"
+        # Use a stable filename: menu_item_<ID>.<ext>, no timestamp
+        new_filename = "menu_item_#{@menu_item.id}#{ext}"
         public_url   = S3Uploader.upload(file, new_filename)
         @menu_item.update!(image_url: public_url)
 
@@ -62,7 +63,7 @@ class MenuItemsController < ApplicationController
       file = menu_item_params[:image]
       # Only proceed if it's actually an uploaded file
       if file.present? && file.respond_to?(:original_filename)
-        # If there's old image_url => remove from S3
+        # If there's old image_url => remove it from S3 (optional but currently in place)
         if @menu_item.image_url.present?
           old_filename = File.basename(@menu_item.image_url)
           S3Uploader.delete(old_filename)
@@ -70,7 +71,7 @@ class MenuItemsController < ApplicationController
 
         # Upload new file
         ext = File.extname(file.original_filename)
-        new_filename = "menu_item_#{@menu_item.id}_#{Time.now.to_i}#{ext}"
+        new_filename = "menu_item_#{@menu_item.id}#{ext}"
         public_url   = S3Uploader.upload(file, new_filename)
         @menu_item.update!(image_url: public_url)
 
@@ -114,14 +115,14 @@ class MenuItemsController < ApplicationController
       return render json: { error: 'No image file uploaded' }, status: :unprocessable_entity
     end
 
-    # If there's an existing image => remove it
+    # If there's an existing image => remove it from S3
     if menu_item.image_url.present?
       old_filename = File.basename(menu_item.image_url)
       S3Uploader.delete(old_filename)
     end
 
     ext = File.extname(file.original_filename)
-    new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
+    new_filename = "menu_item_#{menu_item.id}#{ext}"
     public_url   = S3Uploader.upload(file, new_filename)
 
     menu_item.update!(image_url: public_url)
