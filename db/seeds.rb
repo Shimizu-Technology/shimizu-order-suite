@@ -588,20 +588,6 @@ menu_items_data = [
     price: 15.95,
     category: 'burgers'
   },
-  {
-    id: 'pepper-pineapple-burger',
-    name: 'Pepper Pineapple Burger',
-    description: 'Pepper-crusted patty with sweet pineapple',
-    price: 16.95,
-    category: 'burgers'
-  },
-  {
-    id: 'torresueno-burger',
-    name: 'Torresueno Burger',
-    description: 'Ultimate burger loaded with special toppings',
-    price: 18.95,
-    category: 'burgers'
-  },
 
   # DESSERTS
   # Shave Ice
