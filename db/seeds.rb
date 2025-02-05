@@ -582,8 +582,8 @@ menu_items_data = [
     category: 'burgers'
   },
   {
-    id: 'tori-chicken-burger',
-    name: 'Tori Chicken Burger',
+    id: 'teri-chicken-burger',
+    name: 'Teri Chicken Burger',
     description: 'Grilled chicken with island spices',
     price: 15.95,
     category: 'burgers'
