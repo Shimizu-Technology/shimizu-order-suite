@@ -10,17 +10,18 @@ class Order < ApplicationRecord
   # After creation, we do any custom notifications
   after_create :notify_whatsapp
 
-  # Convert total to float, add created/updated times
+  # Convert total to float, add created/updated times, plus userId & contact info
   def as_json(options = {})
     super(options).merge(
       'total' => total.to_f,
       'createdAt' => created_at.iso8601,
       'updatedAt' => updated_at.iso8601,
+      'userId' => user_id,  # <== so the frontend can filter by .userId
 
-      # Add this line so the frontend gets an ISO string
+      # Provide an ISO8601 string for JS
       'estimatedPickupTime' => estimated_pickup_time&.iso8601,
 
-      # If you also want these in the JSON:
+      # Contact fields
       'contact_name' => contact_name,
       'contact_phone' => contact_phone,
       'contact_email' => contact_email
@@ -30,7 +31,7 @@ class Order < ApplicationRecord
   private
 
   def set_default_pickup_time
-    # If the order didn't pass an estimated_pickup_time, we set it automatically.
+    # If the order didn't pass an estimated_pickup_time, set it automatically.
     return unless estimated_pickup_time.blank?
 
     # Check if any item needs 24 hours
