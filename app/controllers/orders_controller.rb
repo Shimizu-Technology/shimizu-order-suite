@@ -46,31 +46,29 @@ class OrdersController < ApplicationController
     # 2) Build the new order params
     new_params = order_params.dup
     new_params[:restaurant_id] ||= 1
-    # If we have a valid user, attach it
-    new_params[:user_id] = @current_user&.id
+    new_params[:user_id] = @current_user&.id if @current_user
 
     @order = Order.new(new_params)
     @order.status = 'pending'
 
     # -----------------------------------------------------
-    # NEW: Check the 'advance_notice_hours' among the items
+    # Check the 'advance_notice_hours' among the items
     # -----------------------------------------------------
     if @order.items.present?
       max_required = 0
       @order.items.each do |item|
-        # item[:id] is the menu_item's ID
         menu_item = MenuItem.find_by(id: item[:id])
-        # fallback if not found or item is invalid
-        next unless menu_item
-
-        if menu_item.advance_notice_hours > max_required
-          max_required = menu_item.advance_notice_hours
-        end
+        next unless menu_item  # skip if no item found
+        max_required = [max_required, menu_item.advance_notice_hours].max
       end
 
-      # If there's a pickup time, enforce it. (You might do something else if it's blank.)
-      if @order.estimated_pickup_time.present?
-        earliest_allowed = Time.current + max_required.hours
+      # Optionally, if the client didn't provide an estimated_pickup_time, we can set one:
+      # if @order.estimated_pickup_time.blank?
+      #   @order.estimated_pickup_time = Time.current + (max_required >= 24 ? 24.hours : 20.minutes)
+      # end
+
+      if max_required >= 24 && @order.estimated_pickup_time.present?
+        earliest_allowed = Time.current + 24.hours
         if @order.estimated_pickup_time < earliest_allowed
           return render json: {
             error: "Earliest pickup time for these items is at least #{earliest_allowed.strftime('%Y-%m-%d %H:%M')}"
