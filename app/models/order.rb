@@ -6,23 +6,30 @@ class Order < ApplicationRecord
 
   after_create :notify_whatsapp
 
+  # 1) Ensure total is a float in JSON
+  def as_json(options = {})
+    super(options).merge(
+      # Make sure 'total' is numeric
+      'total' => total.to_f,
+
+      # If your frontend references createdAt or updatedAt, you can also add:
+      'createdAt' => created_at.iso8601,
+      'updatedAt' => updated_at.iso8601
+    )
+  end
+
   private
 
   def notify_whatsapp
-    # Skip if in test environment or if you only want this in production
     return if Rails.env.test?
 
     group_id = ENV['WASSENGER_GROUP_ID']
     return unless group_id.present?
 
-    # Format the line items nicely
-    # items is an Array of Hashes like:
-    #   [{ "id"=>2, "name"=>"O.M.G. Lumpia", "price"=>11.95, "quantity"=>1 }, ... ]
     item_lines = items.map do |item|
       "- #{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
     end.join("\n")
 
-    # Build up the message
     message_text = <<~MSG
       New order \##{id} created!
 

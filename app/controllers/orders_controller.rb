@@ -118,7 +118,7 @@ class OrdersController < ApplicationController
       :promo_code,
       :special_instructions,
       :estimated_pickup_time,
-      items: [:id, :name, :price, :quantity, customizations: {}]
+      items: [:id, :name, :price, :quantity, :notes, customizations: {}]
     )
   end
 
