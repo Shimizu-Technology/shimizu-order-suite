@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_02_04_005536) do
+ActiveRecord::Schema[7.2].define(version: 2025_02_08_132631) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -104,6 +104,27 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_04_005536) do
     t.datetime "updated_at", null: false
     t.index ["restaurant_id", "day_of_week"], name: "index_operating_hours_on_restaurant_id_and_day_of_week", unique: true
     t.index ["restaurant_id"], name: "index_operating_hours_on_restaurant_id"
+  end
+
+  create_table "option_groups", force: :cascade do |t|
+    t.string "name", null: false
+    t.integer "min_select", default: 0
+    t.integer "max_select", default: 1
+    t.boolean "required", default: false
+    t.bigint "menu_item_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["menu_item_id"], name: "index_option_groups_on_menu_item_id"
+  end
+
+  create_table "options", force: :cascade do |t|
+    t.string "name", null: false
+    t.decimal "additional_price", precision: 8, scale: 2, default: "0.0"
+    t.boolean "available", default: true
+    t.bigint "option_group_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["option_group_id"], name: "index_options_on_option_group_id"
   end
 
   create_table "orders", force: :cascade do |t|
@@ -253,6 +274,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_04_005536) do
   add_foreign_key "menus", "restaurants"
   add_foreign_key "notifications", "reservations"
   add_foreign_key "operating_hours", "restaurants"
+  add_foreign_key "option_groups", "menu_items"
+  add_foreign_key "options", "option_groups"
   add_foreign_key "orders", "restaurants"
   add_foreign_key "orders", "users"
   add_foreign_key "reservations", "restaurants"

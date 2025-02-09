@@ -4,18 +4,48 @@ class MenuItemsController < ApplicationController
 
   # GET /menu_items
   def index
-    items = if params[:category].present?
-              MenuItem.where(category: params[:category], available: true)
-            else
-              MenuItem.where(available: true)
-            end
-    render json: items
+    items_scope = if params[:category].present?
+                    MenuItem.where(category: params[:category], available: true)
+                  else
+                    MenuItem.where(available: true)
+                  end
+
+    items = items_scope.includes(option_groups: :options)
+
+    # Render each item with numeric :id and nested option_groups
+    render json: items.as_json(
+      only: [:id, :name, :description, :price, :category, :image_url],
+      include: {
+        option_groups: {
+          include: {
+            options: {
+              only: [:id, :name, :available],
+              methods: [:additional_price_float]  # so we get a float for additional_price
+            }
+          }
+        }
+      }
+    )
   end
 
   # GET /menu_items/:id
   def show
-    item = MenuItem.find(params[:id])
-    render json: item
+    # Eager-load the option_groups and their options
+    item = MenuItem.includes(option_groups: :options).find(params[:id])
+
+    render json: item.as_json(
+      only: [:id, :name, :description, :price, :category, :image_url],
+      include: {
+        option_groups: {
+          include: {
+            options: {
+              only: [:id, :name, :available],
+              methods: [:additional_price_float]
+            }
+          }
+        }
+      }
+    )
   end
 
   # POST /menu_items
@@ -23,24 +53,17 @@ class MenuItemsController < ApplicationController
     Rails.logger.info "=== MenuItemsController#create ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
-    # Build item without the :image param
+    # Note: No attempt to set :id manually, we let Rails pick an integer ID
     @menu_item = MenuItem.new(menu_item_params.except(:image))
-
     if @menu_item.save
       Rails.logger.info "Created MenuItem => #{@menu_item.inspect}"
 
-      # If file is present and it's a real upload => do S3 upload + set image_url
       file = menu_item_params[:image]
       if file.present? && file.respond_to?(:original_filename)
         ext = File.extname(file.original_filename)
-
-        # Use a unique name => append timestamp, so it never overwrites old files
         new_filename = "menu_item_#{@menu_item.id}_#{Time.now.to_i}#{ext}"
-
-        public_url = S3Uploader.upload(file, new_filename)
+        public_url   = S3Uploader.upload(file, new_filename)
         @menu_item.update!(image_url: public_url)
-
-        Rails.logger.info "menu_item updated => image_url: #{@menu_item.image_url.inspect}"
       end
 
       render json: @menu_item, status: :created
@@ -58,22 +81,15 @@ class MenuItemsController < ApplicationController
     @menu_item = MenuItem.find(params[:id])
     Rails.logger.info "Updating MenuItem => #{@menu_item.id}"
 
-    # Update everything except the file
     if @menu_item.update(menu_item_params.except(:image))
       Rails.logger.info "Update success => #{@menu_item.inspect}"
 
       file = menu_item_params[:image]
-      # Only proceed if it's actually an uploaded file
       if file.present? && file.respond_to?(:original_filename)
         ext = File.extname(file.original_filename)
-
-        # Unique name => never overwrites old files
         new_filename = "menu_item_#{@menu_item.id}_#{Time.now.to_i}#{ext}"
-
         public_url   = S3Uploader.upload(file, new_filename)
         @menu_item.update!(image_url: public_url)
-
-        Rails.logger.info "menu_item updated => image_url: #{@menu_item.image_url.inspect}"
       end
 
       render json: @menu_item
@@ -91,10 +107,9 @@ class MenuItemsController < ApplicationController
     menu_item = MenuItem.find(params[:id])
     Rails.logger.info "Destroying MenuItem => #{menu_item.id}, current image_url => #{menu_item.image_url.inspect}"
 
-    # We do NOT delete the old image from S3.
     menu_item.destroy
-
     Rails.logger.info "Destroyed MenuItem => #{menu_item.id}"
+
     head :no_content
   end
 
@@ -110,11 +125,9 @@ class MenuItemsController < ApplicationController
       return render json: { error: 'No image file uploaded' }, status: :unprocessable_entity
     end
 
-    # We do NOT delete the existing image. We just upload a new one.
     ext = File.extname(file.original_filename)
     new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
-
-    public_url = S3Uploader.upload(file, new_filename)
+    public_url   = S3Uploader.upload(file, new_filename)
     menu_item.update!(image_url: public_url)
 
     Rails.logger.info "menu_item updated => image_url: #{menu_item.image_url.inspect}"
@@ -132,7 +145,7 @@ class MenuItemsController < ApplicationController
       :menu_id,
       :category,
       :image_url,
-      :image  # <-- Permit :image so it’s not filtered out
+      :image  # allow file upload param
     )
   end
 
