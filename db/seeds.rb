@@ -73,7 +73,6 @@ oh_data.each do |row|
     o.closed     = row[:closed]
   end
 
-  # If it's an existing record, update it
   oh.update!(
     open_time:  row[:open_time],
     close_time: row[:close_time],
@@ -419,8 +418,6 @@ categories_data = [
 # Hardcode all images to this single S3 URL (for seeds):
 s3_image_url = "https://hafaloha.s3.ap-southeast-2.amazonaws.com/Hafaloha_Burger.webp"
 
-# -- REMOVE the :id fields from each item here --
-# We only define :name, :description, :price, :category, etc.
 menu_items_data = [
   # APPETIZERS
   {
@@ -607,7 +604,8 @@ menu_items_data = [
     name: 'Frozen Fruit Cake (8")',
     description: '8-inch frozen fruit cake with choice of crust & toppings',
     price: 28.00,
-    category: 'desserts'
+    category: 'desserts',
+    advance_notice_hours: 24
   },
   {
     name: 'Frozen Fruit Cake (10")',
@@ -619,13 +617,15 @@ menu_items_data = [
     name: 'Frozen Fruit Cake (1/4 Cake)',
     description: 'Quarter-sheet frozen fruit cake',
     price: 58.00,
-    category: 'desserts'
+    category: 'desserts',
+    advance_notice_hours: 24
   },
   {
     name: 'Frozen Fruit Cake (1/2 Cake)',
     description: 'Half-sheet frozen fruit cake',
     price: 69.00,
-    category: 'desserts'
+    category: 'desserts',
+    advance_notice_hours: 24
   },
 
   # DRINKS
@@ -655,13 +655,13 @@ main_menu = Menu.find_or_create_by!(name: "Main Menu", restaurant_id: restaurant
 main_menu.update!(active: true)
 
 menu_items_data.each do |data|
-  # We only use :name to find_or_create_by -- no manual "id"
   MenuItem.find_or_create_by!(menu_id: main_menu.id, name: data[:name]) do |mi|
-    mi.description = data[:description]
-    mi.price       = data[:price]
-    mi.category    = data[:category]
-    mi.image_url   = s3_image_url
-    mi.available   = true
+    mi.description            = data[:description]
+    mi.price                  = data[:price]
+    mi.category               = data[:category]
+    mi.image_url              = s3_image_url
+    mi.available              = true
+    mi.advance_notice_hours   = data[:advance_notice_hours] || 0
   end
 end
 
@@ -770,109 +770,90 @@ puts "Done creating sample OptionGroups & Options."
 # ------------------------------------------------------------------------------
 puts "Creating some sample Orders..."
 
-orders_data = [
+# We'll associate them with 'regular_user' where relevant
+# or skip user => guest order
+# We'll also show contact fields & item notes
+
+sample_orders_data = [
   {
-    id: 'ORD-001',
+    contact_name:  "John Doe",
+    contact_phone: "671-999-8888",
+    contact_email: "john.doe@example.com",
+    user: nil,  # no user => guest
     items: [
       {
-        id: 'hafaloha-burger',
+        id: 1,  # numeric ID from your seeds, or any item from the DB
+        name: 'French Fries',
+        quantity: 2,
+        price: 5.95,
+        notes: "Light salt please",
+        customizations: {}
+      }
+    ],
+    status: 'pending',
+    total: 11.90,
+    special_instructions: "Extra ketchup",
+  },
+  {
+    contact_name:  regular_user.full_name,  # or "Regular User"
+    contact_phone: regular_user.phone,
+    contact_email: regular_user.email,
+    user: regular_user,
+    items: [
+      {
+        id: 2,  # e.g. the id of 'Hafaloha Burger'
         name: 'Hafaloha Burger',
         quantity: 1,
         price: 13.95,
+        notes: "No onions please",
         customizations: {
-          'Add-ons' => ['Bacon', 'Avocado']
-        }
-      }
-    ],
-    status: 'completed',
-    total: 18.95,
-    createdAt: '2024-03-14T10:30:00Z',
-    estimatedPickupTime: '2024-03-14T11:00:00Z'
-  },
-  {
-    id: 'ORD-002',
-    items: [
-      {
-        id: 'shave-ice',
-        name: 'Shave Ice',
-        quantity: 1,
-        price: 4.50,
-        customizations: {
-          'Size'    => ['Diki (Small)'],
-          'Flavors' => ['Mango', 'Lychee']
-        }
-      },
-      {
-        id: 'build-a-bowl',
-        name: 'Build-a-Bowl',
-        quantity: 1,
-        price: 9.25,
-        customizations: {
-          'Toppings' => ['Granola', 'Honey Drizzle']
-        }
-      }
-    ],
-    status: 'completed',
-    total: 13.75,
-    createdAt: '2024-03-13T15:45:00Z',
-    estimatedPickupTime: '2024-03-13T16:15:00Z'
-  },
-  {
-    id: 'ORD-003',
-    user_id: 'user1',
-    items: [
-      {
-        id: 'spicy-wings',
-        name: 'Spicy Wings',
-        quantity: 2,
-        price: 13.95,
-        customizations: {
-          'Sauce' => ['Buffalo']
-        }
-      },
-      {
-        id: 'soda-pop',
-        name: 'Island Soda Pop',
-        quantity: 2,
-        price: 4.75,
-        customizations: {
-          'Flavor' => ['Cola'],
-          'Size'   => ['Large']
+          "Add-ons" => ["Bacon"]
         }
       }
     ],
     status: 'preparing',
-    total: 37.40,
-    createdAt: '2024-03-15T12:00:00Z',
-    estimatedPickupTime: '2024-03-15T12:30:00Z',
-    specialInstructions: 'Extra napkins please'
+    total: 15.45,  # includes bacon add-on if you want
+    special_instructions: "Call me when ready"
+  },
+  {
+    contact_name:  "Maria Pika",
+    contact_phone: "671-444-7777",
+    contact_email: "maria@example.com",
+    user: nil,  # guest
+    items: [
+      {
+        # The item ID for 'Frozen Fruit Cake (8")', which has 24hr notice
+        id: 3,
+        name: 'Frozen Fruit Cake (8")',
+        quantity: 1,
+        price: 28.00,
+        notes: "Add extra fruit toppings if possible",
+        customizations: {}
+      }
+    ],
+    status: 'pending',
+    total: 28.00,
+    special_instructions: "Birthday cake—write 'Happy Bday' in icing"
   }
 ]
 
-regular_user = User.find_by(email: "user@example.com")
-
-orders_data.each do |order_data|
-  created_at_time = Time.zone.parse(order_data[:createdAt]) rescue Time.current
-  pickup_time     = Time.zone.parse(order_data[:estimatedPickupTime]) rescue (created_at_time + 30.minutes)
-
-  # If an order already exists with the same total & created_at, skip
-  if Order.exists?(total: order_data[:total], created_at: created_at_time)
-    puts "Order with total=#{order_data[:total]} at #{created_at_time} already exists; skipping."
-    next
-  end
-
+sample_orders_data.each do |order_data|
+  # We'll create an Order with the new contact fields
   new_order = Order.create!(
     restaurant:            restaurant,
-    user:                  regular_user,
+    user:                  order_data[:user],
     items:                 order_data[:items],
     status:                order_data[:status],
     total:                 order_data[:total],
-    estimated_pickup_time: pickup_time,
-    special_instructions:  order_data[:specialInstructions]
+    special_instructions:  order_data[:special_instructions],
+    contact_name:          order_data[:contact_name],
+    contact_phone:         order_data[:contact_phone],
+    contact_email:         order_data[:contact_email],
+    # If you want to manually override pickup time, do so:
+    # estimated_pickup_time: Time.current + 20.minutes
   )
 
-  new_order.update_column(:created_at, created_at_time)
-  puts "Created Order: #{new_order.id}, total=#{new_order.total}"
+  puts "Created order##{new_order.id} => status=#{new_order.status}, total=#{new_order.total}"
 end
 
 puts "== Seeding complete! =="

@@ -27,26 +27,24 @@ class OrdersController < ApplicationController
   end
 
   # POST /orders
-  # -- Manual token decoding for optional user association --
   def create
-    # 1) If there is an Authorization header, try decoding it manually.
+    # Optional manual token decode for guest checkout w/ token
     if request.headers['Authorization'].present?
       token = request.headers['Authorization'].split(' ').last
       begin
         decoded = JWT.decode(token, Rails.application.secret_key_base, true, { algorithm: 'HS256' })
         user_id = decoded[0]['user_id']
         found_user = User.find_by(id: user_id)
-        # If we found a valid user, set @current_user or however you track it
         @current_user = found_user if found_user
       rescue JWT::DecodeError
-        # If token invalid => do nothing => guest checkout
+        # invalid token => do nothing => guest
       end
     end
 
-    # 2) Build the new order params
     new_params = order_params.dup
     new_params[:restaurant_id] ||= 1
-    new_params[:user_id] = @current_user&.id if @current_user
+    # If there's a logged-in user, attach them
+    new_params[:user_id] = @current_user&.id
 
     @order = Order.new(new_params)
     @order.status = 'pending'
@@ -109,7 +107,7 @@ class OrdersController < ApplicationController
   private
 
   def order_params
-    # items: [ { "id": 7, "name": "Onion Rings", "price": 13.95, "quantity": 1 }, ... ]
+    # items: [ { "id":7, "name":"Onion Rings", "price":11.95, "quantity":1, "notes":"no onions" }, ...]
     params.require(:order).permit(
       :restaurant_id,
       :user_id,
@@ -118,12 +116,22 @@ class OrdersController < ApplicationController
       :promo_code,
       :special_instructions,
       :estimated_pickup_time,
-      items: [:id, :name, :price, :quantity, :notes, customizations: {}]
+      :contact_name,
+      :contact_phone,
+      :contact_email,
+      items: [
+        :id,
+        :name,
+        :price,
+        :quantity,
+        :notes,
+        { customizations: {} }
+      ]
     )
   end
 
   def can_edit?(order)
-    current_user&.role.in?(%w[admin super_admin]) ||
-      (current_user && order.user_id == current_user.id)
+    return true if current_user&.role.in?(%w[admin super_admin])
+    current_user && order.user_id == current_user.id
   end
 end
