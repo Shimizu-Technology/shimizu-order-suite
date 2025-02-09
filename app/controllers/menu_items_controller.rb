@@ -1,4 +1,5 @@
 # app/controllers/menu_items_controller.rb
+
 class MenuItemsController < ApplicationController
   before_action :authorize_request, except: [:index, :show]
 
@@ -14,13 +15,14 @@ class MenuItemsController < ApplicationController
 
     # Render each item with numeric :id and nested option_groups
     render json: items.as_json(
-      only: [:id, :name, :description, :price, :category, :image_url],
+      # NEW: include :advance_notice_hours in the top-level fields
+      only: [:id, :name, :description, :price, :category, :image_url, :advance_notice_hours],
       include: {
         option_groups: {
           include: {
             options: {
               only: [:id, :name, :available],
-              methods: [:additional_price_float]  # so we get a float for additional_price
+              methods: [:additional_price_float]  # so we get float for additional_price
             }
           }
         }
@@ -34,7 +36,8 @@ class MenuItemsController < ApplicationController
     item = MenuItem.includes(option_groups: :options).find(params[:id])
 
     render json: item.as_json(
-      only: [:id, :name, :description, :price, :category, :image_url],
+      # NEW: include :advance_notice_hours here too
+      only: [:id, :name, :description, :price, :category, :image_url, :advance_notice_hours],
       include: {
         option_groups: {
           include: {
@@ -136,6 +139,7 @@ class MenuItemsController < ApplicationController
 
   private
 
+  # NEW: Permit :advance_notice_hours in the strong params
   def menu_item_params
     params.require(:menu_item).permit(
       :name,
@@ -145,7 +149,8 @@ class MenuItemsController < ApplicationController
       :menu_id,
       :category,
       :image_url,
-      :image  # allow file upload param
+      :advance_notice_hours,  # <-- NEW
+      :image                  # for file upload param
     )
   end
 

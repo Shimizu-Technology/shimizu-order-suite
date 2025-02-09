@@ -1,4 +1,5 @@
 # app/models/order.rb
+
 class Order < ApplicationRecord
   belongs_to :restaurant
   belongs_to :user, optional: true
@@ -22,7 +23,6 @@ class Order < ApplicationRecord
     end.join("\n")
 
     # Build up the message
-    # You might also want to display special_instructions if present.
     message_text = <<~MSG
       New order \##{id} created!
 

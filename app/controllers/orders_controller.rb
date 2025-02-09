@@ -1,4 +1,5 @@
 # app/controllers/orders_controller.rb
+
 class OrdersController < ApplicationController
   before_action :authorize_request, except: [:create, :show]
 
@@ -32,7 +33,6 @@ class OrdersController < ApplicationController
     if request.headers['Authorization'].present?
       token = request.headers['Authorization'].split(' ').last
       begin
-        # Example decode logic; adjust secret & algorithm to match your app
         decoded = JWT.decode(token, Rails.application.secret_key_base, true, { algorithm: 'HS256' })
         user_id = decoded[0]['user_id']
         found_user = User.find_by(id: user_id)
@@ -52,6 +52,34 @@ class OrdersController < ApplicationController
     @order = Order.new(new_params)
     @order.status = 'pending'
 
+    # -----------------------------------------------------
+    # NEW: Check the 'advance_notice_hours' among the items
+    # -----------------------------------------------------
+    if @order.items.present?
+      max_required = 0
+      @order.items.each do |item|
+        # item[:id] is the menu_item's ID
+        menu_item = MenuItem.find_by(id: item[:id])
+        # fallback if not found or item is invalid
+        next unless menu_item
+
+        if menu_item.advance_notice_hours > max_required
+          max_required = menu_item.advance_notice_hours
+        end
+      end
+
+      # If there's a pickup time, enforce it. (You might do something else if it's blank.)
+      if @order.estimated_pickup_time.present?
+        earliest_allowed = Time.current + max_required.hours
+        if @order.estimated_pickup_time < earliest_allowed
+          return render json: {
+            error: "Earliest pickup time for these items is at least #{earliest_allowed.strftime('%Y-%m-%d %H:%M')}"
+          }, status: :unprocessable_entity
+        end
+      end
+    end
+
+    # 3) Attempt to save
     if @order.save
       render json: @order, status: :created
     else
