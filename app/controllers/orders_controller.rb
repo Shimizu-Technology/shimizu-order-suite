@@ -44,8 +44,8 @@ class OrdersController < ApplicationController
     if request.headers['Authorization'].present?
       token = request.headers['Authorization'].split(' ').last
       begin
-        decoded = JWT.decode(token, Rails.application.secret_key_base, true, { algorithm: 'HS256' })
-        user_id = decoded[0]['user_id']
+        decoded    = JWT.decode(token, Rails.application.secret_key_base, true, { algorithm: 'HS256' })
+        user_id    = decoded[0]['user_id']
         found_user = User.find_by(id: user_id)
         @current_user = found_user if found_user
       rescue JWT::DecodeError
@@ -58,7 +58,7 @@ class OrdersController < ApplicationController
     # If there's a logged-in user, attach them
     new_params[:user_id] = @current_user&.id
 
-    @order = Order.new(new_params)
+    @order       = Order.new(new_params)
     @order.status = 'pending'
 
     # -----------------------------------------------------
@@ -72,8 +72,7 @@ class OrdersController < ApplicationController
         max_required = [max_required, menu_item.advance_notice_hours].max
       end
 
-      # Optionally, if the client didn't provide an estimated_pickup_time,
-      # we can set one (example commented out):
+      # If no estimated_pickup_time was provided, you could auto-set here:
       # if @order.estimated_pickup_time.blank?
       #   @order.estimated_pickup_time = Time.current + (max_required >= 24 ? 24.hours : 20.minutes)
       # end
@@ -90,6 +89,43 @@ class OrdersController < ApplicationController
 
     # Attempt to save
     if @order.save
+      # -----------------------------------------
+      # 1) Send a confirmation email (async)
+      # -----------------------------------------
+      if @order.contact_email.present?
+        OrderMailer.order_confirmation(@order).deliver_later
+      end
+
+      # -----------------------------------------
+      # 2) Send a text message (via ClickSend)
+      # -----------------------------------------
+      if @order.contact_phone.present?
+        # Build a summary of items, e.g. "2x Onion Rings, 1x Aloha Poke"
+        item_list = @order.items.map do |i|
+          "#{i['quantity']}x #{i['name']}"
+        end.join(", ")
+
+        # If we have an estimated pickup time, use it
+        pickup_str = if @order.estimated_pickup_time.present?
+          "Pickup around #{@order.estimated_pickup_time.strftime('%-I:%M %p')}."
+        else
+          "We'll let you know once it's ready!"
+        end
+
+        message_body = <<~MSG.squish
+          Hi #{@order.contact_name.presence || 'Customer'},
+          thanks for ordering from Håfaloha!
+          Order ##{@order.id}: #{item_list}, total: $#{@order.total.to_f.round(2)}. 
+          #{pickup_str}
+        MSG
+
+        ClicksendClient.send_text_message(
+          to:   @order.contact_phone,
+          body: message_body,
+          from: 'Hafaloha'
+        )
+      end
+
       render json: @order, status: :created
     else
       render json: { errors: @order.errors.full_messages }, status: :unprocessable_entity
