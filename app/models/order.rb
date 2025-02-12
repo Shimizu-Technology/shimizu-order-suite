@@ -7,7 +7,7 @@ class Order < ApplicationRecord
   # AUTO-SET pickup time if not provided
   before_save :set_default_pickup_time
 
-  # After creation, we do any custom notifications
+  # After creation, enqueue a background job for WhatsApp notifications
   after_create :notify_whatsapp
 
   # Convert total to float, add created/updated times, plus userId & contact info
@@ -69,6 +69,7 @@ class Order < ApplicationRecord
       Instructions: #{special_instructions.presence || 'none'}
     MSG
 
-    WassengerClient.new.send_group_message(group_id, message_text)
+    # Instead of calling Wassenger inline, enqueue an async job:
+    SendWhatsappJob.perform_later(group_id, message_text)
   end
 end

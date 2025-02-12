@@ -14,6 +14,8 @@ gem 'jwt', '~> 2.2'
 gem 'faker'
 # Allow rails to use the .env file
 gem 'dotenv-rails'
+# Rails background job adapter
+gem 'sidekiq'
 # AWS S3
 gem 'aws-sdk-s3', require: false
 # Use the Puma web server [https://github.com/puma/puma]
