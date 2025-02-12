@@ -1,7 +1,7 @@
 # app/controllers/orders_controller.rb
 
 class OrdersController < ApplicationController
-  before_action :authorize_request, except: [:create, :show, :new_since]
+  before_action :authorize_request, except: [:create, :show]
 
   # GET /orders
   def index
