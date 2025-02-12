@@ -114,7 +114,7 @@ class OrdersController < ApplicationController
 
         message_body = <<~MSG.squish
           Hi #{@order.contact_name.presence || 'Customer'},
-          thanks for ordering from Håfaloha!
+          thanks for ordering from Hafaloha!
           Order ##{@order.id}: #{item_list}, total: $#{@order.total.to_f.round(2)}. 
           #{pickup_str}
         MSG
