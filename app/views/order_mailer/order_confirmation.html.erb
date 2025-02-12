@@ -1,59 +1,49 @@
 <!-- app/views/order_mailer/order_confirmation.html.erb -->
 
-<!-- 
-  A table-based, inline-styled template for better email client compatibility.
-  Adjust widths, fonts, and colors as desired.
--->
-
-<!-- The outer <table> is the main container -->
-<table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8f8f8; padding: 20px 0; font-family: Arial, sans-serif;">
+<table width="100%" border="0" cellspacing="0" cellpadding="0"
+       style="background-color: #f8f8f8; padding: 20px 0; font-family: Arial, sans-serif;">
   <tr>
     <td align="center">
-      <!-- Inner container with a fixed width for desktop -->
-      <table width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 6px; overflow: hidden;">
+      <table width="600" border="0" cellspacing="0" cellpadding="0"
+             style="background-color: #ffffff; border-radius: 6px; overflow: hidden;">
         
-        <!-- HEADER / BRAND SECTION -->
+        <!-- HEADER -->
         <tr>
           <td align="center" style="background-color: #c1902f; padding: 20px;">
-            <!-- If you have a brand logo image: 
-            <img src="https://example.com/logo.png" alt="Håfaloha" width="150" style="display:block; border:0;"/>
-            -->
-            <h1 style="margin: 0; font-size: 24px; color: #ffffff; font-family: 'Helvetica Neue', Arial, sans-serif;">
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff;
+                       font-family: 'Helvetica Neue', Arial, sans-serif;">
               Håfaloha Order Confirmation
             </h1>
           </td>
         </tr>
 
         <!-- SPACER -->
-        <tr>
-          <td style="height: 20px;">&nbsp;</td>
-        </tr>
+        <tr><td style="height: 20px;">&nbsp;</td></tr>
 
-        <!-- MAIN CONTENT ROW -->
+        <!-- MAIN CONTENT -->
         <tr>
           <td style="padding: 0 30px 20px;">
-            <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
               Hi <strong><%= @order.contact_name.presence || "Valued Customer" %></strong>,
             </p>
 
-            <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
               Thank you for your order! Below are your details:
             </p>
 
             <!-- Order Details -->
-            <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 15px; font-size: 16px; color: #333;">
+            <table width="100%" border="0" cellspacing="0" cellpadding="0"
+                   style="margin-bottom: 15px; font-size: 16px; color: #333;">
               <tr>
                 <td style="padding: 5px 0;">
                   <strong>Order ID:</strong> <%= @order.id %>
                 </td>
               </tr>
-
               <tr>
                 <td style="padding: 5px 0;">
                   <strong>Total:</strong> $<%= @order.total.to_f.round(2) %>
                 </td>
               </tr>
-
               <tr>
                 <td style="padding: 5px 0;">
                   <strong>Items:</strong>
@@ -71,11 +61,13 @@
               <% if @order.special_instructions.present? %>
                 <tr>
                   <td style="padding: 5px 0;">
-                    <strong>Special Instructions:</strong> <%= @order.special_instructions %>
+                    <strong>Special Instructions:</strong>
+                    <%= @order.special_instructions %>
                   </td>
                 </tr>
               <% end %>
 
+              <!-- If there's a pickup time already (rare at creation), show it. Otherwise reassure them. -->
               <% if @order.estimated_pickup_time.present? %>
                 <tr>
                   <td style="padding: 5px 0;">
@@ -87,17 +79,17 @@
                 <tr>
                   <td style="padding: 5px 0;">
                     <strong>Pickup Time:</strong> 
-                    We'll notify you when it's ready!
+                    We’ll send you another message with your ETA as soon as we start preparing your order.
                   </td>
                 </tr>
               <% end %>
             </table>
 
-            <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
               We'll contact you at <strong><%= @order.contact_phone %></strong> if we have questions.
             </p>
 
-            <p style="margin: 0; color: #333333; font-size: 16px; line-height: 24px;">
+            <p style="margin: 0; color: #333; font-size: 16px; line-height: 24px;">
               We appreciate your business!
             </p>
           </td>
@@ -105,14 +97,15 @@
 
         <!-- FOOTER -->
         <tr>
-          <td style="padding: 20px 30px; background-color: #f2f2f2; color: #555555; font-size: 14px; line-height: 20px; border-top: 1px solid #dddddd;">
+          <td style="padding: 20px 30px; background-color: #f2f2f2;
+                     color: #555; font-size: 14px; line-height: 20px;
+                     border-top: 1px solid #ddd;">
             <p style="margin: 0;">
               <strong>Håfaloha</strong><br/>
               Tamuning, Guam | (671) 989-3444 | 11AM–9PM Daily
             </p>
           </td>
         </tr>
-
       </table>
     </td>
   </tr>

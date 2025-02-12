@@ -13,4 +13,10 @@ class OrderMailer < ApplicationMailer
     mail to: @order.contact_email,
          subject: "Håfaloha Order ##{@order.id} is Ready!"
   end
+
+  def order_preparing(order)
+    @order = order
+    mail to: @order.contact_email,
+         subject: "Your Håfaloha Order ##{@order.id} is Being Prepared"
+  end
 end

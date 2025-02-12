@@ -1,0 +1,83 @@
+<!-- app/views/order_mailer/order_preparing.html.erb -->
+
+<table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8f8f8; padding: 20px 0; font-family: Arial, sans-serif;">
+  <tr>
+    <td align="center">
+
+      <!-- Outer fixed-width container -->
+      <table width="600" border="0" cellspacing="0" cellpadding="0" style="background-color: #ffffff; border-radius: 6px; overflow: hidden;">
+
+        <!-- HEADER / BRAND SECTION -->
+        <tr>
+          <td align="center" style="background-color: #c1902f; padding: 20px;">
+            <!-- Optionally place a brand logo here:
+            <img src="https://example.com/logo.png" alt="Håfaloha" width="150" style="display:block; border:0;" />
+            -->
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff; font-family: 'Helvetica Neue', Arial, sans-serif;">
+              Håfaloha Order Update
+            </h1>
+          </td>
+        </tr>
+
+        <!-- SPACER -->
+        <tr>
+          <td style="height: 20px;">&nbsp;</td>
+        </tr>
+
+        <!-- MAIN CONTENT ROW -->
+        <tr>
+          <td style="padding: 0 30px 20px;">
+
+            <!-- Greeting -->
+            <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
+              Hi <strong><%= @order.contact_name.presence || "Valued Customer" %></strong>,
+            </p>
+
+            <!-- Intro text -->
+            <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
+              We’re happy to let you know that your order 
+              (<strong>##<%= @order.id %></strong>) is now being prepared!
+            </p>
+
+            <!-- ETA section -->
+            <% if @order.estimated_pickup_time.present? %>
+              <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
+                Our estimated pickup time is 
+                <strong><%= @order.estimated_pickup_time.strftime("%-I:%M %p") %></strong>.
+              </p>
+            <% else %>
+              <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
+                We’ll let you know once we set your pickup time.
+              </p>
+            <% end %>
+
+            <!-- Contact info note -->
+            <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
+              If you have any questions, we can be reached at
+              <strong><%= @order.contact_phone %></strong>.
+            </p>
+
+            <!-- Closing line -->
+            <p style="margin: 0; color: #333333; font-size: 16px; line-height: 24px;">
+              Thank you for choosing Håfaloha — we appreciate your business!
+            </p>
+
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="padding: 20px 30px; background-color: #f2f2f2; color: #555555; font-size: 14px; line-height: 20px; border-top: 1px solid #dddddd;">
+            <p style="margin: 0;">
+              <strong>Håfaloha</strong><br/>
+              Tamuning, Guam | (671) 989-3444 | 11AM–9PM Daily
+            </p>
+          </td>
+        </tr>
+
+      </table>
+      <!-- End of outer container -->
+
+    </td>
+  </tr>
+</table>

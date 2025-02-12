@@ -1,25 +1,24 @@
 # app/controllers/orders_controller.rb
 
 class OrdersController < ApplicationController
-  before_action :authorize_request, except: [:create, :show]
+  before_action :authorize_request, except: [:create, :show, :new_since]
 
   # GET /orders
   def index
     if current_user&.role.in?(%w[admin super_admin])
-      @orders = Order.includes(:user).all
+      @orders = Order.all
     elsif current_user
       @orders = current_user.orders
     else
       return render json: { error: "Unauthorized" }, status: :unauthorized
     end
-
     render json: @orders, status: :ok
   end
 
   # GET /orders/:id
   def show
     order = Order.find(params[:id])
-    if current_user&.role.in?(%w[admin super_admin]) || current_user&.id == order.user_id
+    if current_user&.role.in?(%w[admin super_admin]) || (current_user && current_user.id == order.user_id)
       render json: order
     else
       render json: { error: "Forbidden" }, status: :forbidden
@@ -39,7 +38,7 @@ class OrdersController < ApplicationController
 
   # POST /orders
   def create
-    # Optional manual token decode for guest checkout w/ token
+    # (Optional) token decode for user lookup
     if request.headers['Authorization'].present?
       token = request.headers['Authorization'].split(' ').last
       begin
@@ -48,21 +47,21 @@ class OrdersController < ApplicationController
         found_user = User.find_by(id: user_id)
         @current_user = found_user if found_user
       rescue JWT::DecodeError
-        # invalid token => do nothing => guest
+        # do nothing => treat as guest
       end
     end
 
     new_params = order_params.dup
     new_params[:restaurant_id] ||= 1
-    # If there's a logged-in user, attach them
     new_params[:user_id] = @current_user&.id
+
+    # If you explicitly want to block setting estimated_pickup_time at creation:
+    # new_params.delete(:estimated_pickup_time)
 
     @order = Order.new(new_params)
     @order.status = 'pending'
 
-    # -----------------------------------------------------
-    # Check the 'advance_notice_hours' among the items
-    # -----------------------------------------------------
+    # Enforce 24-hour rule if items require it (optional)
     if @order.items.present?
       max_required = 0
       @order.items.each do |item|
@@ -71,46 +70,38 @@ class OrdersController < ApplicationController
         max_required = [max_required, menu_item.advance_notice_hours].max
       end
 
-      # If no estimated_pickup_time was provided, you could auto-set here:
-      # if @order.estimated_pickup_time.blank?
-      #   @order.estimated_pickup_time = Time.current + (max_required >= 24 ? 24.hours : 20.minutes)
-      # end
-
+      # If the user tries to pass in an estimated_pickup_time earlier than 24 hrs
+      # for an item that requires 24 hrs, reject.
       if max_required >= 24 && @order.estimated_pickup_time.present?
         earliest_allowed = Time.current + 24.hours
         if @order.estimated_pickup_time < earliest_allowed
           return render json: {
-            error: "Earliest pickup time for these items is at least #{earliest_allowed.strftime('%Y-%m-%d %H:%M')}"
+            error: "Earliest pickup time is #{earliest_allowed.strftime('%Y-%m-%d %H:%M')}"
           }, status: :unprocessable_entity
         end
       end
     end
 
-    # Attempt to save
     if @order.save
       # 1) Confirmation email
       if @order.contact_email.present?
         OrderMailer.order_confirmation(@order).deliver_later
       end
 
-      # 2) Confirmation text
+      # 2) Confirmation text (no ETA yet)
       if @order.contact_phone.present?
         item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
-        pickup_str = if @order.estimated_pickup_time.present?
-                        "Pickup around #{@order.estimated_pickup_time.strftime('%-I:%M %p')}."
-                      else
-                        "We'll let you know once it's ready!"
-                      end
-        message_body = <<~MSG.squish
+        msg = <<~TXT.squish
           Hi #{@order.contact_name.presence || 'Customer'},
           thanks for ordering from Hafaloha!
-          Order ##{@order.id}: #{item_list}, total: $#{@order.total.to_f.round(2)}.
-          #{pickup_str}
-        MSG
+          Order ##{@order.id}: #{item_list},
+          total: $#{@order.total.to_f.round(2)}.
+          We'll send you an ETA by text as soon as we start preparing your order!
+        TXT
 
         ClicksendClient.send_text_message(
           to:   @order.contact_phone,
-          body: message_body,
+          body: msg,
           from: 'Hafaloha'
         )
       end
@@ -128,27 +119,39 @@ class OrdersController < ApplicationController
 
     old_status = order.status
     if order.update(order_params)
-      # ---------------------------------------------------
-      # Check if status changed => e.g. to "ready"
-      # ---------------------------------------------------
+      # -------------------------------------------------------------------
+      # If status changed from 'pending' to 'preparing',
+      # send “preparing” email/text with new ETA
+      # -------------------------------------------------------------------
+      if old_status == 'pending' && order.status == 'preparing'
+        if order.contact_email.present?
+          OrderMailer.order_preparing(order).deliver_later
+        end
+        if order.contact_phone.present?
+          eta_str = if order.estimated_pickup_time.present?
+                       order.estimated_pickup_time.strftime("%-I:%M %p")
+                     else
+                       "soon"
+                     end
+          txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
+                     "is now being prepared! ETA: #{eta_str}."
+          ClicksendClient.send_text_message(
+            to:   order.contact_phone,
+            body: txt_body,
+            from: 'Hafaloha'
+          )
+        end
+      end
+
+      # If status changed to 'ready', then send “order_ready”
       if old_status != 'ready' && order.status == 'ready'
-        # or use "ready" if that’s the status you prefer
-        # 1) Email
         if order.contact_email.present?
           OrderMailer.order_ready(order).deliver_later
         end
-        # 2) SMS
         if order.contact_phone.present?
-          msg = <<~TXT.squish
-            Hi #{order.contact_name.presence || 'Customer'},
-            Your order ##{order.id} is now ready for pickup!
-            Thank you for choosing Hafaloha!
-          TXT
-          ClicksendClient.send_text_message(
-            to:   order.contact_phone,
-            body: msg,
-            from: 'Hafaloha'
-          )
+          msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
+                "is now ready for pickup! Thank you for choosing Hafaloha."
+          ClicksendClient.send_text_message(to: order.contact_phone, body: msg, from: 'Hafaloha')
         end
       end
 
