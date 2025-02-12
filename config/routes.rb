@@ -1,9 +1,9 @@
 # config/routes.rb
 
 Rails.application.routes.draw do
-  # Authentication
-  post '/signup', to: 'users#create'
-  post '/login',  to: 'sessions#create'
+  # Authentication - need to update this since we're using Auth0
+  # post '/signup', to: 'users#create'
+  # post '/login',  to: 'sessions#create'
 
   # Standard RESTful resources
   resources :restaurants, only: [:index, :show, :create, :update, :destroy]

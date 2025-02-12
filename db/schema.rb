@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_02_09_070903) do
+ActiveRecord::Schema[7.2].define(version: 2025_02_11_233427) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -256,6 +256,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_09_070903) do
     t.string "first_name"
     t.string "last_name"
     t.string "phone"
+    t.string "auth0_sub"
+    t.index ["auth0_sub"], name: "index_users_on_auth0_sub", unique: true
     t.index ["restaurant_id"], name: "index_users_on_restaurant_id"
   end
 

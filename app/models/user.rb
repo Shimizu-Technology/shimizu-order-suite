@@ -1,16 +1,18 @@
 # app/models/user.rb
 class User < ApplicationRecord
   belongs_to :restaurant, optional: true
+
+  # If you still need local passwords for staff, keep this:
   has_secure_password
 
   validates :email, presence: true, uniqueness: true
-  validates :password_digest, presence: true
 
-  # If you prefer both first & last name to be required:
-  validates :first_name, presence: true
-  validates :last_name, presence: true
+  # If the user is purely Auth0-based, you can skip the password presence validations
+  # But if staff logs in with local credentials, keep them.
+  
+  # For linking with Auth0
+  # e.g. validates :auth0_sub, uniqueness: true, allow_nil: true
 
-  # For convenience, define a helper method:
   def full_name
     "#{first_name} #{last_name}".strip
   end
