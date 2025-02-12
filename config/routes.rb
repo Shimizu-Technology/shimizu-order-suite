@@ -61,7 +61,7 @@ Rails.application.routes.draw do
   resources :menus, only: [:index, :show, :create, :update, :destroy]
   resources :menu_items do
     member do
-      post :upload_image  # => POST /menu_items/:id/upload_image
+      post :upload_image
     end
 
     # 1) For listing or creating option groups under a given menu item:
@@ -77,6 +77,10 @@ Rails.application.routes.draw do
   # 4) For updating or deleting a specific option (requires just the option ID)
   resources :options, only: [:update, :destroy]
 
-  # ... (the rest of your routes)
+  # ============================
+  # NEW: Polling route for orders
+  # ============================
+  get '/orders/new_since/:id', to: 'orders#new_since'
+
   resources :inventory_statuses, only: [:index, :show, :update]
 end

@@ -26,6 +26,18 @@ class OrdersController < ApplicationController
     end
   end
 
+  # GET /orders/new_since/:id
+  # Returns all orders with ID > :id, in ascending order by ID.
+  def new_since
+    unless current_user&.role.in?(%w[admin super_admin])
+      return render json: { error: "Forbidden" }, status: :forbidden
+    end
+
+    last_id = params[:id].to_i
+    new_orders = Order.where("id > ?", last_id).order(:id)
+    render json: new_orders, status: :ok
+  end
+
   # POST /orders
   def create
     # Optional manual token decode for guest checkout w/ token
@@ -56,11 +68,12 @@ class OrdersController < ApplicationController
       max_required = 0
       @order.items.each do |item|
         menu_item = MenuItem.find_by(id: item[:id])
-        next unless menu_item  # skip if no item found
+        next unless menu_item
         max_required = [max_required, menu_item.advance_notice_hours].max
       end
 
-      # Optionally, if the client didn't provide an estimated_pickup_time, we can set one:
+      # Optionally, if the client didn't provide an estimated_pickup_time,
+      # we can set one (example commented out):
       # if @order.estimated_pickup_time.blank?
       #   @order.estimated_pickup_time = Time.current + (max_required >= 24 ? 24.hours : 20.minutes)
       # end
@@ -75,7 +88,7 @@ class OrdersController < ApplicationController
       end
     end
 
-    # 3) Attempt to save
+    # Attempt to save
     if @order.save
       render json: @order, status: :created
     else
@@ -107,7 +120,6 @@ class OrdersController < ApplicationController
   private
 
   def order_params
-    # items: [ { "id":7, "name":"Onion Rings", "price":11.95, "quantity":1, "notes":"no onions" }, ...]
     params.require(:order).permit(
       :restaurant_id,
       :user_id,
