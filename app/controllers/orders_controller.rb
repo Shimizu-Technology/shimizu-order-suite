@@ -61,13 +61,22 @@ class OrdersController < ApplicationController
     @order = Order.new(new_params)
     @order.status = 'pending'
 
-    # Enforce 24-hour rule if items require it (optional)
+    # -------------------------------------------------------------
+    # Enforce 24-hour rule if items require it (no functionality change).
+    # Now done with a single MenuItem query => eliminates N+1 lookups
+    # -------------------------------------------------------------
     if @order.items.present?
+      # Gather unique item IDs in the request
+      item_ids = @order.items.map { |i| i[:id] }.compact.uniq
+
+      # Load them all in one query
+      menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
+
       max_required = 0
       @order.items.each do |item|
-        menu_item = MenuItem.find_by(id: item[:id])
-        next unless menu_item
-        max_required = [max_required, menu_item.advance_notice_hours].max
+        if (menu_item = menu_items_by_id[item[:id]])
+          max_required = [max_required, menu_item.advance_notice_hours].max
+        end
       end
 
       # If the user tries to pass in an estimated_pickup_time earlier than 24 hrs
@@ -119,10 +128,10 @@ class OrdersController < ApplicationController
 
     old_status = order.status
     if order.update(order_params)
-      # -------------------------------------------------------------------
+      # -------------------------------------------------------
       # If status changed from 'pending' to 'preparing',
       # send “preparing” email/text with new ETA
-      # -------------------------------------------------------------------
+      # -------------------------------------------------------
       if old_status == 'pending' && order.status == 'preparing'
         if order.contact_email.present?
           OrderMailer.order_preparing(order).deliver_later
