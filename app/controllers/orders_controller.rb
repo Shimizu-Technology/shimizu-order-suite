@@ -27,7 +27,6 @@ class OrdersController < ApplicationController
   end
 
   # GET /orders/new_since/:id
-  # Returns all orders with ID > :id, in ascending order by ID.
   def new_since
     unless current_user&.role.in?(%w[admin super_admin])
       return render json: { error: "Forbidden" }, status: :forbidden
@@ -58,7 +57,7 @@ class OrdersController < ApplicationController
     # If there's a logged-in user, attach them
     new_params[:user_id] = @current_user&.id
 
-    @order       = Order.new(new_params)
+    @order = Order.new(new_params)
     @order.status = 'pending'
 
     # -----------------------------------------------------
@@ -89,33 +88,23 @@ class OrdersController < ApplicationController
 
     # Attempt to save
     if @order.save
-      # -----------------------------------------
-      # 1) Send a confirmation email (async)
-      # -----------------------------------------
+      # 1) Confirmation email
       if @order.contact_email.present?
         OrderMailer.order_confirmation(@order).deliver_later
       end
 
-      # -----------------------------------------
-      # 2) Send a text message (via ClickSend)
-      # -----------------------------------------
+      # 2) Confirmation text
       if @order.contact_phone.present?
-        # Build a summary of items, e.g. "2x Onion Rings, 1x Aloha Poke"
-        item_list = @order.items.map do |i|
-          "#{i['quantity']}x #{i['name']}"
-        end.join(", ")
-
-        # If we have an estimated pickup time, use it
+        item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
         pickup_str = if @order.estimated_pickup_time.present?
-          "Pickup around #{@order.estimated_pickup_time.strftime('%-I:%M %p')}."
-        else
-          "We'll let you know once it's ready!"
-        end
-
+                        "Pickup around #{@order.estimated_pickup_time.strftime('%-I:%M %p')}."
+                      else
+                        "We'll let you know once it's ready!"
+                      end
         message_body = <<~MSG.squish
           Hi #{@order.contact_name.presence || 'Customer'},
           thanks for ordering from Hafaloha!
-          Order ##{@order.id}: #{item_list}, total: $#{@order.total.to_f.round(2)}. 
+          Order ##{@order.id}: #{item_list}, total: $#{@order.total.to_f.round(2)}.
           #{pickup_str}
         MSG
 
@@ -137,7 +126,32 @@ class OrdersController < ApplicationController
     order = Order.find(params[:id])
     return render json: { error: "Forbidden" }, status: :forbidden unless can_edit?(order)
 
+    old_status = order.status
     if order.update(order_params)
+      # ---------------------------------------------------
+      # Check if status changed => e.g. to "ready"
+      # ---------------------------------------------------
+      if old_status != 'ready' && order.status == 'ready'
+        # or use "ready" if that’s the status you prefer
+        # 1) Email
+        if order.contact_email.present?
+          OrderMailer.order_ready(order).deliver_later
+        end
+        # 2) SMS
+        if order.contact_phone.present?
+          msg = <<~TXT.squish
+            Hi #{order.contact_name.presence || 'Customer'},
+            Your order ##{order.id} is now ready for pickup!
+            Thank you for choosing Hafaloha!
+          TXT
+          ClicksendClient.send_text_message(
+            to:   order.contact_phone,
+            body: msg,
+            from: 'Hafaloha'
+          )
+        end
+      end
+
       render json: order
     else
       render json: { errors: order.errors.full_messages }, status: :unprocessable_entity
