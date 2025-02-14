@@ -5,6 +5,10 @@ Rails.application.routes.draw do
   post '/signup', to: 'users#create'
   post '/login',  to: 'sessions#create'
 
+  # Password resets
+  post  '/password/forgot', to: 'passwords#forgot'
+  patch '/password/reset',  to: 'passwords#reset'
+
   # Standard RESTful resources
   resources :restaurants, only: [:index, :show, :create, :update, :destroy]
   resources :seat_sections, only: [:index, :show, :create, :update, :destroy]

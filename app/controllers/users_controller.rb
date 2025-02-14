@@ -1,4 +1,5 @@
 # app/controllers/users_controller.rb
+
 class UsersController < ApplicationController
   # POST /signup
   def create
@@ -14,6 +15,7 @@ class UsersController < ApplicationController
     end
 
     if user.save
+      # Issue JWT
       token = JWT.encode({ user_id: user.id }, Rails.application.secret_key_base)
       render json: { jwt: token, user: user }, status: :created
     else
@@ -23,8 +25,9 @@ class UsersController < ApplicationController
 
   private
 
+  # Expect nested params => { user: {...} }
   def user_params
-    params.permit(
+    params.require(:user).permit(
       :first_name,
       :last_name,
       :phone,
