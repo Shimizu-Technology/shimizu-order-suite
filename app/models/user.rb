@@ -1,5 +1,4 @@
 # app/models/user.rb
-
 require 'securerandom'
 require 'digest'
 
@@ -7,10 +6,14 @@ class User < ApplicationRecord
   belongs_to :restaurant, optional: true
   has_secure_password
 
-  validates :email, presence: true, uniqueness: true
+  # 1) Validate email is unique in a case-insensitive manner
+  validates :email, presence: true, uniqueness: { case_sensitive: false }
   validates :password_digest, presence: true
   validates :first_name, presence: true
   validates :last_name,  presence: true
+
+  # 2) Downcase before saving so we store all emails in lowercase
+  before_save :downcase_email
 
   def full_name
     "#{first_name} #{last_name}".strip
@@ -21,7 +24,7 @@ class User < ApplicationRecord
   end
 
   # -----------------------------------------
-  # Password Reset Logic
+  # Password Reset Logic (unchanged)
   # -----------------------------------------
   def generate_reset_password_token!
     raw_token = SecureRandom.hex(10)
@@ -45,8 +48,10 @@ class User < ApplicationRecord
     save!(validate: false)
   end
 
-  # Optionally, if you want to limit fields in JSON:
-  # def as_json(options = {})
-  #   super(only: [:id, :email, :first_name, :last_name, :role, :phone])
-  # end
+  private
+
+  # Force email to be lowercase before save
+  def downcase_email
+    self.email = email.downcase
+  end
 end
