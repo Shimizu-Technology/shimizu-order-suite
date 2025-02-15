@@ -1,10 +1,9 @@
 # app/controllers/menu_items_controller.rb
-
 class MenuItemsController < ApplicationController
-  # 1) For index & show, we do an optional auth:
+  # 1) For index & show, we do an optional auth (public can see, admin can see all)
   before_action :optional_authorize, only: [:index, :show]
 
-  # 2) For all other actions, require a valid token + admin:
+  # 2) For all other actions, require a valid token + admin
   before_action :authorize_request, except: [:index, :show]
 
   # GET /menu_items
@@ -12,6 +11,9 @@ class MenuItemsController < ApplicationController
     # If admin => show all items (including expired)
     # Else => only “currently_available”
     base_scope = is_admin? ? MenuItem.all : MenuItem.currently_available
+
+    # Sort results by name (alphabetical order)
+    base_scope = base_scope.order(:name)
 
     # Apply category filter if present
     if params[:category].present?
@@ -118,7 +120,7 @@ class MenuItemsController < ApplicationController
   end
 
   # (Optional) POST /menu_items/:id/upload_image
-  # No longer needed if you do single-step upload, but you can keep if desired.
+  # No longer needed if you do single-step uploads, but you can keep if desired.
   def upload_image
     Rails.logger.info "=== MenuItemsController#upload_image ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
@@ -141,9 +143,6 @@ class MenuItemsController < ApplicationController
 
   private
 
-  #---------------------------------------
-  # STRONG PARAMS
-  #---------------------------------------
   def menu_item_params
     params.require(:menu_item).permit(
       :name,
@@ -162,9 +161,6 @@ class MenuItemsController < ApplicationController
     )
   end
 
-  #---------------------------------------
-  # HELPER - check if user is admin
-  #---------------------------------------
   def is_admin?
     current_user && current_user.role.in?(%w[admin super_admin])
   end
