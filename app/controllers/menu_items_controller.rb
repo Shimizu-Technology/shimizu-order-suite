@@ -6,23 +6,21 @@ class MenuItemsController < ApplicationController
   # GET /menu_items
   def index
     items_scope = if params[:category].present?
-                    MenuItem.where(category: params[:category], available: true)
-                  else
-                    MenuItem.where(available: true)
-                  end
+                     MenuItem.currently_available.where(category: params[:category])
+                   else
+                     MenuItem.currently_available
+                   end
 
     items = items_scope.includes(option_groups: :options)
 
-    # Render each item with numeric :id and nested option_groups
     render json: items.as_json(
-      # NEW: include :advance_notice_hours in the top-level fields
       only: [:id, :name, :description, :price, :category, :image_url, :advance_notice_hours],
       include: {
         option_groups: {
           include: {
             options: {
               only: [:id, :name, :available],
-              methods: [:additional_price_float]  # so we get float for additional_price
+              methods: [:additional_price_float]
             }
           }
         }
@@ -32,11 +30,8 @@ class MenuItemsController < ApplicationController
 
   # GET /menu_items/:id
   def show
-    # Eager-load the option_groups and their options
     item = MenuItem.includes(option_groups: :options).find(params[:id])
-
     render json: item.as_json(
-      # NEW: include :advance_notice_hours here too
       only: [:id, :name, :description, :price, :category, :image_url, :advance_notice_hours],
       include: {
         option_groups: {
@@ -56,7 +51,6 @@ class MenuItemsController < ApplicationController
     Rails.logger.info "=== MenuItemsController#create ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
-    # Note: No attempt to set :id manually, we let Rails pick an integer ID
     @menu_item = MenuItem.new(menu_item_params.except(:image))
     if @menu_item.save
       Rails.logger.info "Created MenuItem => #{@menu_item.inspect}"
@@ -108,7 +102,7 @@ class MenuItemsController < ApplicationController
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
     menu_item = MenuItem.find(params[:id])
-    Rails.logger.info "Destroying MenuItem => #{menu_item.id}, current image_url => #{menu_item.image_url.inspect}"
+    Rails.logger.info "Destroying MenuItem => #{menu_item.id}, image_url: #{menu_item.image_url.inspect}"
 
     menu_item.destroy
     Rails.logger.info "Destroyed MenuItem => #{menu_item.id}"
@@ -139,7 +133,6 @@ class MenuItemsController < ApplicationController
 
   private
 
-  # NEW: Permit :advance_notice_hours in the strong params
   def menu_item_params
     params.require(:menu_item).permit(
       :name,
@@ -149,8 +142,12 @@ class MenuItemsController < ApplicationController
       :menu_id,
       :category,
       :image_url,
-      :advance_notice_hours,  # <-- NEW
-      :image                  # for file upload param
+      :advance_notice_hours,
+      :image,
+      :seasonal,
+      :available_from,
+      :available_until,
+      :promo_label
     )
   end
 
