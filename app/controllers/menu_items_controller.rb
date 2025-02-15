@@ -1,17 +1,24 @@
 # app/controllers/menu_items_controller.rb
 
 class MenuItemsController < ApplicationController
+  # 1) For index & show, we do an optional auth:
+  before_action :optional_authorize, only: [:index, :show]
+
+  # 2) For all other actions, require a valid token + admin:
   before_action :authorize_request, except: [:index, :show]
 
   # GET /menu_items
   def index
-    items_scope = if params[:category].present?
-                     MenuItem.currently_available.where(category: params[:category])
-                   else
-                     MenuItem.currently_available
-                   end
+    # If admin => show all items (including expired)
+    # Else => only “currently_available”
+    base_scope = is_admin? ? MenuItem.all : MenuItem.currently_available
 
-    items = items_scope.includes(option_groups: :options)
+    # Apply category filter if present
+    if params[:category].present?
+      base_scope = base_scope.where(category: params[:category])
+    end
+
+    items = base_scope.includes(option_groups: :options)
 
     render json: items.as_json(
       only: [:id, :name, :description, :price, :category, :image_url, :advance_notice_hours],
@@ -110,7 +117,8 @@ class MenuItemsController < ApplicationController
     head :no_content
   end
 
-  # POST /menu_items/:id/upload_image
+  # (Optional) POST /menu_items/:id/upload_image
+  # No longer needed if you do single-step upload, but you can keep if desired.
   def upload_image
     Rails.logger.info "=== MenuItemsController#upload_image ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
@@ -133,6 +141,9 @@ class MenuItemsController < ApplicationController
 
   private
 
+  #---------------------------------------
+  # STRONG PARAMS
+  #---------------------------------------
   def menu_item_params
     params.require(:menu_item).permit(
       :name,
@@ -151,6 +162,9 @@ class MenuItemsController < ApplicationController
     )
   end
 
+  #---------------------------------------
+  # HELPER - check if user is admin
+  #---------------------------------------
   def is_admin?
     current_user && current_user.role.in?(%w[admin super_admin])
   end
