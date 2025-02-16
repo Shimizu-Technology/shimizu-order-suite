@@ -2,16 +2,50 @@
 
 require 'active_record'
 
-# Tell Rails to reload the actual DB columns from scratch
-Reservation.reset_column_information
-
 puts "== (Optional) Cleaning references =="
-# Uncomment if you truly want to wipe all data. Use with caution in production:
-# ActiveRecord::Base.connection.execute("
-#   TRUNCATE reservations, waitlist_entries, users, restaurants, menus, menu_items,
-#     layouts, seat_sections, seats, seat_allocations, operating_hours,
-#     option_groups, options, orders RESTART IDENTITY CASCADE
-# ")
+begin
+  # TRUNCATE all the relevant tables we want to clear, then RESTART IDENTITY to reset PKs
+  # CASCADE drops dependent data in referencing tables, e.g. foreign keys.
+  ActiveRecord::Base.connection.execute("
+    TRUNCATE 
+      reservations,
+      waitlist_entries,
+      users,
+      restaurants,
+      menus,
+      menu_items,
+      layouts,
+      seat_sections,
+      seats,
+      seat_allocations,
+      operating_hours,
+      option_groups,
+      options,
+      orders
+    RESTART IDENTITY CASCADE
+  ")
+
+  puts "Truncated all tables and reset identity counters."
+rescue => e
+  puts "Warning: Truncate step failed => #{e.message}"
+  puts "It's possible you don't have permissions or you're on production with locked DB. " \
+       "Continuing with seeding anyway..."
+end
+
+# Now reload column info for any models we truncated
+Reservation.reset_column_information
+WaitlistEntry.reset_column_information
+User.reset_column_information
+Restaurant.reset_column_information
+Menu.reset_column_information
+MenuItem.reset_column_information
+Layout.reset_column_information
+SeatSection.reset_column_information
+Seat.reset_column_information
+OperatingHour.reset_column_information
+OptionGroup.reset_column_information
+Option.reset_column_information
+Order.reset_column_information
 
 puts "== Seeding the database =="
 
@@ -48,13 +82,6 @@ puts "   admin_settings: #{restaurant.admin_settings.inspect}"
 
 # ------------------------------------------------------------------------------
 # 1B) SEED OPERATING HOURS
-#
-# Sunday is day_of_week=0, Monday=1, Tuesday=2, etc.
-# Requested hours:
-#   * Tues–Thu: 11AM–9PM
-#   * Fri–Sat: 11AM–10PM
-#   * Sun: 11AM–9PM
-#   * Mon: closed
 # ------------------------------------------------------------------------------
 oh_data = [
   { day_of_week: 0, open_time: "11:00:00", close_time: "21:00:00", closed: false }, # Sun
@@ -335,7 +362,6 @@ reservation_data.each do |data|
   existing_prefs = data[:preferences] || []
   filtered = existing_prefs.select { |arr| arr.size == r.party_size }
   if filtered.size < 3
-    # Helper method to generate seat combos
     def build_seat_prefs_for_party_size(party_size, total_seats=10, max_sets=3)
       seat_labels = (1..total_seats).map { |i| "Seat ##{i}" }
       results = []
@@ -662,8 +688,7 @@ menu_items_data.each do |data|
     mi.available            = true
     mi.advance_notice_hours = data[:advance_notice_hours] || 0
 
-    # NEW: set some stock_status / seasonal / featured
-    # By default, let's keep it in_stock (0).
+    # Default to in_stock (0).
     mi.stock_status = 0  # 0 => in_stock, 1 => out_of_stock, 2 => low_stock
     mi.seasonal     = false
   end
@@ -671,10 +696,9 @@ end
 
 puts "Seeded #{MenuItem.count} menu items under '#{main_menu.name}'."
 
-# Now let's manually update a few items to illustrate:
+# Example: override some items with different stock statuses
 spicy_wings = MenuItem.find_by(name: "Spicy Wings")
 if spicy_wings
-  # Mark them as "low_stock" (2)
   spicy_wings.update!(
     stock_status: 2, # low_stock
     status_note: "Running low—supplier issue"
@@ -684,7 +708,6 @@ end
 
 blue_bacon = MenuItem.find_by(name: "Blue Cheese Bacon Burger")
 if blue_bacon
-  # Mark as out_of_stock (1)
   blue_bacon.update!(
     stock_status: 1,
     status_note: "Ran out of bacon"
@@ -694,7 +717,6 @@ end
 
 build_bowl = MenuItem.find_by(name: "Build-a-Bowl")
 if build_bowl
-  # Make it "featured" and seasonal
   build_bowl.update!(
     featured: true,
     seasonal: true,
@@ -712,7 +734,6 @@ puts "Done adjusting some stock_status & seasonal items."
 # ------------------------------------------------------------------------------
 puts "Creating OptionGroups & Options..."
 
-# ============= Shave Ice =============
 shave_ice = MenuItem.find_by(name: "Shave Ice")
 if shave_ice
   size_group = OptionGroup.find_or_create_by!(
@@ -750,7 +771,6 @@ if shave_ice
   puts "Added 'Size' and 'Flavors' OptionGroups to '#{shave_ice.name}'"
 end
 
-# ============= Hafaloha Burger =============
 burger = MenuItem.find_by(name: "Hafaloha Burger")
 if burger
   addons_group = OptionGroup.find_or_create_by!(
@@ -774,7 +794,6 @@ if burger
   puts "   Added 'Add-ons' to '#{burger.name}'"
 end
 
-# ============= Build-a-Bowl =============
 bowl = MenuItem.find_by(name: "Build-a-Bowl")
 if bowl
   toppings_group = OptionGroup.find_or_create_by!(
@@ -806,10 +825,6 @@ puts "Done creating sample OptionGroups & Options."
 # 7) Mock Orders
 # ------------------------------------------------------------------------------
 puts "Creating some sample Orders..."
-
-# We'll associate them with 'regular_user' where relevant
-# or skip user => guest order
-# We'll also show contact fields & item notes
 
 sample_orders_data = [
   {
