@@ -1,4 +1,3 @@
-# app/controllers/menu_items_controller.rb
 class MenuItemsController < ApplicationController
   # 1) For index & show, we do an optional auth (public can see, admin can see all)
   before_action :optional_authorize, only: [:index, :show]
@@ -144,6 +143,7 @@ class MenuItemsController < ApplicationController
   private
 
   def menu_item_params
+    # IMPORTANT: We added :featured here.
     params.require(:menu_item).permit(
       :name,
       :description,
@@ -157,7 +157,8 @@ class MenuItemsController < ApplicationController
       :seasonal,
       :available_from,
       :available_until,
-      :promo_label
+      :promo_label,
+      :featured
     )
   end
 

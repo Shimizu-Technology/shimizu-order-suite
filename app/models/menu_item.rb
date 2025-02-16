@@ -1,5 +1,3 @@
-# app/models/menu_item.rb
-
 class MenuItem < ApplicationRecord
   belongs_to :menu
   has_many :option_groups, dependent: :destroy
@@ -10,6 +8,11 @@ class MenuItem < ApplicationRecord
 
   # Optionally limit length of promo_label if you like:
   # validates :promo_label, length: { maximum: 50 }, allow_nil: true
+
+  # -------------------------------
+  # NEW Validation for Featured
+  # -------------------------------
+  validate :limit_featured_items, on: [:create, :update]
 
   scope :currently_available, -> {
     where(available: true)
@@ -34,5 +37,21 @@ class MenuItem < ApplicationRecord
       'available_until' => available_until,
       'promo_label' => promo_label
     )
+  end
+
+  private
+
+  # -------------------------------
+  # NEW method to enforce max 4 featured
+  # -------------------------------
+  def limit_featured_items
+    # Only run if we're switching this item to featured (true).
+    if featured_changed? && featured?
+      # Count existing featured items (excluding this one).
+      currently_featured = MenuItem.where(featured: true).where.not(id: self.id).count
+      if currently_featured >= 4
+        errors.add(:featured, "cannot exceed 4 total featured items.")
+      end
+    end
   end
 end
