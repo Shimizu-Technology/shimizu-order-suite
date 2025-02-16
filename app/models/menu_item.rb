@@ -1,3 +1,5 @@
+# app/models/menu_item.rb
+
 class MenuItem < ApplicationRecord
   belongs_to :menu
   has_many :option_groups, dependent: :destroy
@@ -15,13 +17,13 @@ class MenuItem < ApplicationRecord
   validate :limit_featured_items, on: [:create, :update]
 
   # -------------------------------
-  # NEW: Stock status enum & optional note
+  # Stock status enum & optional note
   # -------------------------------
   enum stock_status: {
     in_stock: 0,
     out_of_stock: 1,
-    limited: 2
-  }, _prefix: true  # if you want methods like stock_status_in_stock?
+    low_stock: 2  # <-- renamed from :limited to :low_stock
+  }, _prefix: true
 
   # scope :currently_available => existing logic
   scope :currently_available, -> {
@@ -37,7 +39,7 @@ class MenuItem < ApplicationRecord
   }
 
   # -------------------------------------------------------------------------
-  # FUTURE-PROOF: as_json to specify the extra fields (including stock_status)
+  # FUTURE-PROOF: as_json to specify extra fields (including stock_status)
   # -------------------------------------------------------------------------
   def as_json(options = {})
     super(options).merge(
@@ -49,8 +51,8 @@ class MenuItem < ApplicationRecord
       'available_until'      => available_until,
       'promo_label'          => promo_label,
       'featured'             => featured,
-      'stock_status'         => stock_status,   # <-- new
-      'status_note'          => status_note     # <-- new
+      'stock_status'         => stock_status,   # <-- renamed enum
+      'status_note'          => status_note
     )
   end
 
