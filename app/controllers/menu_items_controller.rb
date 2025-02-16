@@ -1,28 +1,30 @@
+# app/controllers/menu_items_controller.rb
+
 class MenuItemsController < ApplicationController
-  # 1) For index & show, we do an optional auth (public can see, admin can see all)
+  # 1) For index & show, we do an optional auth (public can see, admin sees all)
   before_action :optional_authorize, only: [:index, :show]
 
-  # 2) For all other actions, require a valid token + admin
+  # 2) For other actions, require a valid token + admin
   before_action :authorize_request, except: [:index, :show]
 
   # GET /menu_items
   def index
-    # If admin => show all items (including expired)
-    # Else => only “currently_available”
+    # If admin => show all (including expired)
+    # Else => only currently_available
     base_scope = is_admin? ? MenuItem.all : MenuItem.currently_available
 
-    # Sort results by name (alphabetical order)
+    # Sort by name
     base_scope = base_scope.order(:name)
 
-    # Apply category filter if present
+    # Category filter if present
     if params[:category].present?
       base_scope = base_scope.where(category: params[:category])
     end
 
     items = base_scope.includes(option_groups: :options)
 
+    # FUTURE-PROOF: no big "only: ..." block. Our model's as_json handles it.
     render json: items.as_json(
-      only: [:id, :name, :description, :price, :category, :image_url, :advance_notice_hours],
       include: {
         option_groups: {
           include: {
@@ -40,7 +42,6 @@ class MenuItemsController < ApplicationController
   def show
     item = MenuItem.includes(option_groups: :options).find(params[:id])
     render json: item.as_json(
-      only: [:id, :name, :description, :price, :category, :image_url, :advance_notice_hours],
       include: {
         option_groups: {
           include: {
@@ -65,7 +66,7 @@ class MenuItemsController < ApplicationController
 
       file = menu_item_params[:image]
       if file.present? && file.respond_to?(:original_filename)
-        ext = File.extname(file.original_filename)
+        ext          = File.extname(file.original_filename)
         new_filename = "menu_item_#{@menu_item.id}_#{Time.now.to_i}#{ext}"
         public_url   = S3Uploader.upload(file, new_filename)
         @menu_item.update!(image_url: public_url)
@@ -91,7 +92,7 @@ class MenuItemsController < ApplicationController
 
       file = menu_item_params[:image]
       if file.present? && file.respond_to?(:original_filename)
-        ext = File.extname(file.original_filename)
+        ext          = File.extname(file.original_filename)
         new_filename = "menu_item_#{@menu_item.id}_#{Time.now.to_i}#{ext}"
         public_url   = S3Uploader.upload(file, new_filename)
         @menu_item.update!(image_url: public_url)
@@ -119,19 +120,18 @@ class MenuItemsController < ApplicationController
   end
 
   # (Optional) POST /menu_items/:id/upload_image
-  # No longer needed if you do single-step uploads, but you can keep if desired.
   def upload_image
     Rails.logger.info "=== MenuItemsController#upload_image ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
     menu_item = MenuItem.find(params[:id])
-    file = params[:image]
+    file      = params[:image]
     unless file
       Rails.logger.info "No file param"
       return render json: { error: 'No image file uploaded' }, status: :unprocessable_entity
     end
 
-    ext = File.extname(file.original_filename)
+    ext          = File.extname(file.original_filename)
     new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
     public_url   = S3Uploader.upload(file, new_filename)
     menu_item.update!(image_url: public_url)
@@ -143,7 +143,6 @@ class MenuItemsController < ApplicationController
   private
 
   def menu_item_params
-    # IMPORTANT: We added :featured here.
     params.require(:menu_item).permit(
       :name,
       :description,

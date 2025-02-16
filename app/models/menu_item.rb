@@ -1,3 +1,5 @@
+# app/models/menu_item.rb
+
 class MenuItem < ApplicationRecord
   belongs_to :menu
   has_many :option_groups, dependent: :destroy
@@ -10,7 +12,7 @@ class MenuItem < ApplicationRecord
   # validates :promo_label, length: { maximum: 50 }, allow_nil: true
 
   # -------------------------------
-  # NEW Validation for Featured
+  # Validation for Featured
   # -------------------------------
   validate :limit_featured_items, on: [:create, :update]
 
@@ -26,23 +28,26 @@ class MenuItem < ApplicationRecord
       SQL
   }
 
-  # Override as_json so we get floating price + extra fields
+  # -------------------------------------------------------------------------
+  # FUTURE-PROOF: Let as_json specify all the fields we want in the API
+  # -------------------------------------------------------------------------
   def as_json(options = {})
     super(options).merge(
-      'price' => price.to_f,
-      'image_url' => image_url,
-      'advance_notice_hours' => advance_notice_hours,
-      'seasonal' => seasonal,
-      'available_from' => available_from,
-      'available_until' => available_until,
-      'promo_label' => promo_label
+      'price'                 => price.to_f,
+      'image_url'             => image_url,
+      'advance_notice_hours'  => advance_notice_hours,
+      'seasonal'              => seasonal,
+      'available_from'        => available_from,
+      'available_until'       => available_until,
+      'promo_label'           => promo_label,
+      'featured'              => featured  # <--- IMPORTANT
     )
   end
 
   private
 
   # -------------------------------
-  # NEW method to enforce max 4 featured
+  # Enforce max 4 featured
   # -------------------------------
   def limit_featured_items
     # Only run if we're switching this item to featured (true).
