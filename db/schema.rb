@@ -263,11 +263,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_16_124352) do
     t.string "first_name"
     t.string "last_name"
     t.string "phone"
-    t.string "auth0_sub"
     t.string "reset_password_token"
     t.datetime "reset_password_sent_at"
     t.index "lower((email)::text)", name: "index_users_on_lower_email", unique: true
-    t.index ["auth0_sub"], name: "index_users_on_auth0_sub", unique: true
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["restaurant_id"], name: "index_users_on_restaurant_id"
   end

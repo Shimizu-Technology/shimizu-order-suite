@@ -264,21 +264,6 @@ main_layout.update!(
 puts "Updated Layout##{main_layout.id} sections_data."
 
 # ------------------------------------------------------------------------------
-# HELPER: seat preference arrays
-# ------------------------------------------------------------------------------
-def build_seat_prefs_for_party_size(party_size, total_seats=10, max_sets=3)
-  seat_labels = (1..total_seats).map { |i| "Seat ##{i}" }
-  results = []
-  idx = 0
-  while idx + party_size <= seat_labels.size && results.size < max_sets
-    subset = seat_labels[idx...(idx + party_size)]
-    results << subset
-    idx += party_size
-  end
-  results
-end
-
-# ------------------------------------------------------------------------------
 # 4) RESERVATIONS
 # ------------------------------------------------------------------------------
 puts "Creating sample Reservations..."
@@ -350,6 +335,19 @@ reservation_data.each do |data|
   existing_prefs = data[:preferences] || []
   filtered = existing_prefs.select { |arr| arr.size == r.party_size }
   if filtered.size < 3
+    # Helper method to generate seat combos
+    def build_seat_prefs_for_party_size(party_size, total_seats=10, max_sets=3)
+      seat_labels = (1..total_seats).map { |i| "Seat ##{i}" }
+      results = []
+      idx = 0
+      while idx + party_size <= seat_labels.size && results.size < max_sets
+        subset = seat_labels[idx...(idx + party_size)]
+        results << subset
+        idx += party_size
+      end
+      results
+    end
+
     auto_prefs = build_seat_prefs_for_party_size(r.party_size, 10)
     while filtered.size < 3 && !auto_prefs.empty?
       candidate = auto_prefs.shift
@@ -654,18 +652,60 @@ puts "Creating Main Menu with categories & items..."
 main_menu = Menu.find_or_create_by!(name: "Main Menu", restaurant_id: restaurant.id)
 main_menu.update!(active: true)
 
+# CREATE or find each item
 menu_items_data.each do |data|
   MenuItem.find_or_create_by!(menu_id: main_menu.id, name: data[:name]) do |mi|
-    mi.description            = data[:description]
-    mi.price                  = data[:price]
-    mi.category               = data[:category]
-    mi.image_url              = s3_image_url
-    mi.available              = true
-    mi.advance_notice_hours   = data[:advance_notice_hours] || 0
+    mi.description          = data[:description]
+    mi.price                = data[:price]
+    mi.category             = data[:category]
+    mi.image_url            = s3_image_url
+    mi.available            = true
+    mi.advance_notice_hours = data[:advance_notice_hours] || 0
+
+    # NEW: set some stock_status / seasonal / featured
+    # By default, let's keep it in_stock (0).
+    mi.stock_status = 0  # 0 => in_stock, 1 => out_of_stock, 2 => low_stock
+    mi.seasonal     = false
   end
 end
 
 puts "Seeded #{MenuItem.count} menu items under '#{main_menu.name}'."
+
+# Now let's manually update a few items to illustrate:
+spicy_wings = MenuItem.find_by(name: "Spicy Wings")
+if spicy_wings
+  # Mark them as "low_stock" (2)
+  spicy_wings.update!(
+    stock_status: 2, # low_stock
+    status_note: "Running low—supplier issue"
+  )
+  puts "Updated '#{spicy_wings.name}' => low_stock with a status_note."
+end
+
+blue_bacon = MenuItem.find_by(name: "Blue Cheese Bacon Burger")
+if blue_bacon
+  # Mark as out_of_stock (1)
+  blue_bacon.update!(
+    stock_status: 1,
+    status_note: "Ran out of bacon"
+  )
+  puts "Updated '#{blue_bacon.name}' => out_of_stock with a note."
+end
+
+build_bowl = MenuItem.find_by(name: "Build-a-Bowl")
+if build_bowl
+  # Make it "featured" and seasonal
+  build_bowl.update!(
+    featured: true,
+    seasonal: true,
+    available_from: Date.today,
+    available_until: Date.today + 10,
+    promo_label: "Limited Time Only!"
+  )
+  puts "Updated '#{build_bowl.name}' => featured, seasonal, from today to 10 days from now."
+end
+
+puts "Done adjusting some stock_status & seasonal items."
 
 # ------------------------------------------------------------------------------
 # 6B) SEED OPTION GROUPS & OPTIONS
@@ -675,7 +715,6 @@ puts "Creating OptionGroups & Options..."
 # ============= Shave Ice =============
 shave_ice = MenuItem.find_by(name: "Shave Ice")
 if shave_ice
-  # 1) Size OptionGroup (required)
   size_group = OptionGroup.find_or_create_by!(
     menu_item_id: shave_ice.id,
     name: "Size"
@@ -684,7 +723,6 @@ if shave_ice
     og.max_select = 1
     og.required   = true
   end
-
   [
     { name: "Diki (Small)",   additional_price: 0.00 },
     { name: "Regular",        additional_price: 3.00 },
@@ -695,7 +733,6 @@ if shave_ice
     end
   end
 
-  # 2) Flavors OptionGroup
   flavors_group = OptionGroup.find_or_create_by!(
     menu_item_id: shave_ice.id,
     name: "Flavors"
@@ -782,7 +819,7 @@ sample_orders_data = [
     user: nil,  # no user => guest
     items: [
       {
-        id: 1,  # numeric ID from your seeds, or any item from the DB
+        id: MenuItem.find_by(name: 'French Fries')&.id || 1,
         name: 'French Fries',
         quantity: 2,
         price: 5.95,
@@ -792,27 +829,25 @@ sample_orders_data = [
     ],
     status: 'pending',
     total: 11.90,
-    special_instructions: "Extra ketchup",
+    special_instructions: "Extra ketchup"
   },
   {
-    contact_name:  regular_user.full_name,  # or "Regular User"
+    contact_name:  regular_user.full_name,
     contact_phone: regular_user.phone,
     contact_email: regular_user.email,
     user: regular_user,
     items: [
       {
-        id: 2,  # e.g. the id of 'Hafaloha Burger'
+        id: MenuItem.find_by(name: 'Hafaloha Burger')&.id || 2,
         name: 'Hafaloha Burger',
         quantity: 1,
         price: 13.95,
         notes: "No onions please",
-        customizations: {
-          "Add-ons" => ["Bacon"]
-        }
+        customizations: { "Add-ons" => ["Bacon"] }
       }
     ],
     status: 'preparing',
-    total: 15.45,  # includes bacon add-on if you want
+    total: 15.45,
     special_instructions: "Call me when ready"
   },
   {
@@ -822,8 +857,7 @@ sample_orders_data = [
     user: nil,  # guest
     items: [
       {
-        # The item ID for 'Frozen Fruit Cake (8")', which has 24hr notice
-        id: 3,
+        id: MenuItem.find_by(name: 'Frozen Fruit Cake (8")')&.id || 3,
         name: 'Frozen Fruit Cake (8")',
         quantity: 1,
         price: 28.00,
@@ -838,7 +872,6 @@ sample_orders_data = [
 ]
 
 sample_orders_data.each do |order_data|
-  # We'll create an Order with the new contact fields
   new_order = Order.create!(
     restaurant:            restaurant,
     user:                  order_data[:user],
@@ -848,9 +881,7 @@ sample_orders_data.each do |order_data|
     special_instructions:  order_data[:special_instructions],
     contact_name:          order_data[:contact_name],
     contact_phone:         order_data[:contact_phone],
-    contact_email:         order_data[:contact_email],
-    # If you want to manually override pickup time, do so:
-    # estimated_pickup_time: Time.current + 20.minutes
+    contact_email:         order_data[:contact_email]
   )
 
   puts "Created order##{new_order.id} => status=#{new_order.status}, total=#{new_order.total}"
