@@ -68,23 +68,25 @@ Rails.application.routes.draw do
       post :upload_image
     end
 
-    # 1) For listing or creating option groups under a given menu item:
+    # For listing or creating option groups under a given menu item:
     resources :option_groups, only: [:index, :create]
   end
 
-  # 2) For updating or deleting an option group (requires just the group ID):
+  # For updating or deleting an option group (requires just the group ID):
   resources :option_groups, only: [:update, :destroy] do
-    # 3) For creating options under a specific option group:
+    # For creating options under a specific option group:
     resources :options, only: [:create]
   end
 
-  # 4) For updating or deleting a specific option (requires just the option ID)
+  # For updating or deleting a specific option (requires just the option ID)
   resources :options, only: [:update, :destroy]
 
-  # ============================
-  # NEW: Polling route for orders
-  # ============================
+  # Polling route for orders
   get '/orders/new_since/:id', to: 'orders#new_since'
 
   resources :inventory_statuses, only: [:index, :show, :update]
+
+  # Profile
+  get   '/profile', to: 'users#show_profile'
+  patch '/profile', to: 'users#update_profile'
 end
