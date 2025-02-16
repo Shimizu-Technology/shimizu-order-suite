@@ -1,16 +1,12 @@
-# app/controllers/menu_items_controller.rb
-
 class MenuItemsController < ApplicationController
-  # 1) For index & show, we do an optional auth (public can see, admin sees all)
+  # 1) For index & show, optional_auth => public can see
   before_action :optional_authorize, only: [:index, :show]
 
-  # 2) For other actions, require a valid token + admin
+  # 2) For other actions, require token + admin
   before_action :authorize_request, except: [:index, :show]
 
   # GET /menu_items
   def index
-    # If admin => show all (including expired)
-    # Else => only currently_available
     base_scope = is_admin? ? MenuItem.all : MenuItem.currently_available
 
     # Sort by name
@@ -23,7 +19,6 @@ class MenuItemsController < ApplicationController
 
     items = base_scope.includes(option_groups: :options)
 
-    # FUTURE-PROOF: no big "only: ..." block. Our model's as_json handles it.
     render json: items.as_json(
       include: {
         option_groups: {
@@ -66,7 +61,7 @@ class MenuItemsController < ApplicationController
 
       file = menu_item_params[:image]
       if file.present? && file.respond_to?(:original_filename)
-        ext          = File.extname(file.original_filename)
+        ext = File.extname(file.original_filename)
         new_filename = "menu_item_#{@menu_item.id}_#{Time.now.to_i}#{ext}"
         public_url   = S3Uploader.upload(file, new_filename)
         @menu_item.update!(image_url: public_url)
@@ -92,7 +87,7 @@ class MenuItemsController < ApplicationController
 
       file = menu_item_params[:image]
       if file.present? && file.respond_to?(:original_filename)
-        ext          = File.extname(file.original_filename)
+        ext = File.extname(file.original_filename)
         new_filename = "menu_item_#{@menu_item.id}_#{Time.now.to_i}#{ext}"
         public_url   = S3Uploader.upload(file, new_filename)
         @menu_item.update!(image_url: public_url)
@@ -125,13 +120,13 @@ class MenuItemsController < ApplicationController
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
     menu_item = MenuItem.find(params[:id])
-    file      = params[:image]
+    file = params[:image]
     unless file
       Rails.logger.info "No file param"
       return render json: { error: 'No image file uploaded' }, status: :unprocessable_entity
     end
 
-    ext          = File.extname(file.original_filename)
+    ext = File.extname(file.original_filename)
     new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
     public_url   = S3Uploader.upload(file, new_filename)
     menu_item.update!(image_url: public_url)
@@ -142,6 +137,7 @@ class MenuItemsController < ApplicationController
 
   private
 
+  # IMPORTANT: We now permit :stock_status and :status_note
   def menu_item_params
     params.require(:menu_item).permit(
       :name,
@@ -157,7 +153,11 @@ class MenuItemsController < ApplicationController
       :available_from,
       :available_until,
       :promo_label,
-      :featured
+      :featured,
+
+      # new fields
+      :stock_status,
+      :status_note
     )
   end
 

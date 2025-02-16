@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_02_16_105842) do
+ActiveRecord::Schema[7.2].define(version: 2025_02_16_124352) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -77,6 +77,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_16_105842) do
     t.date "available_until"
     t.string "promo_label"
     t.boolean "featured"
+    t.integer "stock_status"
+    t.text "status_note"
     t.index ["menu_id"], name: "index_menu_items_on_menu_id"
   end
 

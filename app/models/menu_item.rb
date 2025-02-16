@@ -1,5 +1,3 @@
-# app/models/menu_item.rb
-
 class MenuItem < ApplicationRecord
   belongs_to :menu
   has_many :option_groups, dependent: :destroy
@@ -8,7 +6,7 @@ class MenuItem < ApplicationRecord
   validates :price, numericality: { greater_than_or_equal_to: 0 }
   validates :advance_notice_hours, numericality: { greater_than_or_equal_to: 0 }
 
-  # Optionally limit length of promo_label if you like:
+  # If you limit length of promo_label:
   # validates :promo_label, length: { maximum: 50 }, allow_nil: true
 
   # -------------------------------
@@ -16,6 +14,16 @@ class MenuItem < ApplicationRecord
   # -------------------------------
   validate :limit_featured_items, on: [:create, :update]
 
+  # -------------------------------
+  # NEW: Stock status enum & optional note
+  # -------------------------------
+  enum stock_status: {
+    in_stock: 0,
+    out_of_stock: 1,
+    limited: 2
+  }, _prefix: true  # if you want methods like stock_status_in_stock?
+
+  # scope :currently_available => existing logic
   scope :currently_available, -> {
     where(available: true)
       .where(<<-SQL.squish, today: Date.current)
@@ -29,30 +37,30 @@ class MenuItem < ApplicationRecord
   }
 
   # -------------------------------------------------------------------------
-  # FUTURE-PROOF: Let as_json specify all the fields we want in the API
+  # FUTURE-PROOF: as_json to specify the extra fields (including stock_status)
   # -------------------------------------------------------------------------
   def as_json(options = {})
     super(options).merge(
-      'price'                 => price.to_f,
-      'image_url'             => image_url,
-      'advance_notice_hours'  => advance_notice_hours,
-      'seasonal'              => seasonal,
-      'available_from'        => available_from,
-      'available_until'       => available_until,
-      'promo_label'           => promo_label,
-      'featured'              => featured  # <--- IMPORTANT
+      'price'                => price.to_f,
+      'image_url'            => image_url,
+      'advance_notice_hours' => advance_notice_hours,
+      'seasonal'             => seasonal,
+      'available_from'       => available_from,
+      'available_until'      => available_until,
+      'promo_label'          => promo_label,
+      'featured'             => featured,
+      'stock_status'         => stock_status,   # <-- new
+      'status_note'          => status_note     # <-- new
     )
   end
 
   private
 
   # -------------------------------
-  # Enforce max 4 featured
+  # Enforce max 4 featured items
   # -------------------------------
   def limit_featured_items
-    # Only run if we're switching this item to featured (true).
     if featured_changed? && featured?
-      # Count existing featured items (excluding this one).
       currently_featured = MenuItem.where(featured: true).where.not(id: self.id).count
       if currently_featured >= 4
         errors.add(:featured, "cannot exceed 4 total featured items.")
