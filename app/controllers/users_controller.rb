@@ -37,7 +37,7 @@ class UsersController < ApplicationController
     # If the user wants to change password, handle that
     if params[:password].present?
       current_user.password = params[:password]
-      # If you want a password_confirmation, handle it as well
+      # If you need password_confirmation as well, do:
       # current_user.password_confirmation = params[:password_confirmation]
     end
 
@@ -51,13 +51,13 @@ class UsersController < ApplicationController
 
   private
 
-  # The original user_params was for signup. For the profile update, let’s use a separate method:
+  # For profile updates, we now require(:user).
   def profile_params
-    params.permit(:first_name, :last_name, :email, :phone)
+    params.require(:user).permit(:first_name, :last_name, :email, :phone)
   end
 
+  # For signup
   def user_params
-    # For signup
     params.require(:user).permit(
       :first_name,
       :last_name,
