@@ -1,5 +1,5 @@
 class MenuItemsController < ApplicationController
-  # 1) For index & show, optional_auth => public can see
+  # 1) For index & show, optional_authorize => public can see
   before_action :optional_authorize, only: [:index, :show]
 
   # 2) For other actions, require token + admin
@@ -7,7 +7,12 @@ class MenuItemsController < ApplicationController
 
   # GET /menu_items
   def index
-    base_scope = is_admin? ? MenuItem.all : MenuItem.currently_available
+    # If admin AND params[:show_all] => show all. Otherwise only unexpired.
+    if is_admin? && params[:show_all].present?
+      base_scope = MenuItem.all
+    else
+      base_scope = MenuItem.currently_available
+    end
 
     # Sort by name
     base_scope = base_scope.order(:name)
@@ -154,8 +159,6 @@ class MenuItemsController < ApplicationController
       :available_until,
       :promo_label,
       :featured,
-
-      # new fields
       :stock_status,
       :status_note
     )
