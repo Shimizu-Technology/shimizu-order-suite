@@ -13,7 +13,7 @@ class UsersController < ApplicationController
 
     # Assign a fallback restaurant if none specified
     unless user.restaurant_id
-      default_rest = Restaurant.find_by(name: 'Rotary Sushi')
+      default_rest = Restaurant.find_by(name: 'Hafaloha')
       user.restaurant_id = default_rest.id if default_rest
     end
 
