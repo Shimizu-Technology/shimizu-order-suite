@@ -17,9 +17,10 @@ class MenuItemsController < ApplicationController
     # Sort by name
     base_scope = base_scope.order(:name)
 
-    # Category filter if present
-    if params[:category].present?
-      base_scope = base_scope.where(category: params[:category])
+    # Category filter if present => now uses many-to-many:
+    # e.g. ?category_id=3
+    if params[:category_id].present?
+      base_scope = base_scope.joins(:categories).where(categories: { id: params[:category_id] })
     end
 
     items = base_scope.includes(option_groups: :options)
@@ -60,10 +61,17 @@ class MenuItemsController < ApplicationController
     Rails.logger.info "=== MenuItemsController#create ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
-    @menu_item = MenuItem.new(menu_item_params.except(:image))
+    @menu_item = MenuItem.new(menu_item_params.except(:image, :category_ids))
+
     if @menu_item.save
       Rails.logger.info "Created MenuItem => #{@menu_item.inspect}"
 
+      # Assign categories if category_ids param is given
+      if params[:menu_item][:category_ids].present?
+        @menu_item.category_ids = params[:menu_item][:category_ids]
+      end
+
+      # Handle image upload if present
       file = menu_item_params[:image]
       if file.present? && file.respond_to?(:original_filename)
         ext = File.extname(file.original_filename)
@@ -87,9 +95,15 @@ class MenuItemsController < ApplicationController
     @menu_item = MenuItem.find(params[:id])
     Rails.logger.info "Updating MenuItem => #{@menu_item.id}"
 
-    if @menu_item.update(menu_item_params.except(:image))
+    if @menu_item.update(menu_item_params.except(:image, :category_ids))
       Rails.logger.info "Update success => #{@menu_item.inspect}"
 
+      # Assign categories if category_ids param is given
+      if params[:menu_item][:category_ids].present?
+        @menu_item.category_ids = params[:menu_item][:category_ids]
+      end
+
+      # Handle image if present
       file = menu_item_params[:image]
       if file.present? && file.respond_to?(:original_filename)
         ext = File.extname(file.original_filename)
@@ -142,15 +156,14 @@ class MenuItemsController < ApplicationController
 
   private
 
-  # IMPORTANT: We now permit :stock_status and :status_note
   def menu_item_params
+    # category_ids => accept an array; remove single :category
     params.require(:menu_item).permit(
       :name,
       :description,
       :price,
       :available,
       :menu_id,
-      :category,
       :image_url,
       :advance_notice_hours,
       :image,
@@ -160,7 +173,8 @@ class MenuItemsController < ApplicationController
       :promo_label,
       :featured,
       :stock_status,
-      :status_note
+      :status_note,
+      category_ids: []
     )
   end
 

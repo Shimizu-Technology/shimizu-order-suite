@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_02_16_124352) do
+ActiveRecord::Schema[7.2].define(version: 2025_02_20_011405) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -42,6 +42,13 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_16_124352) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "categories", force: :cascade do |t|
+    t.string "name", null: false
+    t.integer "position", default: 0
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
   create_table "inventory_statuses", force: :cascade do |t|
     t.bigint "menu_item_id", null: false
     t.integer "quantity", default: 0
@@ -59,6 +66,16 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_16_124352) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["restaurant_id"], name: "index_layouts_on_restaurant_id"
+  end
+
+  create_table "menu_item_categories", force: :cascade do |t|
+    t.bigint "menu_item_id", null: false
+    t.bigint "category_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["category_id"], name: "index_menu_item_categories_on_category_id"
+    t.index ["menu_item_id", "category_id"], name: "index_menu_item_categories_on_menu_item_id_and_category_id", unique: true
+    t.index ["menu_item_id"], name: "index_menu_item_categories_on_menu_item_id"
   end
 
   create_table "menu_items", force: :cascade do |t|
@@ -285,6 +302,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_16_124352) do
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "inventory_statuses", "menu_items"
   add_foreign_key "layouts", "restaurants"
+  add_foreign_key "menu_item_categories", "categories"
+  add_foreign_key "menu_item_categories", "menu_items"
   add_foreign_key "menu_items", "menus"
   add_foreign_key "menus", "restaurants"
   add_foreign_key "notifications", "reservations"
