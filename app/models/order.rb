@@ -16,7 +16,7 @@ class Order < ApplicationRecord
       'total' => total.to_f,
       'createdAt' => created_at.iso8601,
       'updatedAt' => updated_at.iso8601,
-      'userId' => user_id,  # <== so the frontend can filter by .userId
+      'userId' => user_id,
 
       # Provide an ISO8601 string for JS
       'estimatedPickupTime' => estimated_pickup_time&.iso8601,
@@ -31,7 +31,6 @@ class Order < ApplicationRecord
   private
 
   def set_default_pickup_time
-    # If the order didn't pass an estimated_pickup_time, set it automatically.
     return unless estimated_pickup_time.blank?
 
     # Check if any item needs 24 hours

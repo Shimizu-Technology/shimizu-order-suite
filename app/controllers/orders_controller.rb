@@ -17,7 +17,8 @@ class OrdersController < ApplicationController
   # GET /orders/:id
   def show
     order = Order.find(params[:id])
-    if current_user&.role.in?(%w[admin super_admin]) || (current_user && current_user.id == order.user_id)
+    if current_user&.role.in?(%w[admin super_admin]) ||
+       (current_user && current_user.id == order.user_id)
       render json: order
     else
       render json: { error: "Forbidden" }, status: :forbidden
@@ -37,12 +38,12 @@ class OrdersController < ApplicationController
 
   # POST /orders
   def create
-    # (Optional) token decode for user lookup
+    # Optional decode of JWT for user lookup, treat as guest if invalid
     if request.headers['Authorization'].present?
       token = request.headers['Authorization'].split(' ').last
       begin
-        decoded    = JWT.decode(token, Rails.application.secret_key_base, true, { algorithm: 'HS256' })
-        user_id    = decoded[0]['user_id']
+        decoded = JWT.decode(token, Rails.application.secret_key_base, true, algorithm: 'HS256')[0]
+        user_id = decoded['user_id']
         found_user = User.find_by(id: user_id)
         @current_user = found_user if found_user
       rescue JWT::DecodeError
@@ -50,7 +51,7 @@ class OrdersController < ApplicationController
       end
     end
 
-    new_params = order_params.dup
+    new_params = order_params_admin # Since create does not forcibly restrict user fields
     new_params[:restaurant_id] ||= 1
     new_params[:user_id] = @current_user&.id
 
@@ -64,8 +65,8 @@ class OrdersController < ApplicationController
 
       # Load them all in one query
       menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
-
       max_required = 0
+
       @order.items.each do |item|
         if (menu_item = menu_items_by_id[item[:id]])
           max_required = [max_required, menu_item.advance_notice_hours].max
@@ -88,7 +89,7 @@ class OrdersController < ApplicationController
         OrderMailer.order_confirmation(@order).deliver_later
       end
 
-      # 2) Confirmation text (ASYNC via SendSmsJob)
+      # 2) Confirmation text (async)
       if @order.contact_phone.present?
         item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
         msg = <<~TXT.squish
@@ -96,7 +97,7 @@ class OrdersController < ApplicationController
           thanks for ordering from Hafaloha!
           Order ##{@order.id}: #{item_list},
           total: $#{@order.total.to_f.round(2)}.
-          We'll send you an ETA by text as soon as we start preparing your order!
+          We'll text you an ETA once we start preparing your order!
         TXT
 
         # Replace direct ClicksendClient call with a background job
@@ -119,18 +120,22 @@ class OrdersController < ApplicationController
     return render json: { error: "Forbidden" }, status: :forbidden unless can_edit?(order)
 
     old_status = order.status
-    if order.update(order_params)
+
+    # If admin => allow full params, else only allow partial
+    permitted_params = if current_user&.role.in?(%w[admin super_admin])
+                         order_params_admin
+                       else
+                         order_params_user
+                       end
+
+    if order.update(permitted_params)
       # If status changed from 'pending' to 'preparing'
       if old_status == 'pending' && order.status == 'preparing'
         if order.contact_email.present?
           OrderMailer.order_preparing(order).deliver_later
         end
         if order.contact_phone.present?
-          eta_str = if order.estimated_pickup_time.present?
-                       order.estimated_pickup_time.strftime("%-I:%M %p")
-                     else
-                       "soon"
-                     end
+          eta_str = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "soon"
           txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
                      "is now being prepared! ETA: #{eta_str}."
 
@@ -151,7 +156,6 @@ class OrdersController < ApplicationController
         if order.contact_phone.present?
           msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
                 "is now ready for pickup! Thank you for choosing Hafaloha."
-
           SendSmsJob.perform_later(
             to:   order.contact_phone,
             body: msg,
@@ -177,7 +181,13 @@ class OrdersController < ApplicationController
 
   private
 
-  def order_params
+  def can_edit?(order)
+    return true if current_user&.role.in?(%w[admin super_admin])
+    current_user && order.user_id == current_user.id
+  end
+
+  # For admins: allow editing everything
+  def order_params_admin
     params.require(:order).permit(
       :restaurant_id,
       :user_id,
@@ -200,8 +210,17 @@ class OrdersController < ApplicationController
     )
   end
 
-  def can_edit?(order)
-    return true if current_user&.role.in?(%w[admin super_admin])
-    current_user && order.user_id == current_user.id
+  # For normal customers: allow only certain fields
+  # e.g. let them cancel, update special_instructions, or contact info
+  def order_params_user
+    # If you want to let them set status to 'cancelled':
+    # maybe only if old_status == 'pending'?
+    params.require(:order).permit(
+      :special_instructions,
+      :contact_name,
+      :contact_phone,
+      :contact_email,
+      :status
+    )
   end
 end
