@@ -5,6 +5,10 @@ Rails.application.routes.draw do
   post '/signup', to: 'users#create'
   post '/login',  to: 'sessions#create'
 
+  # phone verification
+  post '/verify_phone', to: 'users#verify_phone'
+  post '/resend_code',  to: 'users#resend_code'
+
   # Password resets
   post  '/password/forgot', to: 'passwords#forgot'
   patch '/password/reset',  to: 'passwords#reset'

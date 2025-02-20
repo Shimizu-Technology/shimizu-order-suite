@@ -1,4 +1,5 @@
 # app/models/user.rb
+
 require 'securerandom'
 require 'digest'
 
@@ -6,15 +7,26 @@ class User < ApplicationRecord
   belongs_to :restaurant, optional: true
   has_secure_password
 
-  # 1) Validate email is unique in a case-insensitive manner
+  # Email validations
   validates :email, presence: true, uniqueness: { case_sensitive: false }
   validates :password_digest, presence: true
   validates :first_name, presence: true
   validates :last_name,  presence: true
 
-  # 2) Downcase before saving so we store all emails in lowercase
+  # Optional: validate presence/format of phone if you want phone to be mandatory
+  # validates :phone, presence: true, format: { with: /\A\d{7,15}\z/, message: "must be a valid phone number" }
+
   before_save :downcase_email
 
+  # -----------------------------------------------------------
+  # PHONE VERIFICATION FIELDS:
+  #
+  #   phone_verified (boolean) -> whether user’s phone is confirmed
+  #   verification_code (string) -> last SMS code we sent
+  #   verification_code_sent_at (datetime) -> when we sent the last code
+  # -----------------------------------------------------------
+
+  # Full name helper
   def full_name
     "#{first_name} #{last_name}".strip
   end
@@ -23,9 +35,10 @@ class User < ApplicationRecord
     role == 'admin'
   end
 
-  # -----------------------------------------
-  # Password Reset Logic (unchanged)
-  # -----------------------------------------
+  # -----------------------------------------------------------
+  # PASSWORD RESET LOGIC (unchanged from your existing code)
+  # -----------------------------------------------------------
+
   def generate_reset_password_token!
     raw_token = SecureRandom.hex(10)
     self.reset_password_token = Digest::SHA256.hexdigest(raw_token)
@@ -50,7 +63,7 @@ class User < ApplicationRecord
 
   private
 
-  # Force email to be lowercase before save
+  # Force email to be lowercase before saving
   def downcase_email
     self.email = email.downcase
   end
