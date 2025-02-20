@@ -5,7 +5,7 @@ Rails.application.routes.draw do
   post '/signup', to: 'users#create'
   post '/login',  to: 'sessions#create'
 
-  # phone verification
+  # Phone verification
   post '/verify_phone', to: 'users#verify_phone'
   post '/resend_code',  to: 'users#resend_code'
 
@@ -13,7 +13,7 @@ Rails.application.routes.draw do
   post  '/password/forgot', to: 'passwords#forgot'
   patch '/password/reset',  to: 'passwords#reset'
 
-  # Standard RESTful resources
+  # Standard REST resources
   resources :restaurants, only: [:index, :show, :create, :update, :destroy]
   resources :seat_sections, only: [:index, :show, :create, :update, :destroy]
 
@@ -52,6 +52,11 @@ Rails.application.routes.draw do
   get '/availability', to: 'availability#index'
 
   # -------------------------
+  # PUBLIC categories endpoint
+  # -------------------------
+  resources :categories, only: [:index]
+
+  # -------------------------
   # Admin namespace
   # -------------------------
   namespace :admin do
@@ -64,7 +69,7 @@ Rails.application.routes.draw do
     # Special Events
     resources :special_events, only: [:index, :show, :create, :update, :destroy]
 
-    # Categories
+    # Admin categories => for create/update/delete
     resources :categories, only: [:index, :create, :update, :destroy]
   end
 
@@ -73,7 +78,7 @@ Rails.application.routes.draw do
   resources :promo_codes, only: [:index, :show, :create, :update, :destroy]
   resources :menus, only: [:index, :show, :create, :update, :destroy]
 
-  # Enhanced menu_items with image uploading & option groups:
+  # Enhanced menu_items with image uploading & option groups
   resources :menu_items do
     member do
       post :upload_image
