@@ -50,7 +50,7 @@
                   <ul style="margin: 8px 0 0 20px; padding: 0;">
                     <% @order.items.each do |i| %>
                       <li style="margin-bottom: 5px; list-style-type: disc;">
-                        <%= i['quantity'] %>× <%= i['name'] %> 
+                        <%= i['quantity'] %>× <%= i['name'] %>
                         ($<%= i['price'].to_f.round(2) %> each)
                       </li>
                     <% end %>
@@ -67,22 +67,13 @@
                 </tr>
               <% end %>
 
-              <!-- If there's a pickup time already (rare at creation), show it. Otherwise reassure them. -->
-              <% if @order.estimated_pickup_time.present? %>
-                <tr>
-                  <td style="padding: 5px 0;">
-                    <strong>Pickup Time:</strong> 
-                    <%= @order.estimated_pickup_time.strftime("%-I:%M %p") %>
-                  </td>
-                </tr>
-              <% else %>
-                <tr>
-                  <td style="padding: 5px 0;">
-                    <strong>Pickup Time:</strong> 
-                    We’ll send you another message with your ETA as soon as we start preparing your order.
-                  </td>
-                </tr>
-              <% end %>
+              <!-- Always show the same pickup time message -->
+              <tr>
+                <td style="padding: 5px 0;">
+                  <strong>Pickup Time:</strong>
+                  We’ll send you another message with your ETA as soon as we start preparing your order.
+                </td>
+              </tr>
             </table>
 
             <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
