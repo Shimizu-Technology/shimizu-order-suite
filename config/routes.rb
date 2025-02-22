@@ -63,6 +63,9 @@ Rails.application.routes.draw do
     # Restaurant settings
     resource :settings, only: [:show, :update]
 
+    # <=== This is the new resource for site_settings
+    resource :site_settings, only: [:show, :update]
+
     # Operating Hours
     resources :operating_hours, only: [:index, :update]
 
