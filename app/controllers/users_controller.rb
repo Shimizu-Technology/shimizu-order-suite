@@ -1,3 +1,4 @@
+# app/controllers/users_controller.rb
 class UsersController < ApplicationController
   before_action :authorize_request, only: [:show_profile, :update_profile, :verify_phone, :resend_code]
 

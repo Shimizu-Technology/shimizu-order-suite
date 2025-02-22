@@ -3,7 +3,7 @@
 class PasswordsController < ApplicationController
   # POST /password/forgot
   def forgot
-    user = User.find_by(email: params[:email].downcase)
+    user = User.find_by(email: params[:email].to_s.downcase)
     if user
       # 1) Generate the reset token
       raw_token = user.generate_reset_password_token!
@@ -18,7 +18,8 @@ class PasswordsController < ApplicationController
 
   # PATCH /password/reset
   def reset
-    user = User.find_by(email: params[:email].downcase)
+    # Because we encoded email, Rails automatically decodes it here.
+    user = User.find_by(email: params[:email].to_s.downcase)
     unless user
       return render json: { error: "Invalid link or user not found" }, status: :unprocessable_entity
     end

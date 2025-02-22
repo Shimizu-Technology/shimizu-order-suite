@@ -5,28 +5,29 @@ require 'digest'
 
 class User < ApplicationRecord
   belongs_to :restaurant, optional: true
+
   has_secure_password
+
+  attr_accessor :skip_password_validation
 
   # Email validations
   validates :email, presence: true, uniqueness: { case_sensitive: false }
-  validates :password_digest, presence: true
+
+  # We only require :password_digest presence if we're not skipping password validation
+  validates :password_digest, presence: true, unless: :skip_password_validation
+
   validates :first_name, presence: true
   validates :last_name,  presence: true
-
-  # Optional: validate presence/format of phone if you want phone to be mandatory
-  # validates :phone, presence: true, format: { with: /\A\d{7,15}\z/, message: "must be a valid phone number" }
 
   before_save :downcase_email
 
   # -----------------------------------------------------------
   # PHONE VERIFICATION FIELDS:
-  #
-  #   phone_verified (boolean) -> whether user’s phone is confirmed
-  #   verification_code (string) -> last SMS code we sent
-  #   verification_code_sent_at (datetime) -> when we sent the last code
+  # phone_verified (boolean),
+  # verification_code (string),
+  # verification_code_sent_at (datetime)
   # -----------------------------------------------------------
 
-  # Full name helper
   def full_name
     "#{first_name} #{last_name}".strip
   end
@@ -63,7 +64,6 @@ class User < ApplicationRecord
 
   private
 
-  # Force email to be lowercase before saving
   def downcase_email
     self.email = email.downcase
   end

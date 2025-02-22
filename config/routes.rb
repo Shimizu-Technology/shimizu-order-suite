@@ -63,7 +63,7 @@ Rails.application.routes.draw do
     # Restaurant settings
     resource :settings, only: [:show, :update]
 
-    # <=== This is the new resource for site_settings
+    # Site settings (hero/spinner)
     resource :site_settings, only: [:show, :update]
 
     # Operating Hours
@@ -74,6 +74,13 @@ Rails.application.routes.draw do
 
     # Admin categories => for create/update/delete
     resources :categories, only: [:index, :create, :update, :destroy]
+
+    # Admin users => create/edit/delete + resend_invite
+    resources :users, only: [:index, :create, :update, :destroy] do
+      member do
+        post :resend_invite
+      end
+    end
   end
 
   # For ordering
