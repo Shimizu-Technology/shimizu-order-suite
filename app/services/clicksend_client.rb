@@ -1,19 +1,18 @@
-# app/services/clicksend_client.rb
-require 'net/http'
-require 'json'
-require 'base64'
-
 class ClicksendClient
   BASE_URL = 'https://rest.clicksend.com/v3'
 
   def self.send_text_message(to:, body:, from: nil)
     username = ENV['CLICKSEND_USERNAME']
     api_key  = ENV['CLICKSEND_API_KEY']
+    approved_sender_id = ENV['CLICKSEND_APPROVED_SENDER_ID']
 
     if username.blank? || api_key.blank?
       Rails.logger.error("[ClicksendClient] Missing ClickSend credentials.")
       return false
     end
+
+    # Use the approved sender ID if 'from' is not provided
+    from ||= approved_sender_id
 
     # Basic Auth
     auth = Base64.strict_encode64("#{username}:#{api_key}")
@@ -24,7 +23,7 @@ class ClicksendClient
       messages: [
         {
           source: 'ruby_app',
-          from:   from, # e.g. 'Hafaloha'
+          from:   from,
           body:   body,
           to:     to
         }
