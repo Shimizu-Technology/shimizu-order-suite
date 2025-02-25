@@ -75,8 +75,11 @@ Rails.application.routes.draw do
     # Admin categories => for create/update/delete
     resources :categories, only: [:index, :create, :update, :destroy]
 
-    # Admin analytics => monthly/custom “customer orders” report
-    get 'analytics/customer_orders', to: 'analytics#customer_orders'
+    # Admin analytics
+    get 'analytics/customer_orders',    to: 'analytics#customer_orders'
+    get 'analytics/revenue_trend',     to: 'analytics#revenue_trend'
+    get 'analytics/top_items',         to: 'analytics#top_items'
+    get 'analytics/income_statement',  to: 'analytics#income_statement'
 
     # Admin users => create/edit/delete + resend_invite
     resources :users, only: [:index, :create, :update, :destroy] do
