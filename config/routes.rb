@@ -75,6 +75,9 @@ Rails.application.routes.draw do
     # Admin categories => for create/update/delete
     resources :categories, only: [:index, :create, :update, :destroy]
 
+    # Admin analytics => monthly/custom “customer orders” report
+    get 'analytics/customer_orders', to: 'analytics#customer_orders'
+
     # Admin users => create/edit/delete + resend_invite
     resources :users, only: [:index, :create, :update, :destroy] do
       member do
