@@ -2,6 +2,11 @@
 class OptionsController < ApplicationController
   before_action :authorize_request
   before_action :set_option, only: [:update, :destroy]
+  
+  # Mark all actions as public endpoints that don't require restaurant context
+  def public_endpoint?
+    true
+  end
 
   # POST /option_groups/:option_group_id/options
   def create

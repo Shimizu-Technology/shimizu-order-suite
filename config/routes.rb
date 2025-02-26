@@ -80,6 +80,10 @@ Rails.application.routes.draw do
     get 'analytics/revenue_trend',     to: 'analytics#revenue_trend'
     get 'analytics/top_items',         to: 'analytics#top_items'
     get 'analytics/income_statement',  to: 'analytics#income_statement'
+    
+    # Restaurant settings
+    get 'restaurant/allowed_origins',  to: 'restaurant#allowed_origins'
+    post 'restaurant/allowed_origins', to: 'restaurant#update_allowed_origins'
 
     # Admin users => create/edit/delete + resend_invite
     resources :users, only: [:index, :create, :update, :destroy] do

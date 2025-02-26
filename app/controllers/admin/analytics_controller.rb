@@ -4,6 +4,11 @@ module Admin
   class AnalyticsController < ApplicationController
     before_action :authorize_request
     before_action :require_admin!
+    
+    # Mark all actions as public endpoints that don't require restaurant context
+    def public_endpoint?
+      true
+    end
 
     # GET /admin/analytics/customer_orders?start=YYYY-MM-DD&end=YYYY-MM-DD
     def customer_orders

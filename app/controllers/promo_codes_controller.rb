@@ -1,6 +1,11 @@
 # app/controllers/promo_codes_controller.rb
 class PromoCodesController < ApplicationController
   before_action :authorize_request, except: [:index, :show]
+  
+  # Mark index and show as public endpoints that don't require restaurant context
+  def public_endpoint?
+    action_name.in?(['index', 'show'])
+  end
 
   # GET /promo_codes
   #   Maybe only admin sees them all. Or you can let normal users see them (for applying promos).

@@ -1,6 +1,7 @@
 # app/controllers/application_controller.rb
 
 class ApplicationController < ActionController::API
+  include RestaurantScope
   def authorize_request
     header = request.headers['Authorization']
     token = header.split(' ').last if header
@@ -8,6 +9,12 @@ class ApplicationController < ActionController::API
     begin
       decoded = JWT.decode(token, Rails.application.secret_key_base)[0]
       @current_user = User.find(decoded['user_id'])
+      
+      # Check token expiration if exp is present
+      if decoded['exp'].present? && Time.at(decoded['exp']) < Time.current
+        render json: { errors: 'Token expired' }, status: :unauthorized
+        return
+      end
     rescue ActiveRecord::RecordNotFound, JWT::DecodeError
       render json: { errors: 'Unauthorized' }, status: :unauthorized
     end
@@ -27,6 +34,9 @@ class ApplicationController < ActionController::API
       # Use the same decode logic & secret as authorize_request
       decoded = JWT.decode(token, Rails.application.secret_key_base)[0]
       @current_user = User.find(decoded['user_id'])
+      
+      # Check token expiration if exp is present
+      return if decoded['exp'].present? && Time.at(decoded['exp']) < Time.current
     rescue ActiveRecord::RecordNotFound, JWT::DecodeError
       # do nothing => user stays nil
     end

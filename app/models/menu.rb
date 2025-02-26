@@ -1,5 +1,7 @@
 # app/models/menu.rb
 class Menu < ApplicationRecord
+  # Default scope to current restaurant
+  default_scope { with_restaurant_scope }
   belongs_to :restaurant
   has_many :menu_items, dependent: :destroy
 

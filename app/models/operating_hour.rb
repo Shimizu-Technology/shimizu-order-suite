@@ -1,6 +1,8 @@
 # app/models/operating_hour.rb
 
 class OperatingHour < ApplicationRecord
+  # Default scope to current restaurant
+  default_scope { with_restaurant_scope }
   belongs_to :restaurant
 
   validates :day_of_week, inclusion: { in: 0..6 }

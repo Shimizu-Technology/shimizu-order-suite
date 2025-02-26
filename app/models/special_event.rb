@@ -1,5 +1,7 @@
 # app/models/special_event.rb
 class SpecialEvent < ApplicationRecord
+  # Default scope to current restaurant
+  default_scope { with_restaurant_scope }
   belongs_to :restaurant
 
   validates :event_date, presence: true

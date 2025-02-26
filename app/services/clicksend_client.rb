@@ -1,3 +1,8 @@
+require 'net/http'
+require 'uri'
+require 'json'
+require 'base64'
+
 class ClicksendClient
   BASE_URL = 'https://rest.clicksend.com/v3'
 

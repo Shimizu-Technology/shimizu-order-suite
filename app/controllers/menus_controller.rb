@@ -1,6 +1,11 @@
 # app/controllers/menus_controller.rb
 class MenusController < ApplicationController
   before_action :authorize_request, except: [:index, :show]
+  
+  # Mark index and show as public endpoints that don't require restaurant context
+  def public_endpoint?
+    action_name.in?(['index', 'show'])
+  end
 
   # GET /menus
   def index

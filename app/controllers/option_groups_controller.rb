@@ -2,6 +2,11 @@
 class OptionGroupsController < ApplicationController
   before_action :authorize_request
   before_action :set_option_group, only: [:update, :destroy]
+  
+  # Mark all actions as public endpoints that don't require restaurant context
+  def public_endpoint?
+    true
+  end
 
   # GET /menu_items/:menu_item_id/option_groups
   def index

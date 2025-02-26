@@ -3,6 +3,11 @@ module Admin
   class SettingsController < ApplicationController
     before_action :authorize_request
     before_action :require_admin
+    
+    # Mark all actions as public endpoints that don't require restaurant context
+    def public_endpoint?
+      true
+    end
 
     # GET /admin/settings
     def show

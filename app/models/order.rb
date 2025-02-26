@@ -1,6 +1,8 @@
 # app/models/order.rb
 
 class Order < ApplicationRecord
+  # Default scope to current restaurant
+  default_scope { with_restaurant_scope }
   belongs_to :restaurant
   belongs_to :user, optional: true
 

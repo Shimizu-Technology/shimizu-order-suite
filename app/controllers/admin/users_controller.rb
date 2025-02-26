@@ -4,6 +4,11 @@ module Admin
   class UsersController < ApplicationController
     before_action :authorize_request
     before_action :require_admin!
+    
+    # Mark all actions as public endpoints that don't require restaurant context
+    def public_endpoint?
+      true
+    end
 
     # GET /admin/users?search=...&role=...&page=1&per_page=10&sort_by=email&sort_dir=asc
     def index
@@ -80,9 +85,32 @@ module Admin
     # DELETE /admin/users/:id
     def destroy
       user = User.find(params[:id])
-      # optionally protect from deleting self or last admin
-      user.destroy
-      head :no_content
+      
+      # Prevent deleting self
+      if user.id == current_user.id
+        return render json: { error: "Cannot delete your own account" }, status: :unprocessable_entity
+      end
+      
+      # Check if this is the last admin
+      if user.role.in?(%w[admin super_admin]) && User.where(role: %w[admin super_admin]).count <= 1
+        return render json: { error: "Cannot delete the last admin user" }, status: :unprocessable_entity
+      end
+      
+      begin
+        # Start a transaction
+        ActiveRecord::Base.transaction do
+          # Nullify user_id in associated orders
+          Order.where(user_id: user.id).update_all(user_id: nil)
+          
+          # Now delete the user
+          user.destroy!
+        end
+        
+        head :no_content
+      rescue => e
+        Rails.logger.error("Failed to delete user: #{e.message}")
+        render json: { error: "Failed to delete user: #{e.message}" }, status: :unprocessable_entity
+      end
     end
 
     # POST /admin/users/:id/resend_invite

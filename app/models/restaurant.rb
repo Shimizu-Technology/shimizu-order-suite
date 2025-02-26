@@ -1,5 +1,7 @@
 # app/models/restaurant.rb
 class Restaurant < ApplicationRecord
+  # Ensure allowed_origins is always an array
+  attribute :allowed_origins, :string, array: true, default: []
   # Existing associations
   has_many :users,            dependent: :destroy
   has_many :reservations,     dependent: :destroy
@@ -19,6 +21,38 @@ class Restaurant < ApplicationRecord
 
   validates :default_reservation_length, 
             numericality: { only_integer: true, greater_than: 0 }
+            
+  # Helper methods for allowed_origins
+  def add_allowed_origin(origin)
+    return if origin.blank?
+    
+    # Normalize the origin (remove trailing slashes, etc.)
+    normalized_origin = normalize_origin(origin)
+    
+    # Add to allowed_origins if not already present
+    unless allowed_origins.include?(normalized_origin)
+      self.allowed_origins = (allowed_origins || []) + [normalized_origin]
+      save
+    end
+  end
+  
+  def remove_allowed_origin(origin)
+    return if origin.blank?
+    
+    normalized_origin = normalize_origin(origin)
+    
+    if allowed_origins.include?(normalized_origin)
+      self.allowed_origins = allowed_origins - [normalized_origin]
+      save
+    end
+  end
+  
+  private
+  
+  def normalize_origin(origin)
+    # Remove trailing slash if present
+    origin.sub(/\/$/, '')
+  end
 
   #--------------------------------------------------------------------------
   # Example helper if you only want seats from the "active" layout:

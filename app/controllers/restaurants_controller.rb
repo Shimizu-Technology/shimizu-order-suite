@@ -67,7 +67,7 @@ class RestaurantsController < ApplicationController
   end
 
   def restaurant_params
-    params.require(:restaurant).permit(
+    permitted = params.require(:restaurant).permit(
       :name,
       :address,
       :layout_type,
@@ -75,8 +75,16 @@ class RestaurantsController < ApplicationController
       :default_reservation_length,
       :time_slot_interval,
       :time_zone,
-      admin_settings: {}
+      admin_settings: {},
+      allowed_origins: []
     )
+    
+    # Handle allowed_origins as a special case if it's a string
+    if params[:restaurant][:allowed_origins].is_a?(String)
+      permitted[:allowed_origins] = params[:restaurant][:allowed_origins].split(',').map(&:strip)
+    end
+    
+    permitted
   end
 
   def restaurant_json(restaurant)
@@ -90,6 +98,7 @@ class RestaurantsController < ApplicationController
       time_slot_interval:         restaurant.time_slot_interval,
       time_zone:                  restaurant.time_zone,
       admin_settings:             restaurant.admin_settings,
+      allowed_origins:            restaurant.allowed_origins,
       # Expose seat count so the frontend can pre-fill event max_capacity
       current_seat_count:         restaurant.current_seats.count
     }

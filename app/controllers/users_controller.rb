@@ -2,6 +2,11 @@
 class UsersController < ApplicationController
   before_action :authorize_request, only: [:show_profile, :update_profile, :verify_phone, :resend_code]
 
+  # Mark create, verify_phone, resend_code, show_profile, and update_profile as public endpoints that don't require restaurant context
+  def public_endpoint?
+    action_name.in?(['create', 'verify_phone', 'resend_code', 'show_profile', 'update_profile'])
+  end
+
   # POST /signup
   def create
     user = User.new(user_params)
@@ -35,8 +40,14 @@ class UsersController < ApplicationController
         )
       end
 
-      # Issue JWT
-      token = JWT.encode({ user_id: user.id }, Rails.application.secret_key_base)
+      # Issue JWT with user_id, restaurant_id, and 24-hour expiration
+      token_payload = {
+        user_id: user.id,
+        restaurant_id: user.restaurant_id,
+        exp: 24.hours.from_now.to_i
+      }
+      
+      token = JWT.encode(token_payload, Rails.application.secret_key_base)
       render json: { jwt: token, user: user }, status: :created
     else
       render json: { errors: user.errors.full_messages }, status: :unprocessable_entity

@@ -4,6 +4,11 @@ class MenuItemsController < ApplicationController
 
   # 2) For other actions, require token + admin
   before_action :authorize_request, except: [:index, :show]
+  
+  # Mark all actions as public endpoints that don't require restaurant context
+  def public_endpoint?
+    true
+  end
 
   # GET /menu_items
   def index

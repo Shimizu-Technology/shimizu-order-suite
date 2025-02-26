@@ -1,13 +1,26 @@
 # app/controllers/availability_controller.rb
 
 class AvailabilityController < ApplicationController
-  # GET /availability?date=YYYY-MM-DD&party_size=4
+  before_action :optional_authorize
+  
+  # Mark this as a public endpoint that doesn't require restaurant context
+  def public_endpoint?
+    true
+  end
+  # GET /availability?date=YYYY-MM-DD&party_size=4&restaurant_id=1
   def index
     date_str   = params[:date]
     party_size = params[:party_size].to_i
-
-    # For simplicity => Restaurant.find(1).
-    restaurant = Restaurant.find(1)
+    
+    # Get restaurant from current context or from params
+    restaurant = if @current_restaurant
+                   @current_restaurant
+                 elsif params[:restaurant_id].present?
+                   Restaurant.find_by(id: params[:restaurant_id])
+                 else
+                   render json: { error: "Restaurant ID is required" }, status: :unprocessable_entity
+                   return
+                 end
 
     # 1) Generate local timeslots for that date
     slots = generate_timeslots_for_date(restaurant, date_str)

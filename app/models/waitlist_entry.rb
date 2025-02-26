@@ -1,5 +1,7 @@
 # app/models/waitlist_entry.rb
 class WaitlistEntry < ApplicationRecord
+  # Default scope to current restaurant
+  default_scope { with_restaurant_scope }
   belongs_to :restaurant
 
   # If you want to see which seats are occupied by this waitlist entry:

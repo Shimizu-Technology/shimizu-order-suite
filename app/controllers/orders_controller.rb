@@ -1,6 +1,11 @@
 # app/controllers/orders_controller.rb
 class OrdersController < ApplicationController
   before_action :authorize_request, except: [:create, :show]
+  
+  # Mark create, show, new_since, index, update, and destroy as public endpoints that don't require restaurant context
+  def public_endpoint?
+    action_name.in?(['create', 'show', 'new_since', 'index', 'update', 'destroy'])
+  end
 
   # GET /orders
   def index
@@ -52,7 +57,7 @@ class OrdersController < ApplicationController
     end
 
     new_params = order_params_admin # Since create does not forcibly restrict user fields
-    new_params[:restaurant_id] ||= 1
+    new_params[:restaurant_id] ||= params[:restaurant_id] || 1
     new_params[:user_id] = @current_user&.id
 
     @order = Order.new(new_params)
