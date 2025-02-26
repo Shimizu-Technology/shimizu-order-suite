@@ -1,8 +1,12 @@
 # app/models/menu_item.rb
 
 class MenuItem < ApplicationRecord
+  apply_default_scope
+  
   belongs_to :menu
   has_many :option_groups, dependent: :destroy
+  # Define path to restaurant through associations for tenant isolation
+  has_one :restaurant, through: :menu
 
   # Many-to-many categories
   has_many :menu_item_categories, dependent: :destroy
@@ -11,6 +15,15 @@ class MenuItem < ApplicationRecord
   validates :name, presence: true
   validates :price, numericality: { greater_than_or_equal_to: 0 }
   validates :advance_notice_hours, numericality: { greater_than_or_equal_to: 0 }
+  
+  # Override with_restaurant_scope for indirect restaurant association
+  def self.with_restaurant_scope
+    if current_restaurant
+      joins(:menu).where(menus: { restaurant_id: current_restaurant.id })
+    else
+      all
+    end
+  end
 
   # Optional: validation for promo_label length
   # validates :promo_label, length: { maximum: 50 }, allow_nil: true

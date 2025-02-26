@@ -12,4 +12,9 @@ class ApplicationRecord < ActiveRecord::Base
       all
     end
   end
+  
+  # Method to apply default scope for tenant isolation
+  def self.apply_default_scope
+    default_scope { with_restaurant_scope }
+  end
 end
