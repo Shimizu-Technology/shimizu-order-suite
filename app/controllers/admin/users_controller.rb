@@ -131,9 +131,9 @@ module Admin
       end
     end
 
-    # Admin can’t directly set user password => no :password param
+    # Admin can't directly set user password => no :password param
     def user_params
-      params.permit(:email, :first_name, :last_name, :phone, :role)
+      params.permit(:email, :first_name, :last_name, :phone, :role, :restaurant_id)
     end
   end
 end
