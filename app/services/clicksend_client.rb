@@ -23,13 +23,16 @@ class ClicksendClient
     auth = Base64.strict_encode64("#{username}:#{api_key}")
     uri  = URI("#{BASE_URL}/sms/send")
 
+    # Replace $ with USD symbol to avoid encoding issues
+    encoded_body = body.gsub('$', 'USD ')
+    
     # Build JSON payload for the API
     payload = {
       messages: [
         {
           source: 'ruby_app',
           from:   from,
-          body:   body,
+          body:   encoded_body,
           to:     to
         }
       ]

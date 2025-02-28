@@ -41,7 +41,7 @@
               </tr>
               <tr>
                 <td style="padding: 5px 0;">
-                  <strong>Total:</strong> $<%= @order.total.to_f.round(2) %>
+                  <strong>Total:</strong> $<%= sprintf("%.2f", @order.total.to_f) %>
                 </td>
               </tr>
               <tr>
@@ -51,7 +51,7 @@
                     <% @order.items.each do |i| %>
                       <li style="margin-bottom: 5px; list-style-type: disc;">
                         <%= i['quantity'] %>× <%= i['name'] %>
-                        ($<%= i['price'].to_f.round(2) %> each)
+                        ($<%= sprintf("%.2f", i['price'].to_f) %> each)
                       </li>
                     <% end %>
                   </ul>

@@ -8,5 +8,8 @@
   <li>Reservation Date/Time: <%= @reservation.start_time.strftime("%B %d, %Y at %I:%M %p") %></li>
   <li>Party Size: <%= @reservation.party_size %></li>
   <li>Restaurant: <%= @reservation.restaurant.name if @reservation.restaurant %></li>
+  <% if @reservation.deposit_amount && @reservation.deposit_amount > 0 %>
+  <li>Deposit Amount: $<%= sprintf("%.2f", @reservation.deposit_amount.to_f) %></li>
+  <% end %>
 </ul>
 <p>We look forward to serving you!</p>

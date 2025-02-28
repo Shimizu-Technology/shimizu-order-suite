@@ -144,6 +144,7 @@ class ReservationsController < ApplicationController
         message_body = <<~MSG.squish
           Hi #{@reservation.contact_name}, your Hafaloha reservation is confirmed
           on #{@reservation.start_time.strftime("%B %d at %I:%M %p")}.
+          #{@reservation.deposit_amount && @reservation.deposit_amount > 0 ? "Deposit amount: $#{sprintf("%.2f", @reservation.deposit_amount.to_f)}. " : ""}
           We look forward to seeing you!
         MSG
         ClicksendClient.send_text_message(
