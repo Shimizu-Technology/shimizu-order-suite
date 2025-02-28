@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_02_26_034204) do
+ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -218,6 +218,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_26_034204) do
     t.integer "default_reservation_length", default: 60, null: false
     t.jsonb "admin_settings", default: {}, null: false
     t.string "allowed_origins", default: [], array: true
+    t.string "phone_number"
     t.index ["current_layout_id"], name: "index_restaurants_on_current_layout_id"
   end
 

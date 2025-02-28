@@ -64,6 +64,7 @@ end
 
 restaurant.update!(
   address:                   "955 Pale San Vitores Rd, Tamuning, Guam 96913",
+  phone_number:              "+16719893444",
   time_slot_interval:        30,
   time_zone:                 "Pacific/Guam",
   default_reservation_length: 60,
@@ -75,6 +76,7 @@ restaurant.update!(
 
 puts "Created/found Restaurant: #{restaurant.name}"
 puts "   Address:  #{restaurant.address}"
+puts "   Phone:    #{restaurant.phone_number}"
 puts "   time_slot_interval: #{restaurant.time_slot_interval} mins"
 puts "   time_zone: #{restaurant.time_zone}"
 puts "   default_reservation_length: #{restaurant.default_reservation_length}"

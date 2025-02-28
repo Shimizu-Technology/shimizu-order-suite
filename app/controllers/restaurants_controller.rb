@@ -1,7 +1,12 @@
 # app/controllers/restaurants_controller.rb
 class RestaurantsController < ApplicationController
-  before_action :authorize_request
+  before_action :authorize_request, except: [:show]
   before_action :set_restaurant, only: [:show, :update, :destroy]
+  
+  # Override public_endpoint? to mark index, show, and update as public endpoints
+  def public_endpoint?
+    action_name.in?(['index', 'show', 'update'])
+  end
 
   # GET /restaurants
   def index
@@ -16,8 +21,11 @@ class RestaurantsController < ApplicationController
 
   # GET /restaurants/:id
   def show
-    unless current_user.role == "super_admin" || current_user.restaurant_id == @restaurant.id
-      return render json: { error: "Forbidden" }, status: :forbidden
+    # Skip authorization check for public access
+    if current_user.present?
+      unless current_user.role == "super_admin" || current_user.restaurant_id == @restaurant.id
+        return render json: { error: "Forbidden" }, status: :forbidden
+      end
     end
 
     render json: restaurant_json(@restaurant)
@@ -70,6 +78,7 @@ class RestaurantsController < ApplicationController
     permitted = params.require(:restaurant).permit(
       :name,
       :address,
+      :phone_number,
       :layout_type,
       :current_layout_id,
       :default_reservation_length,
@@ -92,6 +101,7 @@ class RestaurantsController < ApplicationController
       id:                         restaurant.id,
       name:                       restaurant.name,
       address:                    restaurant.address,
+      phone_number:               restaurant.phone_number,
       layout_type:                restaurant.layout_type,
       current_layout_id:          restaurant.current_layout_id,
       default_reservation_length: restaurant.default_reservation_length,
@@ -99,8 +109,10 @@ class RestaurantsController < ApplicationController
       time_zone:                  restaurant.time_zone,
       admin_settings:             restaurant.admin_settings,
       allowed_origins:            restaurant.allowed_origins,
-      # Expose seat count so the frontend can pre-fill event max_capacity
-      current_seat_count:         restaurant.current_seats.count
+      # Calculate seat count directly instead of using the private method
+      current_seat_count:         restaurant.current_layout ? 
+                                  restaurant.current_layout.seat_sections.includes(:seats).flat_map(&:seats).count : 
+                                  0
     }
   end
 end

@@ -55,8 +55,9 @@ class Restaurant < ApplicationRecord
   end
 
   #--------------------------------------------------------------------------
-  # Example helper if you only want seats from the "active" layout:
+  # Helper if you only want seats from the "active" layout:
   #--------------------------------------------------------------------------
+  # Make this method public so it can be called from controllers
   def current_seats
     return [] unless current_layout
     current_layout.seat_sections.includes(:seats).flat_map(&:seats)
