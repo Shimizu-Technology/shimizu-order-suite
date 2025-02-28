@@ -19,7 +19,8 @@ class User < ApplicationRecord
   validates :first_name, presence: true
   validates :last_name,  presence: true
 
-  before_save :downcase_email
+  # Ensure email is downcased before validation to ensure uniqueness check works properly
+  before_validation :downcase_email
 
   # -----------------------------------------------------------
   # PHONE VERIFICATION FIELDS:
@@ -52,8 +53,9 @@ class User < ApplicationRecord
     return false if reset_password_token.blank?
     return false if reset_password_sent_at.blank? || reset_password_sent_at < 2.hours.ago
 
-    token_hash = Digest::SHA256.hexdigest(raw_token)
-    token_hash == reset_password_token
+    # Ensure token comparison is done in a timing-safe manner
+    token_hash = Digest::SHA256.hexdigest(raw_token.to_s)
+    ActiveSupport::SecurityUtils.secure_compare(token_hash, reset_password_token.to_s)
   end
 
   def clear_reset_password_token!
@@ -65,6 +67,6 @@ class User < ApplicationRecord
   private
 
   def downcase_email
-    self.email = email.downcase
+    self.email = email.to_s.downcase if email.present?
   end
 end

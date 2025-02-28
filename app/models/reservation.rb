@@ -15,6 +15,7 @@ class Reservation < ApplicationRecord
             presence: true,
             numericality: { greater_than: 0 }
   validates :contact_name, presence: true
+  validates :status, inclusion: { in: %w[booked reserved seated finished canceled no_show] }
 
   # The check constraint in the DB enforces only these statuses:
   #   booked, reserved, seated, finished, canceled, no_show

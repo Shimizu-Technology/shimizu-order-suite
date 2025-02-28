@@ -5,7 +5,15 @@ class Order < ApplicationRecord
   default_scope { with_restaurant_scope }
   belongs_to :restaurant
   belongs_to :user, optional: true
-
+  
+  # Validations
+  validates :status, presence: true
+  validates :total, presence: true
+  validates :status, inclusion: { in: %w[pending processing ready completed cancelled] }
+  
+  # Set default status if not provided
+  before_validation :set_default_status, on: :create
+  
   # AUTO-SET pickup time if not provided
   before_save :set_default_pickup_time
 
@@ -31,6 +39,10 @@ class Order < ApplicationRecord
   end
 
   private
+  
+  def set_default_status
+    self.status = 'pending' if status.blank?
+  end
 
   def set_default_pickup_time
     return unless estimated_pickup_time.blank?

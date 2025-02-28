@@ -1,10 +1,34 @@
 # app/controllers/users_controller.rb
 class UsersController < ApplicationController
-  before_action :authorize_request, only: [:show_profile, :update_profile, :verify_phone, :resend_code]
+  before_action :authorize_request, only: [:show, :update, :destroy, :show_profile, :update_profile, :verify_phone, :resend_code]
+  before_action :set_user, only: [:show, :update, :destroy]
+  before_action :check_ownership, only: [:update, :destroy]
 
   # Mark create, verify_phone, resend_code, show_profile, and update_profile as public endpoints that don't require restaurant context
   def public_endpoint?
-    action_name.in?(['create', 'verify_phone', 'resend_code', 'show_profile', 'update_profile'])
+    action_name.in?(['create', 'verify_phone', 'resend_code', 'show_profile', 'update_profile', 'show', 'update', 'destroy'])
+  end
+  
+  # GET /users/:id
+  def show
+    user_json = @user.as_json.except('password_digest')
+    render json: user_json, status: :ok
+  end
+  
+  # PUT /users/:id
+  def update
+    if @user.update(user_params)
+      user_json = @user.as_json.except('password_digest')
+      render json: user_json, status: :ok
+    else
+      render json: { errors: @user.errors.full_messages }, status: :unprocessable_entity
+    end
+  end
+  
+  # DELETE /users/:id
+  def destroy
+    @user.destroy
+    head :no_content
   end
 
   # POST /signup
@@ -48,7 +72,8 @@ class UsersController < ApplicationController
       }
       
       token = JWT.encode(token_payload, Rails.application.secret_key_base)
-      render json: { jwt: token, user: user }, status: :created
+      user_json = user.as_json.except('password_digest')
+      render json: { token: token, user: user_json }, status: :created
     else
       render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
     end
@@ -72,7 +97,8 @@ class UsersController < ApplicationController
 
     if user.verification_code == code
       user.update(phone_verified: true, verification_code: nil, verification_code_sent_at: nil)
-      render json: { message: "Phone verified successfully!", user: user }, status: :ok
+      user_json = user.as_json.except('password_digest')
+      render json: { message: "Phone verified successfully!", user: user_json }, status: :ok
     else
       render json: { error: "Invalid code" }, status: :unprocessable_entity
     end
@@ -116,7 +142,8 @@ class UsersController < ApplicationController
 
   # GET /profile
   def show_profile
-    render json: current_user, status: :ok
+    user_json = current_user.as_json.except('password_digest')
+    render json: user_json, status: :ok
   end
 
   # PATCH /profile
@@ -126,13 +153,26 @@ class UsersController < ApplicationController
     end
 
     if current_user.update(profile_params)
-      render json: current_user, status: :ok
+      user_json = current_user.as_json.except('password_digest')
+      render json: user_json, status: :ok
     else
       render json: { errors: current_user.errors.full_messages }, status: :unprocessable_entity
     end
   end
 
   private
+  
+  def set_user
+    @user = User.find(params[:id])
+  rescue ActiveRecord::RecordNotFound
+    render json: { error: 'User not found' }, status: :not_found
+  end
+  
+  def check_ownership
+    unless current_user.id == @user.id || current_user.role.in?(%w[admin super_admin])
+      render json: { error: 'You are not authorized to perform this action' }, status: :forbidden
+    end
+  end
 
   def profile_params
     params.require(:user).permit(:first_name, :last_name, :email, :phone)

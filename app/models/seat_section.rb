@@ -9,7 +9,7 @@ class SeatSection < ApplicationRecord
   has_one :restaurant, through: :layout
 
   # For example, we allow these types:
-  VALID_SECTION_TYPES = %w[counter table bar booth].freeze
+  VALID_SECTION_TYPES = %w[counter table bar booth patio dining].freeze
 
   validates :name, presence: true
   validates :capacity, numericality: { greater_than: 0 }, allow_nil: true

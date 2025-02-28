@@ -4,6 +4,11 @@ Rails.application.routes.draw do
   # Authentication
   post '/signup', to: 'users#create'
   post '/login',  to: 'sessions#create'
+  delete '/logout', to: 'sessions#destroy'
+  get '/validate', to: 'sessions#validate'
+  
+  # User management
+  resources :users, only: [:show, :update, :destroy]
 
   # Phone verification
   post '/verify_phone', to: 'users#verify_phone'

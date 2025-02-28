@@ -49,6 +49,24 @@ group :development, :test do
 
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
+  
+  # Testing framework for Rails
+  gem 'rspec-rails', '~> 6.1.0'
+  
+  # Factory Bot for test data generation
+  gem 'factory_bot_rails', '~> 6.4.0'
+  
+  # Shoulda matchers for testing
+  gem 'shoulda-matchers', '~> 6.0'
 end
 
-
+group :test do
+  # Database cleaner for test database management
+  gem 'database_cleaner-active_record'
+  
+  # Simplecov for test coverage reporting
+  gem 'simplecov', require: false
+  
+  # WebMock for stubbing HTTP requests in tests
+  gem 'webmock', '~> 3.19'
+end

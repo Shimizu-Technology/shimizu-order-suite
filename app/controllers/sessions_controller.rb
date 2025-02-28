@@ -1,8 +1,10 @@
 # app/controllers/sessions_controller.rb
 class SessionsController < ApplicationController
-  # Mark create as a public endpoint that doesn't require restaurant context
+  before_action :authorize_request, only: [:destroy, :validate]
+  
+  # Mark create, destroy, and validate as public endpoints that don't require restaurant context
   def public_endpoint?
-    action_name == 'create'
+    action_name.in?(['create', 'destroy', 'validate'])
   end
   
   # POST /login
@@ -23,9 +25,24 @@ class SessionsController < ApplicationController
       }
       
       token = JWT.encode(token_payload, Rails.application.secret_key_base)
-      render json: { jwt: token, user: user }, status: :created
+      
+      # Exclude password_digest from the response
+      user_json = user.as_json.except('password_digest')
+      render json: { token: token, user: user_json }, status: :created
     else
       render json: { error: 'Invalid email or password' }, status: :unauthorized
     end
+  end
+  
+  # DELETE /logout
+  def destroy
+    # In a real implementation, you might blacklist the token or perform other cleanup
+    render json: { message: 'Logged out successfully' }, status: :ok
+  end
+  
+  # GET /validate
+  def validate
+    user_json = @current_user.as_json.except('password_digest')
+    render json: { user: user_json }, status: :ok
   end
 end

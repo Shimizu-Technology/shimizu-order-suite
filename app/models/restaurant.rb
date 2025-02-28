@@ -47,19 +47,18 @@ class Restaurant < ApplicationRecord
     end
   end
   
+  #--------------------------------------------------------------------------
+  # Helper if you only want seats from the "active" layout:
+  #--------------------------------------------------------------------------
+  def current_seats
+    return [] unless current_layout
+    current_layout.seat_sections.includes(:seats).flat_map(&:seats)
+  end
+  
   private
   
   def normalize_origin(origin)
     # Remove trailing slash if present
     origin.sub(/\/$/, '')
-  end
-
-  #--------------------------------------------------------------------------
-  # Helper if you only want seats from the "active" layout:
-  #--------------------------------------------------------------------------
-  # Make this method public so it can be called from controllers
-  def current_seats
-    return [] unless current_layout
-    current_layout.seat_sections.includes(:seats).flat_map(&:seats)
   end
 end
