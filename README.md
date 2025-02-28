@@ -134,11 +134,34 @@ end
 
 #### 3. Public Endpoints
 
-Some endpoints need to be accessible without restaurant context (e.g., login, signup). These override the `public_endpoint?` method:
+Some endpoints need to be accessible without restaurant context (e.g., login, signup, public restaurant data). These override the `public_endpoint?` method:
 
 ```ruby
 def public_endpoint?
   action_name.in?(['create', 'verify_phone', 'resend_code'])
+end
+```
+
+For example, the RestaurantsController allows public access to the `show` action:
+
+```ruby
+class RestaurantsController < ApplicationController
+  before_action :authorize_request, except: [:show]
+  before_action :set_restaurant, only: [:show, :update, :destroy]
+  
+  # GET /restaurants/:id
+  def show
+    # Skip authorization check for public access
+    if current_user.present?
+      unless current_user.role == "super_admin" || current_user.restaurant_id == @restaurant.id
+        return render json: { error: "Forbidden" }, status: :forbidden
+      end
+    end
+
+    render json: restaurant_json(@restaurant)
+  end
+  
+  # ...
 end
 ```
 
@@ -167,6 +190,11 @@ origins lambda { |source, env|
 - **Restaurant**: The central model for tenant isolation
   - Has many users, menus, layouts, reservations, orders
   - Stores configuration including allowed CORS origins
+  - Contains basic information like name, address, phone number, time zone
+
+- **SiteSetting**: Stores site-wide settings for each restaurant
+  - Belongs to a restaurant
+  - Contains hero image and spinner image URLs
 
 - **User**: Authentication and authorization
   - Belongs to a restaurant
@@ -201,6 +229,7 @@ origins lambda { |source, env|
 - **Rails**:
   - `RAILS_ENV` – Environment (development/production)
   - `SECRET_KEY_BASE` – For secure cookies and JWT encoding
+  - `DEFAULT_RESTAURANT_ID` – Default restaurant ID for public pages
 
 ### External Services
 
@@ -384,6 +413,7 @@ bundle exec rspec
 The database includes these key tables:
 
 - `restaurants` - Central tenant table
+- `site_settings` - Site-wide settings for each restaurant
 - `users` - Authentication and roles
 - `reservations` - Table bookings
 - `orders` - Food orders
