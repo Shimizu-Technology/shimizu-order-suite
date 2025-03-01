@@ -203,7 +203,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
     t.jsonb "seat_preferences", default: [], null: false
     t.integer "duration_minutes", default: 60
     t.index ["restaurant_id"], name: "index_reservations_on_restaurant_id"
-    t.check_constraint "status::text = ANY (ARRAY['booked'::character varying, 'reserved'::character varying, 'seated'::character varying, 'finished'::character varying, 'canceled'::character varying, 'no_show'::character varying]::text[])", name: "check_reservation_status"
+    t.check_constraint "status::text = ANY (ARRAY['booked'::character varying::text, 'reserved'::character varying::text, 'seated'::character varying::text, 'finished'::character varying::text, 'canceled'::character varying::text, 'no_show'::character varying::text])", name: "check_reservation_status"
   end
 
   create_table "restaurants", force: :cascade do |t|
