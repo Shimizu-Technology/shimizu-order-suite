@@ -134,25 +134,25 @@ class ReservationsController < ApplicationController
 
     # 6) Save
     if @reservation.save
-      # Optionally send a confirmation email
-      if @reservation.contact_email.present?
-        ReservationMailer.booking_confirmation(@reservation).deliver_later
-      end
-
-      # Optionally send a text message
-      if @reservation.contact_phone.present?
-        message_body = <<~MSG.squish
-          Hi #{@reservation.contact_name}, your Hafaloha reservation is confirmed
-          on #{@reservation.start_time.strftime("%B %d at %I:%M %p")}.
-          #{@reservation.deposit_amount && @reservation.deposit_amount > 0 ? "Deposit amount: $#{sprintf("%.2f", @reservation.deposit_amount.to_f)}. " : ""}
-          We look forward to seeing you!
-        MSG
-        ClicksendClient.send_text_message(
-          to:   @reservation.contact_phone,
-          body: message_body,
-          from: 'Hafaloha'
-        )
-      end
+      # Send reservation confirmation notification
+      reservation_time = @reservation.start_time.strftime("%B %d at %I:%M %p")
+      deposit_amount = @reservation.deposit_amount && @reservation.deposit_amount > 0 ? 
+                       sprintf("%.2f", @reservation.deposit_amount.to_f) : nil
+      
+      NotificationService.send_notification(
+        'reservation_confirmation',
+        {
+          email: @reservation.contact_email,
+          phone: @reservation.contact_phone
+        },
+        {
+          restaurant_id: @reservation.restaurant_id,
+          contact_name: @reservation.contact_name,
+          reservation_time: reservation_time,
+          party_size: @reservation.party_size,
+          deposit_amount: deposit_amount
+        }
+      )
 
       render json: @reservation, status: :created
     else

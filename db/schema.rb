@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_01_103313) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -108,6 +108,21 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["restaurant_id"], name: "index_menus_on_restaurant_id"
+  end
+
+  create_table "notification_templates", force: :cascade do |t|
+    t.bigint "restaurant_id"
+    t.string "notification_type", null: false
+    t.string "channel", null: false
+    t.string "subject"
+    t.text "content", null: false
+    t.string "sender_name"
+    t.boolean "active", default: true
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "frontend_id"
+    t.index ["notification_type", "channel", "restaurant_id", "frontend_id"], name: "idx_notification_templates_unique", unique: true
+    t.index ["restaurant_id"], name: "index_notification_templates_on_restaurant_id"
   end
 
   create_table "notifications", force: :cascade do |t|
@@ -219,6 +234,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
     t.jsonb "admin_settings", default: {}, null: false
     t.string "allowed_origins", default: [], array: true
     t.string "phone_number"
+    t.string "frontend_id", default: "hafaloha"
     t.index ["current_layout_id"], name: "index_restaurants_on_current_layout_id"
   end
 
@@ -266,6 +282,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
     t.string "spinner_image_url"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "restaurant_id"
+    t.index ["restaurant_id"], name: "index_site_settings_on_restaurant_id"
   end
 
   create_table "special_events", force: :cascade do |t|
@@ -323,6 +341,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
   add_foreign_key "menu_item_categories", "menu_items"
   add_foreign_key "menu_items", "menus"
   add_foreign_key "menus", "restaurants"
+  add_foreign_key "notification_templates", "restaurants"
   add_foreign_key "notifications", "reservations"
   add_foreign_key "operating_hours", "restaurants"
   add_foreign_key "option_groups", "menu_items"
@@ -337,6 +356,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
   add_foreign_key "seat_allocations", "waitlist_entries"
   add_foreign_key "seat_sections", "layouts"
   add_foreign_key "seats", "seat_sections"
+  add_foreign_key "site_settings", "restaurants"
   add_foreign_key "special_events", "restaurants"
   add_foreign_key "users", "restaurants"
   add_foreign_key "waitlist_entries", "restaurants"

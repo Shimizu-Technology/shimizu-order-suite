@@ -89,29 +89,25 @@ class OrdersController < ApplicationController
     end
 
     if @order.save
-      # 1) Confirmation email
-      if @order.contact_email.present?
-        OrderMailer.order_confirmation(@order).deliver_later
-      end
-
-      # 2) Confirmation text (async)
-      if @order.contact_phone.present?
-        item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
-        msg = <<~TXT.squish
-          Hi #{@order.contact_name.presence || 'Customer'},
-          thanks for ordering from Hafaloha!
-          Order ##{@order.id}: #{item_list},
-          total: $#{sprintf("%.2f", @order.total.to_f)}.
-          We'll text you an ETA once we start preparing your order!
-        TXT
-
-        # Replace direct ClicksendClient call with a background job
-        SendSmsJob.perform_later(
-          to:   @order.contact_phone,
-          body: msg,
-          from: 'Hafaloha'
-        )
-      end
+      # Send order confirmation notification
+      item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
+      
+      NotificationService.send_notification(
+        'order_confirmation',
+        {
+          email: @order.contact_email,
+          phone: @order.contact_phone
+        },
+        {
+          restaurant_id: @order.restaurant_id,
+          order_id: @order.id,
+          customer_name: @order.contact_name.presence || 'Valued Customer',
+          total: sprintf("%.2f", @order.total.to_f),
+          items: item_list,
+          special_instructions: @order.special_instructions,
+          contact_phone: @order.contact_phone
+        }
+      )
 
       render json: @order, status: :created
     else
@@ -136,37 +132,37 @@ class OrdersController < ApplicationController
     if order.update(permitted_params)
       # If status changed from 'pending' to 'preparing'
       if old_status == 'pending' && order.status == 'preparing'
-        if order.contact_email.present?
-          OrderMailer.order_preparing(order).deliver_later
-        end
-        if order.contact_phone.present?
-          eta_str = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "soon"
-          txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
-                     "is now being prepared! ETA: #{eta_str}."
-
-          # Send SMS asynchronously
-          SendSmsJob.perform_later(
-            to:   order.contact_phone,
-            body: txt_body,
-            from: 'Hafaloha'
-          )
-        end
+        eta_str = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "soon"
+        
+        NotificationService.send_notification(
+          'order_preparing',
+          {
+            email: order.contact_email,
+            phone: order.contact_phone
+          },
+          {
+            restaurant_id: order.restaurant_id,
+            order_id: order.id,
+            customer_name: order.contact_name.presence || 'Valued Customer',
+            eta: eta_str
+          }
+        )
       end
 
       # If status changed to 'ready'
       if old_status != 'ready' && order.status == 'ready'
-        if order.contact_email.present?
-          OrderMailer.order_ready(order).deliver_later
-        end
-        if order.contact_phone.present?
-          msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
-                "is now ready for pickup! Thank you for choosing Hafaloha."
-          SendSmsJob.perform_later(
-            to:   order.contact_phone,
-            body: msg,
-            from: 'Hafaloha'
-          )
-        end
+        NotificationService.send_notification(
+          'order_ready',
+          {
+            email: order.contact_email,
+            phone: order.contact_phone
+          },
+          {
+            restaurant_id: order.restaurant_id,
+            order_id: order.id,
+            customer_name: order.contact_name.presence || 'Valued Customer'
+          }
+        )
       end
 
       render json: order

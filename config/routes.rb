@@ -91,6 +91,13 @@ Rails.application.routes.draw do
         post :resend_invite
       end
     end
+    
+    # Notification templates
+    resources :notification_templates do
+      collection do
+        post :preview
+      end
+    end
   end
 
   # For ordering

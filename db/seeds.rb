@@ -904,4 +904,8 @@ sample_orders_data.each do |order_data|
   puts "Created order##{new_order.id} => status=#{new_order.status}, total=#{new_order.total}"
 end
 
+# Load notification templates
+puts "Loading notification templates..."
+require_relative 'seeds/notification_templates'
+
 puts "== Seeding complete! =="

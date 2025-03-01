@@ -3,6 +3,7 @@ module Admin
   class SiteSettingsController < ApplicationController
     before_action :authorize_request, except: [:show]
     before_action :require_admin!, except: [:show]
+    before_action :set_restaurant, only: [:show, :update]
     
     # Mark all actions as public endpoints that don't require restaurant context
     def public_endpoint?
@@ -10,15 +11,25 @@ module Admin
     end
 
     # GET /admin/site_settings
+    # GET /admin/site_settings?restaurant_id=1
     def show
-      settings = SiteSetting.first_or_create!
+      settings = if @restaurant
+                   SiteSetting.for_restaurant(@restaurant.id)
+                 else
+                   SiteSetting.first_or_create!
+                 end
       render json: settings
     end
 
     # PATCH /admin/site_settings
+    # PATCH /admin/site_settings?restaurant_id=1
     # Accepts optional file fields: hero_image, spinner_image
     def update
-      settings = SiteSetting.first_or_create!
+      settings = if @restaurant
+                   SiteSetting.find_or_initialize_by(restaurant_id: @restaurant.id)
+                 else
+                   SiteSetting.first_or_create!
+                 end
 
       if params[:hero_image].present?
         file = params[:hero_image]
@@ -44,6 +55,10 @@ module Admin
     end
 
     private
+
+    def set_restaurant
+      @restaurant = Restaurant.find(params[:restaurant_id]) if params[:restaurant_id].present?
+    end
 
     def require_admin!
       unless current_user&.role.in?(%w[admin super_admin])
