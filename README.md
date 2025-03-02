@@ -216,6 +216,95 @@ origins lambda { |source, env|
   - All belong to restaurant through associations
   - Used for visualizing and managing the physical space
 
+- **Notification**: Notification records
+  - Belongs to a reservation
+  - Tracks notification type, delivery method, and status
+
+---
+
+## **Notification System**
+
+The system includes a robust notification framework for communicating with customers:
+
+### 1. Notification Channels
+
+- **Email** - Using SendGrid for transactional emails
+- **SMS** - Using ClickSend for text messages
+- **WhatsApp** - Using Wassenger for WhatsApp messages
+
+### 2. Background Processing
+
+Notifications are processed asynchronously using Sidekiq:
+
+```ruby
+# app/jobs/send_sms_job.rb
+class SendSmsJob < ApplicationJob
+  queue_as :notifications
+
+  def perform(phone_number, message)
+    client = ClicksendClient.new
+    client.send_sms(phone_number, message)
+  end
+end
+
+# app/jobs/send_whatsapp_job.rb
+class SendWhatsappJob < ApplicationJob
+  queue_as :notifications
+
+  def perform(phone_number, message)
+    client = WassengerClient.new
+    client.send_message(phone_number, message)
+  end
+end
+```
+
+### 3. Mailers
+
+Email notifications are handled through dedicated mailers:
+
+```ruby
+# app/mailers/order_mailer.rb
+class OrderMailer < ApplicationMailer
+  def order_confirmation(order)
+    @order = order
+    mail(to: @order.contact_email, subject: "Your order has been confirmed")
+  end
+
+  def order_preparing(order)
+    @order = order
+    mail(to: @order.contact_email, subject: "Your order is being prepared")
+  end
+
+  def order_ready(order)
+    @order = order
+    mail(to: @order.contact_email, subject: "Your order is ready for pickup")
+  end
+end
+
+# app/mailers/reservation_mailer.rb
+class ReservationMailer < ApplicationMailer
+  def reservation_confirmation(reservation)
+    @reservation = reservation
+    mail(to: @reservation.contact_email, subject: "Your reservation is confirmed")
+  end
+end
+```
+
+### 4. Notification Tracking
+
+The Notification model tracks all sent notifications:
+
+```ruby
+# app/models/notification.rb
+class Notification < ApplicationRecord
+  belongs_to :reservation
+  
+  enum status: { pending: 'pending', sent: 'sent', failed: 'failed' }
+  enum notification_type: { confirmation: 'confirmation', reminder: 'reminder', update: 'update' }
+  enum delivery_method: { email: 'email', sms: 'sms', whatsapp: 'whatsapp' }
+end
+```
+
 ---
 
 ## **Environment Variables**
@@ -423,6 +512,34 @@ The database includes these key tables:
 - `promo_codes` - Discount codes
 - `operating_hours` - Restaurant opening times
 - `special_events` - Special bookings or closed days
+- `notifications` - Notification tracking
+
+---
+
+## **Code Organization**
+
+The codebase is organized following Rails conventions with some additional structure:
+
+1. **Controllers** - Handle API requests and responses
+   - `app/controllers/concerns` - Shared controller functionality
+   - `app/controllers/admin` - Admin-specific endpoints
+
+2. **Models** - Database models and business logic
+   - `app/models/concerns` - Shared model functionality
+
+3. **Services** - External service integrations
+   - `app/services/clicksend_client.rb` - SMS integration
+   - `app/services/wassenger_client.rb` - WhatsApp integration
+   - `app/services/s3_uploader.rb` - AWS S3 integration
+
+4. **Mailers** - Email templates and sending logic
+   - `app/mailers/order_mailer.rb` - Order-related emails
+   - `app/mailers/reservation_mailer.rb` - Reservation-related emails
+   - `app/mailers/password_mailer.rb` - Password reset emails
+
+5. **Jobs** - Background processing
+   - `app/jobs/send_sms_job.rb` - Asynchronous SMS sending
+   - `app/jobs/send_whatsapp_job.rb` - Asynchronous WhatsApp messaging
 
 ---
 
