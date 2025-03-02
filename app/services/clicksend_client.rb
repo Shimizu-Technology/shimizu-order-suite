@@ -19,12 +19,24 @@ class ClicksendClient
     # Use the approved sender ID if 'from' is not provided
     from ||= approved_sender_id
 
+    # Ensure the 'from' field is not too long (ClickSend has an 11 character limit)
+    if from.length > 11
+      Rails.logger.warn("[ClicksendClient] 'from' field too long (#{from.length} chars), truncating to 11 chars")
+      from = from[0...11]
+    end
+
     # Basic Auth
     auth = Base64.strict_encode64("#{username}:#{api_key}")
     uri  = URI("#{BASE_URL}/sms/send")
 
     # Replace $ with USD symbol to avoid encoding issues
     encoded_body = body.gsub('$', 'USD ')
+    
+    # Ensure phone number is in E.164 format (e.g., +16714830219)
+    formatted_to = to.strip
+    unless formatted_to.start_with?('+')
+      formatted_to = "+#{formatted_to}"
+    end
     
     # Build JSON payload for the API
     payload = {
@@ -33,10 +45,12 @@ class ClicksendClient
           source: 'ruby_app',
           from:   from,
           body:   encoded_body,
-          to:     to
+          to:     formatted_to
         }
       ]
     }
+
+    Rails.logger.info("[ClicksendClient] Sending SMS from '#{from}' to '#{formatted_to}'")
 
     http = Net::HTTP.new(uri.host, uri.port)
     http.use_ssl = true

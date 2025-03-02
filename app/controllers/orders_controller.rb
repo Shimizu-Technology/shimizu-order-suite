@@ -96,10 +96,14 @@ class OrdersController < ApplicationController
 
       # 2) Confirmation text (async)
       if @order.contact_phone.present?
+        restaurant_name = @order.restaurant.name
+        # Use custom SMS sender ID if set, otherwise use restaurant name
+        sms_sender = @order.restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
+        
         item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
         msg = <<~TXT.squish
           Hi #{@order.contact_name.presence || 'Customer'},
-          thanks for ordering from Hafaloha!
+          thanks for ordering from #{restaurant_name}!
           Order ##{@order.id}: #{item_list},
           total: $#{sprintf("%.2f", @order.total.to_f)}.
           We'll text you an ETA once we start preparing your order!
@@ -109,7 +113,7 @@ class OrdersController < ApplicationController
         SendSmsJob.perform_later(
           to:   @order.contact_phone,
           body: msg,
-          from: 'Hafaloha'
+          from: sms_sender
         )
       end
 
@@ -140,6 +144,10 @@ class OrdersController < ApplicationController
           OrderMailer.order_preparing(order).deliver_later
         end
         if order.contact_phone.present?
+          restaurant_name = order.restaurant.name
+          # Use custom SMS sender ID if set, otherwise use restaurant name
+          sms_sender = order.restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
+          
           eta_str = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "soon"
           txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
                      "is now being prepared! ETA: #{eta_str}."
@@ -148,7 +156,7 @@ class OrdersController < ApplicationController
           SendSmsJob.perform_later(
             to:   order.contact_phone,
             body: txt_body,
-            from: 'Hafaloha'
+            from: sms_sender
           )
         end
       end
@@ -159,12 +167,16 @@ class OrdersController < ApplicationController
           OrderMailer.order_ready(order).deliver_later
         end
         if order.contact_phone.present?
+          restaurant_name = order.restaurant.name
+          # Use custom SMS sender ID if set, otherwise use restaurant name
+          sms_sender = order.restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
+          
           msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
-                "is now ready for pickup! Thank you for choosing Hafaloha."
+                "is now ready for pickup! Thank you for choosing #{restaurant_name}."
           SendSmsJob.perform_later(
             to:   order.contact_phone,
             body: msg,
-            from: 'Hafaloha'
+            from: sms_sender
           )
         end
       end

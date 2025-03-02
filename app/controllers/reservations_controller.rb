@@ -141,8 +141,12 @@ class ReservationsController < ApplicationController
 
       # Optionally send a text message
       if @reservation.contact_phone.present?
+        restaurant_name = restaurant.name
+        # Use custom SMS sender ID if set, otherwise use restaurant name
+        sms_sender = restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
+        
         message_body = <<~MSG.squish
-          Hi #{@reservation.contact_name}, your Hafaloha reservation is confirmed
+          Hi #{@reservation.contact_name}, your #{restaurant_name} reservation is confirmed
           on #{@reservation.start_time.strftime("%B %d at %I:%M %p")}.
           #{@reservation.deposit_amount && @reservation.deposit_amount > 0 ? "Deposit amount: $#{sprintf("%.2f", @reservation.deposit_amount.to_f)}. " : ""}
           We look forward to seeing you!
@@ -150,7 +154,7 @@ class ReservationsController < ApplicationController
         ClicksendClient.send_text_message(
           to:   @reservation.contact_phone,
           body: message_body,
-          from: 'Hafaloha'
+          from: sms_sender
         )
       end
 

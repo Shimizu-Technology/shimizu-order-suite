@@ -3,12 +3,12 @@ class ReservationMailer < ApplicationMailer
   # e.g. a single method for the booking confirmation
   def booking_confirmation(reservation)
     @reservation = reservation
-    # For the email template, you can reference @reservation.contact_name, etc.
-    # If you track a user ID, you can do e.g. @reservation.user… etc.
-
+    restaurant = get_restaurant_for(@reservation)
+    
     mail(
-      to:    @reservation.contact_email,
-      subject: "Your Hafaloha Reservation Confirmation"
+      to: @reservation.contact_email,
+      from: from_address_for(restaurant),
+      subject: "Your #{restaurant&.name || 'Restaurant'} Reservation Confirmation"
     )
   end
 end

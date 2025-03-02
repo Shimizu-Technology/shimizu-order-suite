@@ -33,10 +33,15 @@ class UsersController < ApplicationController
     if user.save
       # If phone present => send the SMS code
       if user.phone.present?
+        restaurant = Restaurant.find(user.restaurant_id)
+        restaurant_name = restaurant.name
+        # Use custom SMS sender ID if set, otherwise use restaurant name
+        sms_sender = restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
+        
         SendSmsJob.perform_later(
           to:   user.phone,
           body: "Your verification code is #{user.verification_code}",
-          from: "Hafaloha"
+          from: sms_sender
         )
       end
 
@@ -106,10 +111,15 @@ class UsersController < ApplicationController
     )
 
     # Send new SMS
+    restaurant = Restaurant.find(user.restaurant_id)
+    restaurant_name = restaurant.name
+    # Use custom SMS sender ID if set, otherwise use restaurant name
+    sms_sender = restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
+    
     SendSmsJob.perform_later(
       to:   user.phone,
       body: "Your new verification code is #{new_code}",
-      from: "Hafaloha"
+      from: sms_sender
     )
     render json: { message: "Verification code resent. Check your messages." }, status: :ok
   end

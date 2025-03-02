@@ -52,8 +52,7 @@ class Order < ApplicationRecord
     return if Rails.env.test?
 
     # Get the WhatsApp group ID from the restaurant's admin_settings
-    # Fall back to the environment variable if not set in admin_settings
-    group_id = restaurant.admin_settings&.dig('whatsapp_group_id') || ENV['WASSENGER_GROUP_ID']
+    group_id = restaurant.admin_settings&.dig('whatsapp_group_id')
     return unless group_id.present?
 
     item_lines = items.map do |item|
