@@ -1,5 +1,14 @@
 # app/mailers/concerns/mailer_helper.rb
 module MailerHelper
+  # Get the email header color for a given restaurant
+  # Falls back to a default gold color if not set
+  def email_header_color_for(restaurant)
+    return "#c1902f" unless restaurant
+    
+    # Get the color from the restaurant's admin_settings, or use the default
+    restaurant.admin_settings&.dig('email_header_color') || "#c1902f"
+  end
+
   # Get the from address for a given restaurant
   # Always use the verified email address from environment variables
   # And always use the restaurant name as the display name

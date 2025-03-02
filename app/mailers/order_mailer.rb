@@ -2,28 +2,31 @@
 class OrderMailer < ApplicationMailer
   def order_confirmation(order)
     @order = order
-    restaurant = get_restaurant_for(@order)
+    @restaurant = get_restaurant_for(@order)
+    @header_color = email_header_color_for(@restaurant)
     
     mail to: @order.contact_email,
-         from: from_address_for(restaurant),
-         subject: "Your #{restaurant&.name || 'Restaurant'} Order Confirmation ##{@order.id}"
+         from: from_address_for(@restaurant),
+         subject: "Your #{@restaurant&.name || 'Restaurant'} Order Confirmation ##{@order.id}"
   end
 
   def order_ready(order)
     @order = order
-    restaurant = get_restaurant_for(@order)
+    @restaurant = get_restaurant_for(@order)
+    @header_color = email_header_color_for(@restaurant)
     
     mail to: @order.contact_email,
-         from: from_address_for(restaurant),
-         subject: "#{restaurant&.name || 'Restaurant'} Order ##{@order.id} is Ready!"
+         from: from_address_for(@restaurant),
+         subject: "#{@restaurant&.name || 'Restaurant'} Order ##{@order.id} is Ready!"
   end
 
   def order_preparing(order)
     @order = order
-    restaurant = get_restaurant_for(@order)
+    @restaurant = get_restaurant_for(@order)
+    @header_color = email_header_color_for(@restaurant)
     
     mail to: @order.contact_email,
-         from: from_address_for(restaurant),
-         subject: "Your #{restaurant&.name || 'Restaurant'} Order ##{@order.id} is Being Prepared"
+         from: from_address_for(@restaurant),
+         subject: "Your #{@restaurant&.name || 'Restaurant'} Order ##{@order.id} is Being Prepared"
   end
 end
