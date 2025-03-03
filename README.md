@@ -238,6 +238,26 @@ The system includes a robust notification framework for communicating with custo
 - **SMS** - Using ClickSend for text messages
 - **WhatsApp** - Using Wassenger for WhatsApp messages
 
+Each restaurant can configure which notification channels they want to use for different types of communications:
+
+```ruby
+# In Restaurant model (admin_settings JSONB field)
+{
+  "notification_channels": {
+    "orders": {
+      "email": true,
+      "sms": true
+    },
+    "reservations": {
+      "email": true,
+      "sms": false
+    }
+  }
+}
+```
+
+The system sends notifications by default unless explicitly disabled, ensuring backward compatibility with existing restaurants that don't have notification preferences set yet.
+
 ### 2. Background Processing
 
 Notifications are processed asynchronously using Sidekiq:

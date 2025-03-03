@@ -134,13 +134,16 @@ class ReservationsController < ApplicationController
 
     # 6) Save
     if @reservation.save
-      # Optionally send a confirmation email
-      if @reservation.contact_email.present?
+      # Get notification preferences - only don't send if explicitly set to false
+      notification_channels = restaurant.admin_settings&.dig('notification_channels', 'reservations') || {}
+      
+      # Optionally send a confirmation email - send unless explicitly disabled
+      if notification_channels['email'] != false && @reservation.contact_email.present?
         ReservationMailer.booking_confirmation(@reservation).deliver_later
       end
 
-      # Optionally send a text message
-      if @reservation.contact_phone.present?
+      # Optionally send a text message - send unless explicitly disabled
+      if notification_channels['sms'] != false && @reservation.contact_phone.present?
         restaurant_name = restaurant.name
         # Use custom SMS sender ID if set, otherwise use restaurant name
         sms_sender = restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name

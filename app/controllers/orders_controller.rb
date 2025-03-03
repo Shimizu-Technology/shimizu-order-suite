@@ -126,13 +126,16 @@ class OrdersController < ApplicationController
     end
 
     if @order.save
-      # 1) Confirmation email
-      if @order.contact_email.present?
+      # Get notification preferences - only don't send if explicitly set to false
+      notification_channels = @order.restaurant.admin_settings&.dig('notification_channels', 'orders') || {}
+      
+      # 1) Confirmation email - send unless explicitly disabled
+      if notification_channels['email'] != false && @order.contact_email.present?
         OrderMailer.order_confirmation(@order).deliver_later
       end
 
-      # 2) Confirmation text (async)
-      if @order.contact_phone.present?
+      # 2) Confirmation text (async) - send unless explicitly disabled
+      if notification_channels['sms'] != false && @order.contact_phone.present?
         restaurant_name = @order.restaurant.name
         # Use custom SMS sender ID if set, otherwise use restaurant name
         sms_sender = @order.restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
@@ -175,12 +178,15 @@ class OrdersController < ApplicationController
                        end
 
     if order.update(permitted_params)
+      # Get notification preferences - only don't send if explicitly set to false
+      notification_channels = order.restaurant.admin_settings&.dig('notification_channels', 'orders') || {}
+      
       # If status changed from 'pending' to 'preparing'
       if old_status == 'pending' && order.status == 'preparing'
-        if order.contact_email.present?
+        if notification_channels['email'] != false && order.contact_email.present?
           OrderMailer.order_preparing(order).deliver_later
         end
-        if order.contact_phone.present?
+        if notification_channels['sms'] != false && order.contact_phone.present?
           restaurant_name = order.restaurant.name
           # Use custom SMS sender ID if set, otherwise use restaurant name
           sms_sender = order.restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
@@ -200,10 +206,10 @@ class OrdersController < ApplicationController
 
       # If status changed to 'ready'
       if old_status != 'ready' && order.status == 'ready'
-        if order.contact_email.present?
+        if notification_channels['email'] != false && order.contact_email.present?
           OrderMailer.order_ready(order).deliver_later
         end
-        if order.contact_phone.present?
+        if notification_channels['sms'] != false && order.contact_phone.present?
           restaurant_name = order.restaurant.name
           # Use custom SMS sender ID if set, otherwise use restaurant name
           sms_sender = order.restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
