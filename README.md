@@ -207,6 +207,12 @@ origins lambda { |source, env|
 - **Order**: Food orders
   - Belongs to restaurant
   - Optional user association for guest orders
+  - Has many order_acknowledgments for tracking admin notifications
+
+- **OrderAcknowledgment**: Tracks which orders have been acknowledged by which admin users
+  - Belongs to order
+  - Belongs to user
+  - Ensures order notifications persist across page refreshes
 
 - **Menu/MenuItem/Category**: Menu management
   - All belong to restaurant directly or through associations
@@ -430,6 +436,8 @@ The API is organized into several main groups:
 - `GET /orders/:id` - Get order details
 - `PATCH /orders/:id` - Update order status
 - `DELETE /orders/:id` - Cancel order
+- `GET /orders/unacknowledged` - Get orders not yet acknowledged by current user
+- `POST /orders/:id/acknowledge` - Mark an order as acknowledged by current user
 
 ### Menus
 - `GET /menus` - List menus
