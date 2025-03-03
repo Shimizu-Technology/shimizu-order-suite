@@ -5,6 +5,10 @@ class Order < ApplicationRecord
   default_scope { with_restaurant_scope }
   belongs_to :restaurant
   belongs_to :user, optional: true
+  
+  # Add associations for order acknowledgments
+  has_many :order_acknowledgments, dependent: :destroy
+  has_many :acknowledging_users, through: :order_acknowledgments, source: :user
 
   # AUTO-SET pickup time if not provided
   before_save :set_default_pickup_time

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_03_032358) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -152,6 +152,17 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["option_group_id"], name: "index_options_on_option_group_id"
+  end
+
+  create_table "order_acknowledgments", force: :cascade do |t|
+    t.bigint "order_id", null: false
+    t.bigint "user_id", null: false
+    t.datetime "acknowledged_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["order_id", "user_id"], name: "index_order_acknowledgments_on_order_id_and_user_id", unique: true
+    t.index ["order_id"], name: "index_order_acknowledgments_on_order_id"
+    t.index ["user_id"], name: "index_order_acknowledgments_on_user_id"
   end
 
   create_table "orders", force: :cascade do |t|
@@ -327,6 +338,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_02_28_035708) do
   add_foreign_key "operating_hours", "restaurants"
   add_foreign_key "option_groups", "menu_items"
   add_foreign_key "options", "option_groups"
+  add_foreign_key "order_acknowledgments", "orders"
+  add_foreign_key "order_acknowledgments", "users"
   add_foreign_key "orders", "restaurants"
   add_foreign_key "orders", "users"
   add_foreign_key "promo_codes", "restaurants"

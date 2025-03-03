@@ -96,7 +96,16 @@ Rails.application.routes.draw do
   end
 
   # For ordering
-  resources :orders, only: [:index, :show, :create, :update, :destroy]
+  resources :orders, only: [:index, :show, :create, :update, :destroy] do
+    member do
+      post :acknowledge
+    end
+    
+    collection do
+      get :unacknowledged
+    end
+  end
+  
   resources :promo_codes, only: [:index, :show, :create, :update, :destroy]
   resources :menus, only: [:index, :show, :create, :update, :destroy]
 

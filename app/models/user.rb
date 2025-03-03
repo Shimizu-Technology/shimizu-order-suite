@@ -5,6 +5,10 @@ require 'digest'
 
 class User < ApplicationRecord
   belongs_to :restaurant, optional: true
+  
+  # Add associations for order acknowledgments
+  has_many :order_acknowledgments, dependent: :destroy
+  has_many :acknowledged_orders, through: :order_acknowledgments, source: :order
 
   has_secure_password
 

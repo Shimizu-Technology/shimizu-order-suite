@@ -4,7 +4,7 @@ class OrdersController < ApplicationController
   
   # Mark create, show, new_since, index, update, and destroy as public endpoints that don't require restaurant context
   def public_endpoint?
-    action_name.in?(['create', 'show', 'new_since', 'index', 'update', 'destroy'])
+    action_name.in?(['create', 'show', 'new_since', 'index', 'update', 'destroy', 'acknowledge', 'unacknowledged'])
   end
 
   # GET /orders
@@ -39,6 +39,43 @@ class OrdersController < ApplicationController
     last_id = params[:id].to_i
     new_orders = Order.where("id > ?", last_id).order(:id)
     render json: new_orders, status: :ok
+  end
+  
+  # GET /orders/unacknowledged
+  def unacknowledged
+    unless current_user&.role.in?(%w[admin super_admin])
+      return render json: { error: "Forbidden" }, status: :forbidden
+    end
+    
+    # Get time threshold (default to 24 hours ago)
+    hours = params[:hours].present? ? params[:hours].to_i : 24
+    time_threshold = Time.current - hours.hours
+    
+    # Find orders that:
+    # 1. Are newer than the time threshold
+    # 2. Haven't been acknowledged by the current user
+    unacknowledged_orders = Order.where('created_at > ?', time_threshold)
+                                 .where.not(id: current_user.acknowledged_orders.pluck(:id))
+                                 .order(created_at: :desc)
+    
+    render json: unacknowledged_orders, status: :ok
+  end
+  
+  # POST /orders/:id/acknowledge
+  def acknowledge
+    order = Order.find(params[:id])
+    
+    # Create acknowledgment record
+    acknowledgment = OrderAcknowledgment.find_or_initialize_by(
+      order: order,
+      user: current_user
+    )
+    
+    if acknowledgment.new_record? && acknowledgment.save
+      render json: { message: "Order #{order.id} acknowledged" }, status: :ok
+    else
+      render json: { error: "Failed to acknowledge order" }, status: :unprocessable_entity
+    end
   end
 
   # POST /orders
