@@ -80,6 +80,8 @@ Rails.application.routes.draw do
     get 'analytics/revenue_trend',     to: 'analytics#revenue_trend'
     get 'analytics/top_items',         to: 'analytics#top_items'
     get 'analytics/income_statement',  to: 'analytics#income_statement'
+    get 'analytics/user_signups',      to: 'analytics#user_signups'
+    get 'analytics/user_activity_heatmap', to: 'analytics#user_activity_heatmap'
     
     # Restaurant settings
     get 'restaurant/allowed_origins',  to: 'restaurant#allowed_origins'

@@ -171,6 +171,84 @@ module Admin
       }
     end
 
+    # GET /admin/analytics/user_signups?start=YYYY-MM-DD&end=YYYY-MM-DD
+    def user_signups
+      start_date = params[:start].present? ? Date.parse(params[:start]) : (Date.today - 30)
+      end_date   = params[:end].present?   ? Date.parse(params[:end])   : Date.today
+      end_date = end_date.end_of_day
+
+      # Query users created within the date range, grouped by day
+      daily_signups = User
+        .where(created_at: start_date..end_date)
+        .group("DATE(created_at)")
+        .select("DATE(created_at) as date, COUNT(*) as count")
+        .order("date")
+
+      # Format the data for the frontend
+      data = daily_signups.map do |row|
+        {
+          date: row.date.to_s,
+          count: row.count.to_i
+        }
+      end
+
+      render json: {
+        start_date: start_date,
+        end_date: end_date,
+        signups: data
+      }
+    end
+
+    # GET /admin/analytics/user_activity_heatmap?start=YYYY-MM-DD&end=YYYY-MM-DD
+    def user_activity_heatmap
+      start_date = params[:start].present? ? Date.parse(params[:start]) : (Date.today - 30)
+      end_date   = params[:end].present?   ? Date.parse(params[:end])   : Date.today
+      end_date = end_date.end_of_day
+
+      # Query orders within the date range, grouped by day of week (0-6, Sunday-Saturday) and hour (0-23)
+      activity_data = Order
+        .where(created_at: start_date..end_date)
+        .where.not(status: 'cancelled')
+        .group("EXTRACT(DOW FROM created_at)")
+        .group("EXTRACT(HOUR FROM created_at)")
+        .count
+
+      # Transform the data for the frontend
+      # The keys in activity_data are arrays like [day, hour]
+      heatmap_data = []
+      
+      # Initialize with zeros for all day/hour combinations
+      (0..6).each do |day|
+        (0..23).each do |hour|
+          count = 0
+          
+          # Find the matching key in activity_data
+          activity_data.each do |key, value|
+            if key[0].to_i == day && key[1].to_i == hour
+              count = value
+              break
+            end
+          end
+          
+          heatmap_data << {
+            day: day,
+            hour: hour,
+            value: count
+          }
+        end
+      end
+
+      # Day names for reference
+      day_names = %w[Sunday Monday Tuesday Wednesday Thursday Friday Saturday]
+
+      render json: {
+        start_date: start_date,
+        end_date: end_date,
+        day_names: day_names,
+        heatmap: heatmap_data
+      }
+    end
+
     private
 
     def require_admin!
