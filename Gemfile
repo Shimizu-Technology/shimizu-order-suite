@@ -20,6 +20,8 @@ gem 'sidekiq'
 gem 'aws-sdk-s3', require: false
 # Pagination
 gem 'kaminari'
+# Braintree payment processing
+gem 'braintree'
 # Use the Puma web server [https://github.com/puma/puma]
 gem "puma", ">= 5.0"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]

@@ -34,7 +34,13 @@ class Order < ApplicationRecord
       
       # Add flag for orders requiring 24-hour advance notice
       'requires_advance_notice' => requires_advance_notice?,
-      'max_advance_notice_hours' => max_advance_notice_hours
+      'max_advance_notice_hours' => max_advance_notice_hours,
+      
+      # Payment fields
+      'payment_method' => payment_method,
+      'transaction_id' => transaction_id,
+      'payment_status' => payment_status,
+      'payment_amount' => payment_amount.to_f
     )
   end
 

@@ -131,6 +131,11 @@ Rails.application.routes.draw do
   # Polling route for orders
   get '/orders/new_since/:id', to: 'orders#new_since'
 
+  # Payment routes
+  get '/payments/client_token', to: 'payments#client_token'
+  post '/payments/process', to: 'payments#process_payment'
+  get '/payments/transaction/:id', to: 'payments#transaction'
+
   resources :inventory_statuses, only: [:index, :show, :update]
 
   # Profile

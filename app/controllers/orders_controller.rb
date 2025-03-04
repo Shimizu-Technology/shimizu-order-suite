@@ -111,9 +111,40 @@ class OrdersController < ApplicationController
       end
     end
 
+    # Check if transaction_id is provided or if we're in test mode
+    restaurant = Restaurant.find(params[:restaurant_id] || 1)
+    
+    # Initialize admin_settings if it doesn't exist
+    restaurant.admin_settings ||= {}
+    restaurant.admin_settings['payment_gateway'] ||= { 'test_mode' => true }
+    restaurant.save if restaurant.changed?
+    
+    # Default to test mode if not explicitly set to false
+    test_mode = restaurant.admin_settings.dig('payment_gateway', 'test_mode') != false
+    
+    Rails.logger.info("Restaurant: #{restaurant.id}, Test Mode: #{test_mode}")
+    Rails.logger.info("Order params: #{params[:order].inspect}")
+    
+    # Initialize order params if not present
+    params[:order] ||= {}
+    
+    # If we're in test mode, generate a test transaction ID
+    if test_mode
+      params[:order][:transaction_id] = "TEST-#{SecureRandom.hex(10)}"
+      params[:order][:payment_method] = params[:order][:payment_method] || 'credit_card'
+      Rails.logger.info("Generated test transaction ID: #{params[:order][:transaction_id]}")
+    elsif !params[:order][:transaction_id].present?
+      # If we're not in test mode and no transaction_id is provided, return an error
+      return render json: { error: "Payment required before creating order" }, status: :unprocessable_entity
+    end
+
     new_params = order_params_admin # Since create does not forcibly restrict user fields
     new_params[:restaurant_id] ||= params[:restaurant_id] || 1
     new_params[:user_id] = @current_user&.id
+    
+    # Set payment fields
+    new_params[:payment_status] = 'completed'
+    new_params[:payment_amount] = new_params[:total]
 
     @order = Order.new(new_params)
     @order.status = 'pending'
@@ -287,6 +318,10 @@ class OrdersController < ApplicationController
       :contact_name,
       :contact_phone,
       :contact_email,
+      :payment_method,
+      :transaction_id,
+      :payment_status,
+      :payment_amount,
       items: [
         :id,
         :name,

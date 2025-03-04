@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_04_005558) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_04_041200) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -182,6 +182,10 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_04_005558) do
     t.string "contact_name"
     t.string "contact_phone"
     t.string "contact_email"
+    t.string "payment_method"
+    t.string "transaction_id"
+    t.string "payment_status", default: "pending"
+    t.decimal "payment_amount", precision: 10, scale: 2
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
     t.index ["user_id", "created_at"], name: "index_orders_on_user_id_and_created_at"
