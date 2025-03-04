@@ -34,6 +34,7 @@ The backend is built with **Ruby on Rails** in API-only mode, with a multi-tenan
 - **SendGrid** for email notifications
 - **ClickSend** for SMS notifications
 - **Wassenger** for WhatsApp group messaging
+- **Braintree/PayPal** for payment processing (see /docs/payment_integration.md)
 
 ### Data Flow
 
