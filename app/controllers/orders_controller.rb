@@ -16,7 +16,25 @@ class OrdersController < ApplicationController
     else
       return render json: { error: "Unauthorized" }, status: :unauthorized
     end
-    render json: @orders, status: :ok
+    
+    # Add pagination
+    page = (params[:page] || 1).to_i
+    per_page = (params[:per_page] || 5).to_i
+    
+    # Get total count before pagination
+    total_count = @orders.count
+    
+    # Apply sorting and pagination
+    @orders = @orders.order(created_at: :desc)
+                    .offset((page - 1) * per_page)
+                    .limit(per_page)
+    
+    render json: {
+      orders: @orders,
+      total_count: total_count,
+      page: page,
+      per_page: per_page
+    }, status: :ok
   end
 
   # GET /orders/:id

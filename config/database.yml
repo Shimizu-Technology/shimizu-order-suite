@@ -27,4 +27,6 @@ production:
   adapter: postgresql
   encoding: unicode
   url: <%= ENV["DATABASE_URL"] %>
-  pool: 5
+  # Increased pool size to handle 4000-5000 concurrent users
+  # Can be configured via DB_POOL environment variable
+  pool: <%= ENV.fetch("DB_POOL") { 30 } %>

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_03_032358) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_04_005558) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -98,6 +98,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_03_032358) do
     t.boolean "featured"
     t.integer "stock_status"
     t.text "status_note"
+    t.index ["menu_id", "available"], name: "index_menu_items_on_menu_id_and_available"
+    t.index ["menu_id", "category"], name: "index_menu_items_on_menu_id_and_category"
     t.index ["menu_id"], name: "index_menu_items_on_menu_id"
   end
 
@@ -160,6 +162,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_03_032358) do
     t.datetime "acknowledged_at", default: -> { "CURRENT_TIMESTAMP" }, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["acknowledged_at"], name: "index_order_acknowledgments_on_acknowledged_at"
     t.index ["order_id", "user_id"], name: "index_order_acknowledgments_on_order_id_and_user_id", unique: true
     t.index ["order_id"], name: "index_order_acknowledgments_on_order_id"
     t.index ["user_id"], name: "index_order_acknowledgments_on_user_id"
@@ -179,7 +182,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_03_032358) do
     t.string "contact_name"
     t.string "contact_phone"
     t.string "contact_email"
+    t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
+    t.index ["user_id", "created_at"], name: "index_orders_on_user_id_and_created_at"
     t.index ["user_id"], name: "index_orders_on_user_id"
   end
 
@@ -310,6 +315,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_03_032358) do
     t.string "verification_code"
     t.datetime "verification_code_sent_at"
     t.index "lower((email)::text)", name: "index_users_on_lower_email", unique: true
+    t.index ["phone"], name: "index_users_on_phone_not_null", where: "(phone IS NOT NULL)"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["restaurant_id"], name: "index_users_on_restaurant_id"
   end

@@ -452,13 +452,78 @@ The API is organized into several main groups:
 - `DELETE /reservations/:id` - Cancel reservation
 
 ### Orders
-- `GET /orders` - List orders
+- `GET /orders` - List orders (paginated)
 - `POST /orders` - Create order
 - `GET /orders/:id` - Get order details
 - `PATCH /orders/:id` - Update order status
 - `DELETE /orders/:id` - Cancel order
 - `GET /orders/unacknowledged` - Get orders not yet acknowledged by current user
 - `POST /orders/:id/acknowledge` - Mark an order as acknowledged by current user
+
+### Performance Optimizations
+
+The API includes several performance optimizations to handle high traffic loads:
+
+#### 1. Database Optimizations
+
+- **Performance Indexes**: Critical indexes on frequently queried columns:
+  ```ruby
+  # Example from migration
+  add_index :orders, [:restaurant_id, :status, :created_at], name: 'index_orders_on_restaurant_status_date'
+  add_index :orders, [:user_id, :created_at], name: 'index_orders_on_user_created_at'
+  ```
+
+- **Connection Pooling**: Configurable database connection pool:
+  ```ruby
+  # In database.yml
+  production:
+    pool: <%= ENV.fetch("DB_POOL_SIZE", 30) %>
+  ```
+
+- **Redis Caching**: Redis-backed cache store with memory fallback:
+  ```ruby
+  # In production.rb
+  config.cache_store = :redis_cache_store, {
+    url: ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" },
+    error_handler: -> (method:, returning:, exception:) {
+      Rails.logger.error "Redis error: #{exception.message}"
+    }
+  }
+  ```
+
+#### 2. Pagination
+
+The API uses efficient pagination for list endpoints to ensure optimal performance with large datasets:
+
+```ruby
+# Example pagination implementation in OrdersController
+def index
+  # Get total count before pagination
+  total_count = @orders.count
+  
+  # Apply sorting and pagination
+  @orders = @orders.order(created_at: :desc)
+                  .offset((page - 1) * per_page)
+                  .limit(per_page)
+  
+  render json: {
+    orders: @orders,
+    total_count: total_count,
+    page: page,
+    per_page: per_page
+  }, status: :ok
+end
+```
+
+Paginated endpoints return a consistent response format:
+```json
+{
+  "orders": [...],
+  "total_count": 42,
+  "page": 1,
+  "per_page": 10
+}
+```
 
 ### Menus
 - `GET /menus` - List menus
