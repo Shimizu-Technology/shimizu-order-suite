@@ -191,9 +191,19 @@ class OrdersController < ApplicationController
           # Use custom SMS sender ID if set, otherwise use restaurant name
           sms_sender = order.restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
           
-          eta_str = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "soon"
-          txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
-                     "is now being prepared! ETA: #{eta_str}."
+          if order.requires_advance_notice?
+            # For orders with 24-hour notice items
+            eta_date = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%A, %B %-d") : "tomorrow"
+            eta_time = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "morning"
+            txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
+                       "is now being prepared! Your order contains items that require advance preparation. "\
+                       "Pickup time: #{eta_time} TOMORROW (#{eta_date})."
+          else
+            # For regular orders
+            eta_str = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "soon"
+            txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
+                       "is now being prepared! ETA: #{eta_str} TODAY."
+          end
 
           # Send SMS asynchronously
           SendSmsJob.perform_later(

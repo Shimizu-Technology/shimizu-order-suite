@@ -217,6 +217,7 @@ origins lambda { |source, env|
 - **Menu/MenuItem/Category**: Menu management
   - All belong to restaurant directly or through associations
   - Menu items can have option groups and options
+  - Menu items can have advance_notice_hours for items requiring preparation time (e.g., 24 hours)
 
 - **Layout/SeatSection/Seat**: Table layout configuration
   - All belong to restaurant through associations

@@ -42,12 +42,19 @@
             <!-- ETA section -->
             <% if @order.estimated_pickup_time.present? %>
               <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
-                Our estimated pickup time is 
-                <strong><%= @order.estimated_pickup_time.strftime("%-I:%M %p") %></strong>.
+                <% if @order.requires_advance_notice? %>
+                  Your order contains items that require advance preparation.
+                  <br><br>
+                  Our estimated pickup time is 
+                  <strong><%= @order.estimated_pickup_time.strftime("%-I:%M %p") %> TOMORROW, <%= @order.estimated_pickup_time.strftime("%A, %B %-d") %></strong>.
+                <% else %>
+                  Our estimated pickup time is 
+                  <strong><%= @order.estimated_pickup_time.strftime("%-I:%M %p") %> TODAY</strong>.
+                <% end %>
               </p>
             <% else %>
               <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
-                We’ll let you know once we set your pickup time.
+                We'll let you know once we set your pickup time.
               </p>
             <% end %>
 

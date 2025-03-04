@@ -30,8 +30,31 @@ class Order < ApplicationRecord
       # Contact fields
       'contact_name' => contact_name,
       'contact_phone' => contact_phone,
-      'contact_email' => contact_email
+      'contact_email' => contact_email,
+      
+      # Add flag for orders requiring 24-hour advance notice
+      'requires_advance_notice' => requires_advance_notice?,
+      'max_advance_notice_hours' => max_advance_notice_hours
     )
+  end
+
+  # Check if this order contains any items requiring advance notice (24 hours)
+  def requires_advance_notice?
+    max_advance_notice_hours >= 24
+  end
+  
+  # Get the maximum advance notice hours required by any item in this order
+  def max_advance_notice_hours
+    @max_advance_notice_hours ||= begin
+      max_hours = 0
+      items.each do |item|
+        menu_item = MenuItem.find_by(id: item['id'])
+        if menu_item && menu_item.advance_notice_hours.to_i > max_hours
+          max_hours = menu_item.advance_notice_hours.to_i
+        end
+      end
+      max_hours
+    end
   end
 
   private
@@ -39,15 +62,15 @@ class Order < ApplicationRecord
   def set_default_pickup_time
     return unless estimated_pickup_time.blank?
 
-    # Check if any item needs 24 hours
-    has_24hr_item = items.any? do |item|
-      menu_item = MenuItem.find_by(id: item['id'])
-      menu_item&.advance_notice_hours.to_i >= 24
-    end
-
-    if has_24hr_item
-      self.estimated_pickup_time = Time.current + 24.hours
+    if requires_advance_notice?
+      # For orders with 24-hour notice items, set pickup time to next day at 10 AM
+      tomorrow = Time.current.in_time_zone(restaurant.time_zone).tomorrow
+      self.estimated_pickup_time = Time.new(
+        tomorrow.year, tomorrow.month, tomorrow.day, 10, 0, 0, 
+        Time.find_zone(restaurant.time_zone)&.formatted_offset || "+10:00"
+      )
     else
+      # For regular orders, set a default of 20 minutes
       self.estimated_pickup_time = Time.current + 20.minutes
     end
   end
