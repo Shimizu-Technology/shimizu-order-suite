@@ -15,6 +15,7 @@ class MenuItem < ApplicationRecord
   validates :name, presence: true
   validates :price, numericality: { greater_than_or_equal_to: 0 }
   validates :advance_notice_hours, numericality: { greater_than_or_equal_to: 0 }
+  validate :must_have_at_least_one_category, on: [:create, :update]
   
   # Override with_restaurant_scope for indirect restaurant association
   def self.with_restaurant_scope
@@ -77,6 +78,13 @@ class MenuItem < ApplicationRecord
       if currently_featured >= 4
         errors.add(:featured, "cannot exceed 4 total featured items.")
       end
+    end
+  end
+  
+  # Ensure menu item belongs to at least one category
+  def must_have_at_least_one_category
+    if categories.empty? && category_ids.blank?
+      errors.add(:base, "Menu item must be assigned to at least one category")
     end
   end
 end

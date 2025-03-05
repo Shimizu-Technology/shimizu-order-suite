@@ -75,15 +75,15 @@ class MenuItemsController < ApplicationController
     Rails.logger.info "=== MenuItemsController#create ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
-    @menu_item = MenuItem.new(menu_item_params.except(:image, :category_ids))
+    @menu_item = MenuItem.new(menu_item_params.except(:image))
+    
+    # Assign categories before saving if category_ids param is given
+    if params[:menu_item][:category_ids].present?
+      @menu_item.category_ids = Array(params[:menu_item][:category_ids])
+    end
 
     if @menu_item.save
       Rails.logger.info "Created MenuItem => #{@menu_item.inspect}"
-
-      # Assign categories if category_ids param is given
-      if params[:menu_item][:category_ids].present?
-        @menu_item.category_ids = params[:menu_item][:category_ids]
-      end
 
       # Handle image upload if present
       file = menu_item_params[:image]
@@ -108,14 +108,14 @@ class MenuItemsController < ApplicationController
 
     @menu_item = MenuItem.find(params[:id])
     Rails.logger.info "Updating MenuItem => #{@menu_item.id}"
+    
+    # Assign categories before updating if category_ids param is given
+    if params[:menu_item][:category_ids].present?
+      @menu_item.category_ids = Array(params[:menu_item][:category_ids])
+    end
 
-    if @menu_item.update(menu_item_params.except(:image, :category_ids))
+    if @menu_item.update(menu_item_params.except(:image))
       Rails.logger.info "Update success => #{@menu_item.inspect}"
-
-      # Assign categories if category_ids param is given
-      if params[:menu_item][:category_ids].present?
-        @menu_item.category_ids = params[:menu_item][:category_ids]
-      end
 
       # Handle image if present
       file = menu_item_params[:image]
