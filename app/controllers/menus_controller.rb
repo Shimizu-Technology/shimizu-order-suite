@@ -7,9 +7,9 @@ class MenusController < ApplicationController
   # GET /menus
   def index
     if params[:restaurant_id].present?
-      @menus = Menu.where(restaurant_id: params[:restaurant_id])
+      @menus = Menu.where(restaurant_id: params[:restaurant_id]).order(created_at: :asc)
     else
-      @menus = Menu.all
+      @menus = Menu.all.order(created_at: :asc)
     end
     
     render json: @menus
