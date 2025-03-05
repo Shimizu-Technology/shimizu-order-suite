@@ -16,6 +16,7 @@ class Restaurant < ApplicationRecord
   has_many :seats,            through: :seat_sections
 
   belongs_to :current_layout, class_name: "Layout", optional: true
+  belongs_to :current_menu, class_name: "Menu", optional: true
 
   validates :time_zone, presence: true
 
@@ -61,5 +62,13 @@ class Restaurant < ApplicationRecord
   def current_seats
     return [] unless current_layout
     current_layout.seat_sections.includes(:seats).flat_map(&:seats)
+  end
+  
+  #--------------------------------------------------------------------------
+  # Helper to set the active menu:
+  #--------------------------------------------------------------------------
+  def set_active_menu(menu_id)
+    menu = self.menus.find(menu_id)
+    update(current_menu_id: menu.id)
   end
 end

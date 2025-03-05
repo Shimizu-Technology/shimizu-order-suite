@@ -219,6 +219,8 @@ origins lambda { |source, env|
   - All belong to restaurant directly or through associations
   - Menu items can have option groups and options
   - Menu items can have advance_notice_hours for items requiring preparation time (e.g., 24 hours)
+  - Restaurants can have multiple menus with one set as active via current_menu_id
+  - Menus can be cloned to create variations for special events
 
 - **Layout/SeatSection/Seat**: Table layout configuration
   - All belong to restaurant through associations

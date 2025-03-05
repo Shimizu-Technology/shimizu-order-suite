@@ -37,7 +37,12 @@ Rails.application.routes.draw do
     end
   end
 
-  resources :menus, only: [:index, :show, :create, :update, :destroy]
+  resources :menus, only: [:index, :show, :create, :update, :destroy] do
+    member do
+      post :set_active
+      post :clone
+    end
+  end
   resources :menu_items, only: [:index, :show, :create, :update, :destroy]
   resources :notifications, only: [:index, :show, :create, :update, :destroy]
 

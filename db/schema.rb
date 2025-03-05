@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_04_041200) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_05_013957) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -239,7 +239,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_04_041200) do
     t.jsonb "admin_settings", default: {}, null: false
     t.string "allowed_origins", default: [], array: true
     t.string "phone_number"
+    t.bigint "current_menu_id"
     t.index ["current_layout_id"], name: "index_restaurants_on_current_layout_id"
+    t.index ["current_menu_id"], name: "index_restaurants_on_current_menu_id"
   end
 
   create_table "seat_allocations", force: :cascade do |t|
@@ -355,6 +357,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_04_041200) do
   add_foreign_key "promo_codes", "restaurants"
   add_foreign_key "reservations", "restaurants"
   add_foreign_key "restaurants", "layouts", column: "current_layout_id", on_delete: :nullify
+  add_foreign_key "restaurants", "menus", column: "current_menu_id"
   add_foreign_key "seat_allocations", "reservations"
   add_foreign_key "seat_allocations", "seats"
   add_foreign_key "seat_allocations", "waitlist_entries"
