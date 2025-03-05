@@ -60,7 +60,7 @@ class PromoCodesController < ApplicationController
 
   def promo_code_params
     params.require(:promo_code).permit(:code, :discount_percent, :valid_from, :valid_until,
-                                       :max_uses, :current_uses)
+                                       :max_uses, :current_uses, :restaurant_id)
   end
 
   def is_admin?

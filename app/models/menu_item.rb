@@ -32,11 +32,11 @@ class MenuItem < ApplicationRecord
   validate :limit_featured_items, on: [:create, :update]
 
   # Stock status enum & optional note
-  enum stock_status: {
+  enum :stock_status, {
     in_stock: 0,
     out_of_stock: 1,
     low_stock: 2
-  }, _prefix: true
+  }, prefix: true
 
   scope :currently_available, -> {
     where(available: true)

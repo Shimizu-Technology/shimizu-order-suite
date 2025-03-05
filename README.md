@@ -578,16 +578,40 @@ All endpoints automatically filter data by the restaurant context from:
 
 ## **Testing**
 
-Run the test suite with:
-
-```bash
-rails test
-```
-
-Or with RSpec (if configured):
+The project uses RSpec for testing. Run the test suite with:
 
 ```bash
 bundle exec rspec
+```
+
+### RSpec Configuration
+
+The test suite is configured with:
+
+- **Progress Format**: Shows green dots for passing tests (configure in `.rspec`)
+- **Documentation Format**: Use `--format documentation` in `.rspec` for detailed output
+- **Fixture Paths**: Uses array-based fixture paths for Rails 7.1 compatibility
+- **Factory Bot**: Integration for easy test data creation
+- **Controller Specs**: Helper methods for authentication and authorization testing
+
+### Running Specific Tests
+
+Run specific test files:
+
+```bash
+bundle exec rspec spec/models/user_spec.rb
+```
+
+Run specific test groups:
+
+```bash
+bundle exec rspec spec/controllers/
+```
+
+Run tests with specific tags:
+
+```bash
+bundle exec rspec --tag focus
 ```
 
 ---

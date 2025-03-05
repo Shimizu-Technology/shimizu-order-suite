@@ -54,4 +54,16 @@ group :development, :test do
 
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
+  
+  # Testing gems
+  gem 'rspec-rails'
+  gem 'shoulda-matchers'  # For testing ActiveRecord relationships and validations
+  gem 'factory_bot_rails' # You already have factories but this makes the integration explicit
+  # faker is already included in the main gems section
+  gem 'database_cleaner-active_record' # For cleaning test database between runs
+end
+
+group :test do
+  gem 'simplecov', require: false # For tracking test coverage
+  gem 'webmock'    # For mocking external API calls
 end
