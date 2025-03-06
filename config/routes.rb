@@ -14,7 +14,14 @@ Rails.application.routes.draw do
   patch '/password/reset',  to: 'passwords#reset'
 
   # Standard REST resources
-  resources :restaurants, only: [:index, :show, :create, :update, :destroy]
+  resources :restaurants, only: [:index, :show, :create, :update, :destroy] do
+    member do
+      patch :set_current_event
+      post :validate_vip_code
+      patch :toggle_vip_mode
+    end
+    resources :special_events, only: [:index]
+  end
   resources :seat_sections, only: [:index, :show, :create, :update, :destroy]
 
   resources :seats, only: [:index, :show, :create, :update, :destroy] do
@@ -75,7 +82,15 @@ Rails.application.routes.draw do
     resources :operating_hours, only: [:index, :update]
 
     # Special Events
-    resources :special_events, only: [:index, :show, :create, :update, :destroy]
+    resources :special_events, only: [:index, :show, :create, :update, :destroy] do
+      resources :vip_access_codes, only: [:index, :create]
+      member do
+        post :set_as_current
+      end
+    end
+    
+    # VIP Access Codes (for update/delete operations that don't need special_event_id)
+    resources :vip_access_codes, only: [:update, :destroy]
 
     # Admin categories => for create/update/delete
     resources :categories, only: [:index, :create, :update, :destroy]
@@ -146,4 +161,8 @@ Rails.application.routes.draw do
   # Profile
   get   '/profile', to: 'users#show_profile'
   patch '/profile', to: 'users#update_profile'
+  
+  # VIP Access
+  post '/vip_access/validate', to: 'vip_access#validate'
+  post '/vip_access/use_code', to: 'vip_access#use_code'
 end

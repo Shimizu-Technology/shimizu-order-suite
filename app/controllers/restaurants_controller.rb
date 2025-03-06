@@ -1,11 +1,11 @@
 # app/controllers/restaurants_controller.rb
 class RestaurantsController < ApplicationController
   before_action :authorize_request, except: [:show]
-  before_action :set_restaurant, only: [:show, :update, :destroy]
+  before_action :set_restaurant, only: [:show, :update, :destroy, :set_current_event, :validate_vip_code, :toggle_vip_mode]
   
-  # Override public_endpoint? to mark index, show, and update as public endpoints
+  # Override public_endpoint? to mark index, show, update, set_current_event, and validate_vip_code as public endpoints
   def public_endpoint?
-    action_name.in?(['index', 'show', 'update'])
+    ['index', 'show', 'toggle_vip_mode'].include?(action_name)
   end
 
   # GET /restaurants
@@ -90,6 +90,78 @@ class RestaurantsController < ApplicationController
     @restaurant.destroy
     head :no_content
   end
+  
+  # PATCH /restaurants/:id/set_current_event
+  def set_current_event
+    unless current_user.role.in?(%w[admin super_admin]) || current_user.restaurant_id == @restaurant.id
+      return render json: { error: "Forbidden" }, status: :forbidden
+    end
+
+    event_id = params[:event_id]
+    
+    if event_id.present?
+      # Find the event and make sure it belongs to this restaurant
+      event = @restaurant.special_events.find_by(id: event_id)
+      
+      if event.nil?
+        return render json: { error: "Event not found" }, status: :not_found
+      end
+      
+      # Set the current event
+      if @restaurant.update(current_event_id: event.id)
+        render json: restaurant_json(@restaurant)
+      else
+        render json: { errors: @restaurant.errors.full_messages }, status: :unprocessable_entity
+      end
+    else
+      # Clear the current event
+      if @restaurant.update(current_event_id: nil)
+        render json: restaurant_json(@restaurant)
+      else
+        render json: { errors: @restaurant.errors.full_messages }, status: :unprocessable_entity
+      end
+    end
+  end
+  
+  # POST /restaurants/:id/validate_vip_code
+  def validate_vip_code
+    code = params[:code]
+    
+    if code.blank?
+      return render json: { valid: false, message: "VIP code is required" }, status: :bad_request
+    end
+    
+    # Check if the restaurant has VIP-only checkout enabled
+    unless @restaurant.vip_only_checkout?
+      return render json: { valid: true, message: "VIP access not required" }
+    end
+    
+    # Validate the code
+    if @restaurant.validate_vip_code(code)
+      render json: { valid: true, message: "Valid VIP code" }
+    else
+      render json: { valid: false, message: "Invalid VIP code" }, status: :unauthorized
+    end
+  end
+  
+  # PATCH /restaurants/:id/toggle_vip_mode
+  def toggle_vip_mode
+    @restaurant = Restaurant.find(params[:id])
+    authorize @restaurant, :update?
+    
+    if @restaurant.update(vip_enabled: params[:vip_only_mode])
+      render json: { 
+        success: true, 
+        vip_only_mode: @restaurant.vip_enabled,
+        restaurant: @restaurant
+      }
+    else
+      render json: { 
+        success: false, 
+        errors: @restaurant.errors.full_messages 
+      }, status: :unprocessable_entity
+    end
+  end
 
   private
 
@@ -107,6 +179,8 @@ class RestaurantsController < ApplicationController
       :default_reservation_length,
       :time_slot_interval,
       :time_zone,
+      :vip_enabled,
+      :code_prefix,
       admin_settings: {},
       allowed_origins: []
     )
@@ -127,6 +201,7 @@ class RestaurantsController < ApplicationController
       phone_number:               restaurant.phone_number,
       layout_type:                restaurant.layout_type,
       current_layout_id:          restaurant.current_layout_id,
+      current_event_id:           restaurant.current_event_id,
       default_reservation_length: restaurant.default_reservation_length,
       time_slot_interval:         restaurant.time_slot_interval,
       time_zone:                  restaurant.time_zone,
@@ -135,7 +210,10 @@ class RestaurantsController < ApplicationController
       # Calculate seat count directly instead of using the private method
       current_seat_count:         restaurant.current_layout ? 
                                   restaurant.current_layout.seat_sections.includes(:seats).flat_map(&:seats).count : 
-                                  0
+                                  0,
+      vip_only_checkout:          restaurant.vip_only_checkout?,
+      vip_only_mode:              restaurant.vip_enabled,
+      code_prefix:                restaurant.code_prefix
     }
   end
 end

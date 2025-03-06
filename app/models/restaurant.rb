@@ -9,6 +9,7 @@ class Restaurant < ApplicationRecord
   has_many :menus,            dependent: :destroy
   has_many :operating_hours, dependent: :destroy
   has_many :special_events,   dependent: :destroy
+  has_many :vip_access_codes, dependent: :destroy
 
   # Layout-related associations
   has_many :layouts,          dependent: :destroy
@@ -17,6 +18,7 @@ class Restaurant < ApplicationRecord
 
   belongs_to :current_layout, class_name: "Layout", optional: true
   belongs_to :current_menu, class_name: "Menu", optional: true
+  belongs_to :current_event, class_name: "SpecialEvent", optional: true
 
   validates :time_zone, presence: true
 
@@ -48,17 +50,9 @@ class Restaurant < ApplicationRecord
     end
   end
   
-  private
-  
-  def normalize_origin(origin)
-    # Remove trailing slash if present
-    origin.sub(/\/$/, '')
-  end
-
   #--------------------------------------------------------------------------
   # Helper if you only want seats from the "active" layout:
   #--------------------------------------------------------------------------
-  # Make this method public so it can be called from controllers
   def current_seats
     return [] unless current_layout
     current_layout.seat_sections.includes(:seats).flat_map(&:seats)
@@ -70,5 +64,59 @@ class Restaurant < ApplicationRecord
   def set_active_menu(menu_id)
     menu = self.menus.find(menu_id)
     update(current_menu_id: menu.id)
+  end
+  
+  #--------------------------------------------------------------------------
+  # VIP-related methods:
+  #--------------------------------------------------------------------------
+  
+  # @deprecated Use vip_enabled instead. This method will be removed in a future version.
+  def vip_only_mode=(value)
+    ActiveSupport::Deprecation.warn("vip_only_mode is deprecated. Use vip_enabled instead.")
+    self.vip_enabled = value
+  end
+  
+  # @deprecated Use vip_enabled instead. This method will be removed in a future version.
+  def vip_only_mode
+    ActiveSupport::Deprecation.warn("vip_only_mode is deprecated. Use vip_enabled instead.")
+    vip_enabled
+  end
+  
+  def vip_only_checkout?
+    # Check direct flag first, fall back to event-based check for backward compatibility
+    vip_enabled || current_event&.vip_only?
+  end
+  
+  def validate_vip_code(code)
+    return true unless vip_only_checkout?
+    
+    # Check directly associated codes first
+    return true if vip_access_codes.available.exists?(code: code)
+    
+    # Fall back to event codes for backward compatibility
+    current_event&.valid_vip_code?(code)
+  end
+  
+  def use_vip_code!(code)
+    return unless vip_only_checkout?
+    
+    # Try to find and use directly associated code
+    vip_code = vip_access_codes.available.find_by(code: code)
+    return vip_code.use! if vip_code
+    
+    # Fall back to event-based code
+    current_event&.use_vip_code!(code)
+  end
+  
+  def set_current_event(event_id)
+    event = self.special_events.find(event_id)
+    update(current_event_id: event.id)
+  end
+  
+  private
+  
+  def normalize_origin(origin)
+    # Remove trailing slash if present
+    origin.sub(/\/$/, '')
   end
 end

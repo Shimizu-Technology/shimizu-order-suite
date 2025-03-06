@@ -114,6 +114,28 @@ class OrdersController < ApplicationController
     # Check if transaction_id is provided or if we're in test mode
     restaurant = Restaurant.find(params[:restaurant_id] || 1)
     
+    # Check if VIP-only checkout is enabled and validate VIP code if needed
+    if restaurant.vip_only_checkout?
+      vip_code = params[:order][:vip_code]
+      
+      # If no VIP code provided or code is invalid, return error
+      unless vip_code.present? && restaurant.validate_vip_code(vip_code)
+        return render json: { 
+          error: "VIP access code required for checkout", 
+          vip_required: true 
+        }, status: :unauthorized
+      end
+      
+      # Use the VIP code (increment usage counter)
+      restaurant.use_vip_code!(vip_code)
+      
+      # If the user is logged in, associate the code with them
+      if @current_user.present?
+        code_record = VipAccessCode.find_by(code: vip_code, restaurant_id: restaurant.id)
+        code_record.update(user_id: @current_user.id) if code_record.present?
+      end
+    end
+    
     # Initialize admin_settings if it doesn't exist
     restaurant.admin_settings ||= {}
     restaurant.admin_settings['payment_gateway'] ||= { 'test_mode' => true }
@@ -313,6 +335,7 @@ class OrdersController < ApplicationController
       :status,
       :total,
       :promo_code,
+      :vip_code,
       :special_instructions,
       :estimated_pickup_time,
       :contact_name,

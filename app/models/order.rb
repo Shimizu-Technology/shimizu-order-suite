@@ -40,7 +40,10 @@ class Order < ApplicationRecord
       'payment_method' => payment_method,
       'transaction_id' => transaction_id,
       'payment_status' => payment_status,
-      'payment_amount' => payment_amount.to_f
+      'payment_amount' => payment_amount.to_f,
+      
+      # VIP code
+      'vip_code' => vip_code
     )
   end
 

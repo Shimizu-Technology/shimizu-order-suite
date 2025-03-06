@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_05_013957) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_06_095809) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -186,6 +186,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_05_013957) do
     t.string "transaction_id"
     t.string "payment_status", default: "pending"
     t.decimal "payment_amount", precision: 10, scale: 2
+    t.string "vip_code"
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
     t.index ["user_id", "created_at"], name: "index_orders_on_user_id_and_created_at"
@@ -240,6 +241,11 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_05_013957) do
     t.string "allowed_origins", default: [], array: true
     t.string "phone_number"
     t.bigint "current_menu_id"
+    t.bigint "current_event_id"
+    t.boolean "vip_only_mode", default: false, comment: "DEPRECATED: Use vip_enabled instead. This column will be removed in a future version."
+    t.string "code_prefix"
+    t.boolean "vip_enabled", default: false
+    t.index ["current_event_id"], name: "index_restaurants_on_current_event_id"
     t.index ["current_layout_id"], name: "index_restaurants_on_current_layout_id"
     t.index ["current_menu_id"], name: "index_restaurants_on_current_menu_id"
   end
@@ -301,6 +307,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_05_013957) do
     t.boolean "closed", default: false
     t.time "start_time"
     t.time "end_time"
+    t.boolean "vip_only_checkout", default: false
+    t.string "code_prefix"
     t.index ["restaurant_id", "event_date"], name: "index_special_events_on_restaurant_id_and_event_date", unique: true
     t.index ["restaurant_id"], name: "index_special_events_on_restaurant_id"
   end
@@ -324,6 +332,25 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_05_013957) do
     t.index ["phone"], name: "index_users_on_phone_not_null", where: "(phone IS NOT NULL)"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["restaurant_id"], name: "index_users_on_restaurant_id"
+  end
+
+  create_table "vip_access_codes", force: :cascade do |t|
+    t.bigint "special_event_id"
+    t.bigint "restaurant_id", null: false
+    t.string "code", null: false
+    t.string "name"
+    t.integer "max_uses"
+    t.integer "current_uses", default: 0
+    t.datetime "expires_at"
+    t.boolean "is_active", default: true
+    t.bigint "user_id"
+    t.string "group_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["code", "restaurant_id"], name: "index_vip_access_codes_on_code_and_restaurant_id", unique: true
+    t.index ["restaurant_id"], name: "index_vip_access_codes_on_restaurant_id"
+    t.index ["special_event_id"], name: "index_vip_access_codes_on_special_event_id"
+    t.index ["user_id"], name: "index_vip_access_codes_on_user_id"
   end
 
   create_table "waitlist_entries", force: :cascade do |t|
@@ -358,6 +385,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_05_013957) do
   add_foreign_key "reservations", "restaurants"
   add_foreign_key "restaurants", "layouts", column: "current_layout_id", on_delete: :nullify
   add_foreign_key "restaurants", "menus", column: "current_menu_id"
+  add_foreign_key "restaurants", "special_events", column: "current_event_id"
   add_foreign_key "seat_allocations", "reservations"
   add_foreign_key "seat_allocations", "seats"
   add_foreign_key "seat_allocations", "waitlist_entries"
@@ -365,5 +393,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_05_013957) do
   add_foreign_key "seats", "seat_sections"
   add_foreign_key "special_events", "restaurants"
   add_foreign_key "users", "restaurants"
+  add_foreign_key "vip_access_codes", "restaurants"
+  add_foreign_key "vip_access_codes", "special_events"
+  add_foreign_key "vip_access_codes", "users"
   add_foreign_key "waitlist_entries", "restaurants"
 end

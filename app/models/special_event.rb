@@ -3,6 +3,7 @@ class SpecialEvent < ApplicationRecord
   # Default scope to current restaurant
   default_scope { with_restaurant_scope }
   belongs_to :restaurant
+  has_many :vip_access_codes, dependent: :destroy
 
   validates :event_date, presence: true
 
@@ -10,6 +11,22 @@ class SpecialEvent < ApplicationRecord
   validate :end_time_after_start_time, if: -> { start_time.present? && end_time.present? }
 
   before_save :clamp_max_capacity
+  
+  # VIP-related methods
+  def vip_only?
+    vip_only_checkout
+  end
+  
+  def valid_vip_code?(code)
+    return true unless vip_only_checkout
+    vip_access_codes.available.exists?(code: code)
+  end
+  
+  def use_vip_code!(code)
+    return unless vip_only_checkout
+    vip_code = vip_access_codes.available.find_by(code: code)
+    vip_code&.use!
+  end
 
   private
 
