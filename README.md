@@ -189,9 +189,10 @@ origins lambda { |source, env|
 ## **Key Models and Relationships**
 
 - **Restaurant**: The central model for tenant isolation
-  - Has many users, menus, layouts, reservations, orders
+  - Has many users, menus, layouts, reservations, orders, vip_access_codes
   - Stores configuration including allowed CORS origins
   - Contains basic information like name, address, phone number, time zone
+  - Includes vip_enabled flag to toggle VIP-only checkout mode
 
 - **SiteSetting**: Stores site-wide settings for each restaurant
   - Belongs to a restaurant
@@ -209,11 +210,19 @@ origins lambda { |source, env|
   - Belongs to restaurant
   - Optional user association for guest orders
   - Has many order_acknowledgments for tracking admin notifications
+  - Optional vip_access_code association for VIP-only orders
 
 - **OrderAcknowledgment**: Tracks which orders have been acknowledged by which admin users
   - Belongs to order
   - Belongs to user
   - Ensures order notifications persist across page refreshes
+
+- **VipAccessCode**: VIP access control
+  - Belongs to restaurant
+  - Has many orders
+  - Contains code, name, usage limits, and expiration
+  - Tracks current usage count
+  - Can be individual or part of a group (via group_id)
 
 - **Menu/MenuItem/Category**: Menu management
   - All belong to restaurant directly or through associations
@@ -540,6 +549,16 @@ Paginated endpoints return a consistent response format:
 - `POST /admin/restaurant/allowed_origins` - Update allowed CORS origins
 - `GET /admin/site_settings` - Get site-wide settings
 - `PATCH /admin/site_settings` - Update site-wide settings
+
+### VIP Access
+- `GET /vip_access/codes` - List VIP access codes
+- `POST /vip_access/generate_codes` - Generate individual or group VIP codes
+- `PATCH /vip_access/codes/:id` - Update VIP code details
+- `DELETE /vip_access/codes/:id` - Deactivate a VIP code
+- `POST /vip_access/codes/:id/archive` - Archive a VIP code
+- `GET /vip_access/codes/:id/usage` - Get usage statistics for a VIP code
+- `POST /restaurants/:id/vip_access/validate_code` - Validate a VIP code
+- `PATCH /restaurants/:id/toggle_vip_mode` - Enable/disable VIP-only checkout mode
 
 ### Restaurant Scope
 All endpoints automatically filter data by the restaurant context from:
