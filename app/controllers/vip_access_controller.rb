@@ -45,6 +45,10 @@ class VipAccessController < ApplicationController
     else
       @codes = @restaurant.vip_access_codes.where(archived: false)
     end
+    
+    # Sort by creation date (newest first) by default
+    @codes = @codes.order(created_at: :desc)
+    
     render json: @codes
   end
   
