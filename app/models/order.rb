@@ -5,6 +5,7 @@ class Order < ApplicationRecord
   default_scope { with_restaurant_scope }
   belongs_to :restaurant
   belongs_to :user, optional: true
+  belongs_to :vip_access_code, optional: true
   
   # Add associations for order acknowledgments
   has_many :order_acknowledgments, dependent: :destroy

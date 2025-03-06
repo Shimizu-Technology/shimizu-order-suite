@@ -14,7 +14,32 @@ Rails.application.routes.draw do
   patch '/password/reset',  to: 'passwords#reset'
 
   # Standard REST resources
-  resources :restaurants, only: [:index, :show, :create, :update, :destroy]
+  resources :restaurants, only: [:index, :show, :create, :update, :destroy] do
+    member do
+      patch :toggle_vip_mode
+      patch :set_current_event
+    end
+    
+    resources :vip_access, only: [] do
+      collection do
+        post :validate_code
+      end
+    end
+  end
+  
+  # VIP Access routes
+  resources :vip_access, only: [] do
+    collection do
+      get :codes
+      post :generate_codes
+    end
+  end
+  
+  # VIP Access Codes routes
+  delete '/vip_access/codes/:id', to: 'vip_access#deactivate_code'
+  patch '/vip_access/codes/:id', to: 'vip_access#update_code'
+  post '/vip_access/codes/:id/archive', to: 'vip_access#archive_code'
+  get '/vip_access/codes/:id/usage', to: 'vip_access#code_usage'
   resources :seat_sections, only: [:index, :show, :create, :update, :destroy]
 
   resources :seats, only: [:index, :show, :create, :update, :destroy] do
@@ -75,7 +100,9 @@ Rails.application.routes.draw do
     resources :operating_hours, only: [:index, :update]
 
     # Special Events
-    resources :special_events, only: [:index, :show, :create, :update, :destroy]
+    resources :special_events, only: [:index, :show, :create, :update, :destroy] do
+      resources :vip_access_codes, shallow: true
+    end
 
     # Admin categories => for create/update/delete
     resources :categories, only: [:index, :create, :update, :destroy]

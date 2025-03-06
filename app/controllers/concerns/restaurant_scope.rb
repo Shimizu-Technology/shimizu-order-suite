@@ -9,6 +9,13 @@ module RestaurantScope
   private
   
   def set_restaurant_scope
+    # Skip restaurant scope check for toggle_vip_mode and set_current_event actions
+    if controller_name == 'restaurants' && (action_name == 'toggle_vip_mode' || action_name == 'set_current_event')
+      @current_restaurant = Restaurant.unscoped.find_by(id: params[:id])
+      ActiveRecord::Base.current_restaurant = @current_restaurant if ActiveRecord::Base.respond_to?(:current_restaurant=)
+      return
+    end
+    
     # For super_admin users who can access multiple restaurants
     if current_user&.role == 'super_admin'
       # Allow super_admin to specify which restaurant to work with

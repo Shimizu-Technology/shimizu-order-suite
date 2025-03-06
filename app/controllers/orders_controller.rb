@@ -114,6 +114,40 @@ class OrdersController < ApplicationController
     # Check if transaction_id is provided or if we're in test mode
     restaurant = Restaurant.find(params[:restaurant_id] || 1)
     
+    # Check for VIP-only restrictions
+    if restaurant.vip_only_checkout?
+      vip_code = params[:order][:vip_code]
+      
+      if vip_code.blank?
+        return render json: { 
+          error: "This restaurant is currently only accepting orders from VIP guests. Please enter a VIP code.",
+          vip_required: true 
+        }, status: :unprocessable_entity
+      end
+      
+      # Find the VIP access code to associate with the order
+      vip_access_code = VipAccessCode.find_by(restaurant_id: restaurant.id, code: vip_code)
+      
+      # Check if the code exists and is available
+      if vip_access_code && vip_access_code.available?
+        # Mark that the code was used (after validation but before saving the order)
+        vip_access_code.use!
+      else
+        # Provide a more specific error message if the code exists but has reached its usage limit
+        if vip_access_code && vip_access_code.max_uses && vip_access_code.current_uses >= vip_access_code.max_uses
+          return render json: { 
+            error: "This VIP code has reached its maximum usage limit.",
+            vip_required: true 
+          }, status: :unprocessable_entity
+        else
+          return render json: { 
+            error: "Invalid VIP code. Please check your code and try again.",
+            vip_required: true 
+          }, status: :unprocessable_entity
+        end
+      end
+    end
+    
     # Initialize admin_settings if it doesn't exist
     restaurant.admin_settings ||= {}
     restaurant.admin_settings['payment_gateway'] ||= { 'test_mode' => true }
@@ -141,6 +175,11 @@ class OrdersController < ApplicationController
     new_params = order_params_admin # Since create does not forcibly restrict user fields
     new_params[:restaurant_id] ||= params[:restaurant_id] || 1
     new_params[:user_id] = @current_user&.id
+    
+    # Set VIP access code if found
+    if defined?(vip_access_code) && vip_access_code
+      new_params[:vip_access_code_id] = vip_access_code.id
+    end
     
     # Set payment fields
     new_params[:payment_status] = 'completed'
@@ -322,6 +361,7 @@ class OrdersController < ApplicationController
       :transaction_id,
       :payment_status,
       :payment_amount,
+      :vip_code,
       items: [
         :id,
         :name,

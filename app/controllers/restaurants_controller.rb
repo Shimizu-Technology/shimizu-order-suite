@@ -3,9 +3,9 @@ class RestaurantsController < ApplicationController
   before_action :authorize_request, except: [:show]
   before_action :set_restaurant, only: [:show, :update, :destroy]
   
-  # Override public_endpoint? to mark index, show, and update as public endpoints
+  # Override public_endpoint? to mark index, show, update, and toggle_vip_mode as public endpoints
   def public_endpoint?
-    action_name.in?(['index', 'show', 'update'])
+    action_name.in?(['index', 'show', 'update', 'toggle_vip_mode'])
   end
 
   # GET /restaurants
@@ -91,6 +91,65 @@ class RestaurantsController < ApplicationController
     head :no_content
   end
 
+  # PATCH /restaurants/:id/toggle_vip_mode
+  def toggle_vip_mode
+    @restaurant = Restaurant.unscoped.find(params[:id])
+    unless current_user.role.in?(%w[admin super_admin]) || current_user.restaurant_id == @restaurant.id
+      return render json: { error: "Forbidden" }, status: :forbidden
+    end
+    
+    # Extract vip_enabled from params, handling both formats
+    vip_enabled = if params[:restaurant] && params[:restaurant][:vip_enabled].present?
+                    params[:restaurant][:vip_enabled]
+                  else
+                    params[:vip_enabled]
+                  end
+    
+    if @restaurant.update(vip_enabled: vip_enabled)
+      render json: { 
+        success: true, 
+        vip_enabled: @restaurant.vip_enabled,
+        restaurant: restaurant_json(@restaurant)
+      }
+    else
+      render json: { 
+        success: false, 
+        errors: @restaurant.errors.full_messages 
+      }, status: :unprocessable_entity
+    end
+  end
+
+  # PATCH /restaurants/:id/set_current_event
+  def set_current_event
+    @restaurant = Restaurant.find(params[:id])
+    unless current_user.role.in?(%w[admin super_admin]) || current_user.restaurant_id == @restaurant.id
+      return render json: { error: "Forbidden" }, status: :forbidden
+    end
+    
+    event_id = params[:event_id]
+    
+    if event_id.present?
+      event = @restaurant.special_events.find_by(id: event_id)
+      
+      if event.nil?
+        return render json: { error: "Event not found" }, status: :not_found
+      end
+      
+      if @restaurant.update(current_event_id: event.id)
+        render json: restaurant_json(@restaurant)
+      else
+        render json: { errors: @restaurant.errors.full_messages }, status: :unprocessable_entity
+      end
+    else
+      # Clear the current event
+      if @restaurant.update(current_event_id: nil)
+        render json: restaurant_json(@restaurant)
+      else
+        render json: { errors: @restaurant.errors.full_messages }, status: :unprocessable_entity
+      end
+    end
+  end
+  
   private
 
   def set_restaurant
@@ -132,6 +191,11 @@ class RestaurantsController < ApplicationController
       time_zone:                  restaurant.time_zone,
       admin_settings:             restaurant.admin_settings,
       allowed_origins:            restaurant.allowed_origins,
+      # VIP-related fields
+      vip_only_checkout:          restaurant.vip_only_checkout?,
+      vip_enabled:                restaurant.vip_enabled,
+      code_prefix:                restaurant.code_prefix,
+      current_event_id:           restaurant.current_event_id,
       # Calculate seat count directly instead of using the private method
       current_seat_count:         restaurant.current_layout ? 
                                   restaurant.current_layout.seat_sections.includes(:seats).flat_map(&:seats).count : 

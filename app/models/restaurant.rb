@@ -7,8 +7,9 @@ class Restaurant < ApplicationRecord
   has_many :reservations,     dependent: :destroy
   has_many :waitlist_entries, dependent: :destroy
   has_many :menus,            dependent: :destroy
-  has_many :operating_hours, dependent: :destroy
+  has_many :operating_hours,  dependent: :destroy
   has_many :special_events,   dependent: :destroy
+  has_many :vip_access_codes, dependent: :destroy
 
   # Layout-related associations
   has_many :layouts,          dependent: :destroy
@@ -17,12 +18,45 @@ class Restaurant < ApplicationRecord
 
   belongs_to :current_layout, class_name: "Layout", optional: true
   belongs_to :current_menu, class_name: "Menu", optional: true
+  belongs_to :current_event, class_name: "SpecialEvent", optional: true
 
   validates :time_zone, presence: true
 
   validates :default_reservation_length, 
             numericality: { only_integer: true, greater_than: 0 }
             
+  # VIP-related methods
+  def vip_only_checkout?
+    vip_enabled || current_event&.vip_only?
+  end
+  
+  def validate_vip_code(code)
+    return true unless vip_only_checkout?
+    
+    # Check directly associated codes first
+    vip_code = vip_access_codes.find_by(code: code)
+    return true if vip_code && vip_code.available?
+    
+    # Fall back to event codes
+    current_event&.valid_vip_code?(code)
+  end
+  
+  def use_vip_code!(code)
+    return unless vip_only_checkout?
+    
+    # Try to find and use directly associated code
+    vip_code = vip_access_codes.find_by(code: code)
+    return vip_code.use! if vip_code && vip_code.available?
+    
+    # Fall back to event-based code
+    current_event&.use_vip_code!(code)
+  end
+  
+  def set_current_event(event_id)
+    event = self.special_events.find(event_id)
+    update(current_event_id: event.id)
+  end
+  
   # Helper methods for allowed_origins
   def add_allowed_origin(origin)
     return if origin.blank?
