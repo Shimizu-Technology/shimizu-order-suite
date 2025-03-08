@@ -703,4 +703,14 @@ Please check the inline code comments or contact the dev team.
 
 ---
 
+## **Schema Verification System**
+
+To ensure database schema consistency between the application's schema.rb file and the actual database structure, we've implemented a comprehensive schema verification system. For detailed information, see:
+
+- [Schema Verification System Documentation](docs/schema_verification_system.md)
+- [Migration Best Practices](docs/migration_best_practices.md)
+- [Schema Fix Instructions](docs/schema_fix_instructions.md)
+
+---
+
 **Hafaloha - Your Restaurant Management SaaS Platform**
