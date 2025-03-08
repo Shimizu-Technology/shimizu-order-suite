@@ -20,9 +20,7 @@ module MailerHelper
   
   # Get the email header color for a restaurant
   def email_header_color_for(restaurant)
-    # Try different ways to get the color based on restaurant structure
-    restaurant&.admin_settings&.dig('email_header_color') || 
-    restaurant&.primary_color || 
-    '#4A5568' # Default gray if no color is found
+    # Get color from admin_settings or use default
+    restaurant&.admin_settings&.dig('email_header_color') || '#D4AF37' # Default Hafaloha gold if no color is found
   end
 end

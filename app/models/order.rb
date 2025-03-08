@@ -1,6 +1,8 @@
 # app/models/order.rb
 
 class Order < ApplicationRecord
+  # Virtual attribute for VIP code (not stored in database)
+  attr_accessor :vip_code
   # Default scope to current restaurant
   default_scope { with_restaurant_scope }
   belongs_to :restaurant
@@ -13,6 +15,9 @@ class Order < ApplicationRecord
 
   # AUTO-SET pickup time if not provided
   before_save :set_default_pickup_time
+  
+  # Store vip_code in the database column if provided
+  before_save :store_vip_code
 
   # After creation, enqueue a background job for WhatsApp notifications
   after_create :notify_whatsapp
@@ -41,7 +46,11 @@ class Order < ApplicationRecord
       'payment_method' => payment_method,
       'transaction_id' => transaction_id,
       'payment_status' => payment_status,
-      'payment_amount' => payment_amount.to_f
+      'payment_amount' => payment_amount.to_f,
+      
+      # VIP code (if present)
+      'vip_code' => vip_code,
+      'vip_access_code_id' => vip_access_code_id
     )
   end
 
@@ -80,6 +89,11 @@ class Order < ApplicationRecord
       # For regular orders, set a default of 20 minutes
       self.estimated_pickup_time = Time.current + 20.minutes
     end
+  end
+
+  def store_vip_code
+    # Store the vip_code in the database column if it's provided
+    self.write_attribute(:vip_code, vip_code) if vip_code.present?
   end
 
   def notify_whatsapp
