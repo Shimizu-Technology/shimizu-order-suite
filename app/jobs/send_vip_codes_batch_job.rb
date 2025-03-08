@@ -28,6 +28,12 @@ class SendVipCodesBatchJob < ApplicationJob
         create_vip_code(options, restaurant)
       end
       
+      # Record the recipient information
+      vip_code.vip_code_recipients.create!(
+        email: email,
+        sent_at: Time.current
+      )
+      
       # Send the email with the VIP code - use deliver_now since we're already in a background job
       VipCodeMailer.vip_code_notification(email, vip_code, restaurant).deliver_now
       

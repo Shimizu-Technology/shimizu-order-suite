@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_06_124638) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_08_081035) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -349,11 +349,21 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_06_124638) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.boolean "archived", default: false
+    t.string "recipient_email"
     t.index ["archived"], name: "index_vip_access_codes_on_archived"
     t.index ["code", "restaurant_id"], name: "index_vip_access_codes_on_code_and_restaurant_id", unique: true
     t.index ["restaurant_id"], name: "index_vip_access_codes_on_restaurant_id"
     t.index ["special_event_id"], name: "index_vip_access_codes_on_special_event_id"
     t.index ["user_id"], name: "index_vip_access_codes_on_user_id"
+  end
+
+  create_table "vip_code_recipients", force: :cascade do |t|
+    t.bigint "vip_access_code_id", null: false
+    t.string "email"
+    t.datetime "sent_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["vip_access_code_id"], name: "index_vip_code_recipients_on_vip_access_code_id"
   end
 
   create_table "waitlist_entries", force: :cascade do |t|
@@ -400,5 +410,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_06_124638) do
   add_foreign_key "vip_access_codes", "restaurants"
   add_foreign_key "vip_access_codes", "special_events"
   add_foreign_key "vip_access_codes", "users"
+  add_foreign_key "vip_code_recipients", "vip_access_codes"
   add_foreign_key "waitlist_entries", "restaurants"
 end

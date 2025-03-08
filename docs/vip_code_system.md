@@ -13,6 +13,8 @@ The VIP code system allows restaurant administrators to:
 
 ## Database Schema
 
+### VIP Access Codes
+
 The system uses the `vip_access_codes` table with the following structure:
 
 | Column | Type | Description |
@@ -27,6 +29,19 @@ The system uses the `vip_access_codes` table with the following structure:
 | group_id | string | Group identifier for batch-generated codes |
 | archived | boolean | Whether the code is archived |
 | restaurant_id | integer | Associated restaurant |
+| created_at | datetime | Creation timestamp |
+| updated_at | datetime | Last update timestamp |
+
+### VIP Code Recipients
+
+The system also tracks recipients of VIP codes using the `vip_code_recipients` table:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | integer | Primary key |
+| vip_access_code_id | integer | Foreign key to the VIP access code |
+| email | string | Email address of the recipient |
+| sent_at | datetime | When the code was sent to this recipient |
 | created_at | datetime | Creation timestamp |
 | updated_at | datetime | Last update timestamp |
 

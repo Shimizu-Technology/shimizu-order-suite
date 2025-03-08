@@ -115,10 +115,19 @@ class VipAccessController < ApplicationController
     # Get orders that used this VIP code
     @orders = @vip_code.orders.includes(:user).order(created_at: :desc)
     
-    # Prepare the response with code details and order information
+    # Get recipients of this VIP code
+    @recipients = @vip_code.vip_code_recipients.order(sent_at: :desc)
+    
+    # Prepare the response with code details, recipient information, and order information
     response = {
       code: @vip_code.as_json,
       usage_count: @orders.count,
+      recipients: @recipients.map do |recipient|
+        {
+          email: recipient.email,
+          sent_at: recipient.sent_at
+        }
+      end,
       orders: @orders.map do |order|
         {
           id: order.id,

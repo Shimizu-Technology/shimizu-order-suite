@@ -6,6 +6,7 @@ class VipAccessCode < ApplicationRecord
   belongs_to :user, optional: true
   
   has_many :orders
+  has_many :vip_code_recipients, dependent: :destroy
   
   validates :code, presence: true, uniqueness: { scope: :restaurant_id }
   
