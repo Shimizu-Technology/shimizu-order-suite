@@ -6,7 +6,7 @@ class VipAccessController < ApplicationController
   
   # Override public_endpoint? to mark codes and generate_codes as public endpoints
   def public_endpoint?
-    action_name.in?(['codes', 'generate_codes', 'deactivate_code', 'update_code', 'validate_code', 'archive_code', 'code_usage', 'send_vip_code_email', 'bulk_send_vip_codes', 'send_existing_vip_codes'])
+    action_name.in?(['codes', 'generate_codes', 'deactivate_code', 'update_code', 'validate_code', 'archive_code', 'code_usage', 'send_vip_code_email', 'bulk_send_vip_codes', 'send_existing_vip_codes', 'search_by_email'])
   end
   
   def validate_code
@@ -259,6 +259,46 @@ class VipAccessController < ApplicationController
       total_recipients: email_list.length,
       batch_count: (email_list.length.to_f / batch_size).ceil
     }
+  end
+  
+  # GET /vip_access/search_by_email
+  def search_by_email
+    email = params[:email]
+    
+    unless email.present?
+      return render json: { error: "Email parameter is required" }, status: :bad_request
+    end
+    
+    # Use a single efficient query with joins to find all VIP codes that have been sent to the given email
+    @codes = VipAccessCode.joins(:vip_code_recipients)
+                         .where(restaurant_id: @restaurant.id)
+                         .where('vip_code_recipients.email LIKE ?', "%#{email}%")
+                         .distinct
+                         
+    # Apply archived filter unless explicitly requested to include archived
+    unless params[:include_archived] == 'true'
+      @codes = @codes.where(archived: false)
+    end
+    
+    # Sort by creation date (newest first) by default
+    @codes = @codes.order(created_at: :desc)
+    
+    # Include recipient information for each code
+    codes_with_recipients = @codes.map do |code|
+      recipients = code.vip_code_recipients.where('email LIKE ?', "%#{email}%").order(sent_at: :desc)
+      
+      code_json = code.as_json
+      code_json['recipients'] = recipients.map do |recipient|
+        {
+          email: recipient.email,
+          sent_at: recipient.sent_at
+        }
+      end
+      
+      code_json
+    end
+    
+    render json: codes_with_recipients
   end
   
   private

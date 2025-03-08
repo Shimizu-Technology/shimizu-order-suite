@@ -33,6 +33,7 @@ Rails.application.routes.draw do
   resources :vip_access, only: [] do
     collection do
       get :codes
+      get :search_by_email
       post :generate_codes
       post :send_code_email
       post :bulk_send_vip_codes
