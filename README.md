@@ -551,14 +551,22 @@ Paginated endpoints return a consistent response format:
 - `PATCH /admin/site_settings` - Update site-wide settings
 
 ### VIP Access
-- `GET /vip_access/codes` - List VIP access codes
-- `POST /vip_access/generate_codes` - Generate individual or group VIP codes
-- `PATCH /vip_access/codes/:id` - Update VIP code details
-- `DELETE /vip_access/codes/:id` - Deactivate a VIP code
-- `POST /vip_access/codes/:id/archive` - Archive a VIP code
-- `GET /vip_access/codes/:id/usage` - Get usage statistics for a VIP code
-- `POST /restaurants/:id/vip_access/validate_code` - Validate a VIP code
+- `GET /vip/codes` - List VIP access codes
+- `POST /vip/codes/individual` - Generate individual VIP codes
+- `POST /vip/codes/group` - Generate a group VIP code
+- `PATCH /vip/codes/:id` - Update VIP code details
+- `POST /vip/codes/:id/deactivate` - Deactivate a VIP code
+- `POST /vip/codes/:id/reactivate` - Reactivate a VIP code
+- `POST /vip/codes/:id/archive` - Archive a VIP code
+- `POST /vip/codes/:id/unarchive` - Unarchive a VIP code
+- `GET /vip/codes/:id/usage` - Get usage statistics for a VIP code
+- `POST /vip/validate` - Validate a VIP code without using it
+- `POST /vip/use` - Validate and mark a VIP code as used
+- `POST /vip/codes/send` - Send existing VIP codes via email
+- `POST /vip/codes/bulk_send` - Generate and send new VIP codes via email
 - `PATCH /restaurants/:id/toggle_vip_mode` - Enable/disable VIP-only checkout mode
+
+For detailed documentation on the VIP Code System, see [VIP Code System Documentation](docs/vip_code_system.md).
 
 ### Restaurant Scope
 All endpoints automatically filter data by the restaurant context from:

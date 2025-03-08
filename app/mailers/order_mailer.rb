@@ -6,7 +6,7 @@ class OrderMailer < ApplicationMailer
     @header_color = email_header_color_for(@restaurant)
     
     mail to: @order.contact_email,
-         from: from_address_for(@restaurant),
+         from: restaurant_from_address(@restaurant),
          subject: "Your #{@restaurant&.name || 'Restaurant'} Order Confirmation ##{@order.id}"
   end
 
@@ -16,7 +16,7 @@ class OrderMailer < ApplicationMailer
     @header_color = email_header_color_for(@restaurant)
     
     mail to: @order.contact_email,
-         from: from_address_for(@restaurant),
+         from: restaurant_from_address(@restaurant),
          subject: "#{@restaurant&.name || 'Restaurant'} Order ##{@order.id} is Ready!"
   end
 
@@ -26,7 +26,7 @@ class OrderMailer < ApplicationMailer
     @header_color = email_header_color_for(@restaurant)
     
     mail to: @order.contact_email,
-         from: from_address_for(@restaurant),
+         from: restaurant_from_address(@restaurant),
          subject: "Your #{@restaurant&.name || 'Restaurant'} Order ##{@order.id} is Being Prepared"
   end
 end

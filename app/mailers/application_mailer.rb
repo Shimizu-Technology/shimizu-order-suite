@@ -2,9 +2,14 @@
 class ApplicationMailer < ActionMailer::Base
   include MailerHelper
   
-  # Default from address will be overridden in individual mailers
-  # based on the restaurant associated with the record
-  default from: -> { default_from_address }
+  # Use a verified sender identity for SendGrid
+  default from: 'ShimizuTechnology@gmail.com'
   
   layout "mailer"
+  
+  private
+  
+  def default_from_address
+    'ShimizuTechnology@gmail.com'
+  end
 end

@@ -6,7 +6,7 @@ class VipAccessController < ApplicationController
   
   # Override public_endpoint? to mark codes and generate_codes as public endpoints
   def public_endpoint?
-    action_name.in?(['codes', 'generate_codes', 'deactivate_code', 'update_code', 'validate_code', 'archive_code', 'code_usage'])
+    action_name.in?(['codes', 'generate_codes', 'deactivate_code', 'update_code', 'validate_code', 'archive_code', 'code_usage', 'send_vip_code_email', 'bulk_send_vip_codes', 'send_existing_vip_codes'])
   end
   
   def validate_code
@@ -142,6 +142,114 @@ class VipAccessController < ApplicationController
     }
     
     render json: response
+  end
+  
+  # POST /vip_access/send_code_email
+  def send_vip_code_email
+    emails = params[:emails]
+    code_id = params[:code_id]
+    
+    unless emails.present? && code_id.present?
+      return render json: { error: "Emails and code ID are required" }, status: :bad_request
+    end
+    
+    # Find VIP code within current restaurant scope
+    @vip_code = VipAccessCode.find(code_id)
+    
+    # Track failed emails
+    failed_emails = []
+    
+    # Process each email
+    emails.each do |email|
+      begin
+        VipCodeMailer.vip_code_notification(email, @vip_code, @restaurant).deliver_later
+      rescue => e
+        failed_emails << { email: email, error: e.message }
+      end
+    end
+    
+    if failed_emails.empty?
+      render json: { message: "VIP code emails sent successfully" }
+    else
+      render json: { 
+        message: "Some emails failed to send", 
+        failed: failed_emails 
+      }, status: :partial_content
+    end
+  end
+
+  # POST /vip_access/bulk_send_vip_codes
+  def bulk_send_vip_codes
+    # Extract parameters
+    email_list = params[:email_list]
+    batch_size = params[:batch_size] || 100
+    
+    # Permit and symbolize keys for code options
+    code_options = {}
+    code_options[:name] = params[:name] if params[:name].present?
+    code_options[:prefix] = params[:prefix] if params[:prefix].present?
+    code_options[:max_uses] = params[:max_uses].to_i if params[:max_uses].present?
+    
+    unless email_list.present?
+      return render json: { error: "Email list is required" }, status: :bad_request
+    end
+    
+    # Pass restaurant_id to background job
+    restaurant_id = @restaurant.id
+    
+    # Queue background jobs for processing
+    email_list.each_slice(batch_size.to_i) do |email_batch|
+      SendVipCodesBatchJob.perform_later(email_batch, { restaurant_id: restaurant_id }.merge(code_options))
+    end
+    
+    render json: { 
+      message: "VIP code email batches queued for sending",
+      total_recipients: email_list.length,
+      batch_count: (email_list.length.to_f / batch_size).ceil
+    }
+  end
+  
+  # POST /vip_access/send_existing_vip_codes
+  def send_existing_vip_codes
+    # Extract parameters
+    email_list = params[:email_list]
+    code_ids = params[:code_ids]
+    batch_size = params[:batch_size] || 100
+    
+    unless email_list.present?
+      return render json: { error: "Email list is required" }, status: :bad_request
+    end
+    
+    unless code_ids.present? && code_ids.is_a?(Array)
+      return render json: { error: "VIP code IDs are required" }, status: :bad_request
+    end
+    
+    # Verify that all codes belong to this restaurant
+    codes = @restaurant.vip_access_codes.where(id: code_ids)
+    if codes.count != code_ids.length
+      return render json: { error: "Some VIP codes were not found" }, status: :bad_request
+    end
+    
+    # Pass restaurant_id to background job
+    restaurant_id = @restaurant.id
+    
+    # Queue background jobs for processing
+    email_list.each_slice(batch_size.to_i) do |email_batch|
+      SendVipCodesBatchJob.perform_later(
+        email_batch, 
+        {
+          restaurant_id: restaurant_id,
+          use_existing_codes: true,
+          code_ids: code_ids
+        }
+      )
+    end
+    
+    render json: { 
+      message: "Existing VIP code email batches queued for sending",
+      total_recipients: email_list.length,
+      batch_count: (email_list.length.to_f / batch_size).ceil
+    }
   end
   
   private

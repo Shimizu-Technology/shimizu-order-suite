@@ -32,6 +32,9 @@ Rails.application.routes.draw do
     collection do
       get :codes
       post :generate_codes
+      post :send_code_email
+      post :bulk_send_vip_codes
+      post :send_existing_vip_codes
     end
   end
   

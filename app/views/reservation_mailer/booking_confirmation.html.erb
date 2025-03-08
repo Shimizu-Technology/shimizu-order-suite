@@ -1,15 +1,85 @@
 <!-- app/views/reservation_mailer/booking_confirmation.html.erb -->
-<h1>Reservation Confirmation</h1>
-<p>Hi <%= @reservation.contact_name %>,</p>
-<p>
-  Thank you for booking a reservation at Hafaloha. Here are your details:
-</p>
-<ul>
-  <li>Reservation Date/Time: <%= @reservation.start_time.strftime("%B %d, %Y at %I:%M %p") %></li>
-  <li>Party Size: <%= @reservation.party_size %></li>
-  <li>Restaurant: <%= @reservation.restaurant.name if @reservation.restaurant %></li>
-  <% if @reservation.deposit_amount && @reservation.deposit_amount > 0 %>
-  <li>Deposit Amount: $<%= sprintf("%.2f", @reservation.deposit_amount.to_f) %></li>
-  <% end %>
-</ul>
-<p>We look forward to serving you!</p>
+
+<table width="100%" border="0" cellspacing="0" cellpadding="0"
+       style="background-color: #f8f8f8; padding: 20px 0; font-family: Arial, sans-serif;">
+  <tr>
+    <td align="center">
+      <table width="600" border="0" cellspacing="0" cellpadding="0"
+             style="background-color: #ffffff; border-radius: 6px; overflow: hidden;">
+
+        <!-- HEADER / BRAND -->
+        <tr>
+          <td align="center" style="background-color: <%= @header_color %>; padding: 20px;">
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff;">
+              Reservation Confirmation
+            </h1>
+          </td>
+        </tr>
+
+        <!-- SPACER -->
+        <tr>
+          <td style="height: 20px;">&nbsp;</td>
+        </tr>
+
+        <!-- MAIN CONTENT -->
+        <tr>
+          <td style="padding: 0 30px 20px;">
+
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
+              Hi <strong><%= @reservation.contact_name %></strong>,
+            </p>
+
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
+              Thank you for booking a reservation at <%= @restaurant.name %>. Here are your details:
+            </p>
+
+            <table width="100%" style="margin-bottom: 20px; border-collapse: collapse;">
+              <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 10px 0; color: #666; width: 40%;">Reservation Date/Time:</td>
+                <td style="padding: 10px 0; color: #333; font-weight: bold;">
+                  <%= @reservation.start_time.strftime("%B %d, %Y at %I:%M %p") %>
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 10px 0; color: #666;">Party Size:</td>
+                <td style="padding: 10px 0; color: #333; font-weight: bold;">
+                  <%= @reservation.party_size %>
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 10px 0; color: #666;">Restaurant:</td>
+                <td style="padding: 10px 0; color: #333; font-weight: bold;">
+                  <%= @reservation.restaurant.name if @reservation.restaurant %>
+                </td>
+              </tr>
+              <% if @reservation.deposit_amount && @reservation.deposit_amount > 0 %>
+              <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 10px 0; color: #666;">Deposit Amount:</td>
+                <td style="padding: 10px 0; color: #333; font-weight: bold;">
+                  $<%= sprintf("%.2f", @reservation.deposit_amount.to_f) %>
+                </td>
+              </tr>
+              <% end %>
+            </table>
+
+            <p style="margin: 0; color: #333; font-size: 16px; line-height: 24px;">
+              We look forward to serving you!
+            </p>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="padding: 20px 30px; background-color: #f2f2f2; color: #555;
+                     font-size: 14px; line-height: 20px; border-top: 1px solid #ddd;">
+            <p style="margin: 0;">
+              <strong><%= @restaurant.name %></strong><br/>
+              <%= @restaurant.address %> | <%= @restaurant.phone %>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
