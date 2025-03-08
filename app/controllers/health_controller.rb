@@ -1,7 +1,4 @@
 class HealthController < ApplicationController
-  # Skip authentication for health checks
-  skip_before_action :authorize_request, if: -> { action_name == 'check' }
-  
   def check
     inconsistencies = []
     
