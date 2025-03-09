@@ -146,6 +146,25 @@ Rails.application.routes.draw do
   
   resources :promo_codes, only: [:index, :show, :create, :update, :destroy]
   resources :menus, only: [:index, :show, :create, :update, :destroy]
+  
+  # Merchandise routes
+  resources :merchandise_collections, only: [:index, :show, :create, :update, :destroy] do
+    member do
+      post :set_active
+    end
+  end
+  
+  resources :merchandise_items, only: [:index, :show, :create, :update, :destroy] do
+    member do
+      post :upload_image
+    end
+  end
+  
+  resources :merchandise_variants, only: [:index, :show, :create, :update, :destroy] do
+    collection do
+      post :batch_create
+    end
+  end
 
   # Enhanced menu_items with image uploading & option groups
   resources :menu_items do

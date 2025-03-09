@@ -50,7 +50,10 @@ class Order < ApplicationRecord
       
       # VIP code (if present)
       'vip_code' => vip_code,
-      'vip_access_code_id' => vip_access_code_id
+      'vip_access_code_id' => vip_access_code_id,
+      
+      # Merchandise items (if present)
+      'merchandise_items' => merchandise_items || []
     )
   end
 
@@ -103,15 +106,25 @@ class Order < ApplicationRecord
     group_id = restaurant.admin_settings&.dig('whatsapp_group_id')
     return unless group_id.present?
 
-    item_lines = items.map do |item|
+    # Food items
+    food_item_lines = items.map do |item|
       "- #{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
     end.join("\n")
+    
+    # Merchandise items
+    merch_item_lines = ""
+    if merchandise_items.present? && merchandise_items.any?
+      merch_item_lines = "\n\nMerchandise Items:\n" + merchandise_items.map do |item|
+        "- #{item['name']} #{item['size']} #{item['color']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
+      end.join("\n")
+    end
 
     message_text = <<~MSG
       New order \##{id} created!
 
-      Items:
-      #{item_lines}
+      Food Items:
+      #{food_item_lines}
+      #{merch_item_lines}
 
       Total: $#{'%.2f' % total.to_f}
       Status: #{status}

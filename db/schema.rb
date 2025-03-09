@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_09_000001) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_09_141900) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -112,6 +112,45 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_09_000001) do
     t.index ["restaurant_id"], name: "index_menus_on_restaurant_id"
   end
 
+  create_table "merchandise_collections", force: :cascade do |t|
+    t.string "name", null: false
+    t.text "description"
+    t.boolean "active", default: false
+    t.bigint "restaurant_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["restaurant_id", "active"], name: "index_merchandise_collections_on_restaurant_id_and_active"
+    t.index ["restaurant_id"], name: "index_merchandise_collections_on_restaurant_id"
+  end
+
+  create_table "merchandise_items", force: :cascade do |t|
+    t.string "name", null: false
+    t.text "description"
+    t.decimal "base_price", precision: 8, scale: 2, default: "0.0"
+    t.string "image_url"
+    t.boolean "available", default: true
+    t.integer "stock_status", default: 0
+    t.text "status_note"
+    t.bigint "merchandise_collection_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["merchandise_collection_id", "available"], name: "idx_on_merchandise_collection_id_available_397f61ae61"
+    t.index ["merchandise_collection_id"], name: "index_merchandise_items_on_merchandise_collection_id"
+  end
+
+  create_table "merchandise_variants", force: :cascade do |t|
+    t.bigint "merchandise_item_id", null: false
+    t.string "size"
+    t.string "color"
+    t.string "sku"
+    t.decimal "price_adjustment", precision: 8, scale: 2, default: "0.0"
+    t.integer "stock_quantity", default: 0
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["merchandise_item_id", "size", "color"], name: "index_merch_variants_on_item_size_color"
+    t.index ["merchandise_item_id"], name: "index_merchandise_variants_on_merchandise_item_id"
+  end
+
   create_table "notifications", force: :cascade do |t|
     t.bigint "reservation_id", null: false
     t.string "notification_type"
@@ -188,6 +227,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_09_000001) do
     t.decimal "payment_amount", precision: 10, scale: 2
     t.string "vip_code"
     t.bigint "vip_access_code_id"
+    t.jsonb "merchandise_items", default: []
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
     t.index ["user_id", "created_at"], name: "index_orders_on_user_id_and_created_at"
@@ -246,9 +286,11 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_09_000001) do
     t.bigint "current_event_id"
     t.boolean "vip_enabled", default: false
     t.string "code_prefix"
+    t.bigint "current_merchandise_collection_id"
     t.index ["current_event_id"], name: "index_restaurants_on_current_event_id"
     t.index ["current_layout_id"], name: "index_restaurants_on_current_layout_id"
     t.index ["current_menu_id"], name: "index_restaurants_on_current_menu_id"
+    t.index ["current_merchandise_collection_id"], name: "index_restaurants_on_current_merchandise_collection_id"
   end
 
   create_table "seat_allocations", force: :cascade do |t|
@@ -388,6 +430,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_09_000001) do
   add_foreign_key "menu_item_categories", "menu_items"
   add_foreign_key "menu_items", "menus"
   add_foreign_key "menus", "restaurants"
+  add_foreign_key "merchandise_collections", "restaurants"
+  add_foreign_key "merchandise_items", "merchandise_collections"
+  add_foreign_key "merchandise_variants", "merchandise_items"
   add_foreign_key "notifications", "reservations"
   add_foreign_key "operating_hours", "restaurants"
   add_foreign_key "option_groups", "menu_items"
@@ -401,6 +446,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_09_000001) do
   add_foreign_key "reservations", "restaurants"
   add_foreign_key "restaurants", "layouts", column: "current_layout_id", on_delete: :nullify
   add_foreign_key "restaurants", "menus", column: "current_menu_id"
+  add_foreign_key "restaurants", "merchandise_collections", column: "current_merchandise_collection_id"
   add_foreign_key "restaurants", "special_events", column: "current_event_id"
   add_foreign_key "seat_allocations", "reservations"
   add_foreign_key "seat_allocations", "seats"

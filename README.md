@@ -10,6 +10,7 @@ Hafaloha is a SaaS (Software as a Service) platform that enables multiple restau
 - Take **food orders** online
 - Send **notifications** via multiple channels
 - Track **inventory** and **menu items**
+- Sell **merchandise** with separate collection-based organization
 - Analyze **business data** and metrics
 
 The backend is built with **Ruby on Rails** in API-only mode, with a multi-tenant architecture that ensures proper data isolation between different restaurants.
@@ -190,9 +191,11 @@ origins lambda { |source, env|
 
 - **Restaurant**: The central model for tenant isolation
   - Has many users, menus, layouts, reservations, orders, vip_access_codes
+  - Has many merchandise_collections and merchandise_items through associations
   - Stores configuration including allowed CORS origins
   - Contains basic information like name, address, phone number, time zone
   - Includes vip_enabled flag to toggle VIP-only checkout mode
+  - Has current_merchandise_collection_id to set active merchandise collection
 
 - **SiteSetting**: Stores site-wide settings for each restaurant
   - Belongs to a restaurant
@@ -211,6 +214,7 @@ origins lambda { |source, env|
   - Optional user association for guest orders
   - Has many order_acknowledgments for tracking admin notifications
   - Optional vip_access_code association for VIP-only orders
+  - Has many merchandise_items (for merchandise purchases)
 
 - **OrderAcknowledgment**: Tracks which orders have been acknowledged by which admin users
   - Belongs to order
@@ -230,6 +234,24 @@ origins lambda { |source, env|
   - Menu items can have advance_notice_hours for items requiring preparation time (e.g., 24 hours)
   - Restaurants can have multiple menus with one set as active via current_menu_id
   - Menus can be cloned to create variations for special events
+
+- **MerchandiseCollection**: Merchandise collection management
+  - Belongs to restaurant
+  - Has many merchandise_items
+  - Contains name, description, and active status
+  - Restaurants can have multiple collections with one set as active via current_merchandise_collection_id
+
+- **MerchandiseItem**: Merchandise item management
+  - Belongs to merchandise_collection
+  - Has many merchandise_variants (for size/color options)
+  - Contains name, description, base_price, and image_url
+  - Includes stock_status tracking (in_stock, low_stock, out_of_stock)
+  - Uses S3 for image storage with unique filenames
+
+- **MerchandiseVariant**: Merchandise variants
+  - Belongs to merchandise_item
+  - Contains variation info like size, color, etc.
+  - Has its own price that can differ from the base price
 
 - **Layout/SeatSection/Seat**: Table layout configuration
   - All belong to restaurant through associations
@@ -472,6 +494,26 @@ The API is organized into several main groups:
 - `GET /orders/unacknowledged` - Get orders not yet acknowledged by current user
 - `POST /orders/:id/acknowledge` - Mark an order as acknowledged by current user
 
+### Merchandise
+- `GET /merchandise_collections` - List merchandise collections
+- `POST /merchandise_collections` - Create new merchandise collection
+- `GET /merchandise_collections/:id` - Get specific collection details
+- `PATCH /merchandise_collections/:id` - Update collection details
+- `DELETE /merchandise_collections/:id` - Delete a collection
+- `PATCH /merchandise_collections/:id/activate` - Set a collection as the active one
+
+- `GET /merchandise_items` - List merchandise items (with optional collection_id filter)
+- `POST /merchandise_items` - Create new merchandise item (with image upload)
+- `GET /merchandise_items/:id` - Get specific item details
+- `PATCH /merchandise_items/:id` - Update item details (with image upload)
+- `DELETE /merchandise_items/:id` - Delete an item
+
+- `GET /merchandise_variants` - List merchandise variants
+- `POST /merchandise_variants` - Create new merchandise variant
+- `GET /merchandise_variants/:id` - Get specific variant details
+- `PATCH /merchandise_variants/:id` - Update variant details
+- `DELETE /merchandise_variants/:id` - Delete a variant
+
 ### Performance Optimizations
 
 The API includes several performance optimizations to handle high traffic loads:
@@ -655,6 +697,7 @@ The database includes these key tables:
 - `reservations` - Table bookings
 - `orders` - Food orders
 - `menus`/`menu_items`/`categories` - Menu structure
+- `merchandise_collections`/`merchandise_items`/`merchandise_variants` - Merchandise structure
 - `layouts`/`seat_sections`/`seats` - Physical layout
 - `option_groups`/`options` - Menu item customization
 - `promo_codes` - Discount codes

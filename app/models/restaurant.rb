@@ -10,6 +10,7 @@ class Restaurant < ApplicationRecord
   has_many :operating_hours,  dependent: :destroy
   has_many :special_events,   dependent: :destroy
   has_many :vip_access_codes, dependent: :destroy
+  has_many :merchandise_collections, dependent: :destroy
 
   # Layout-related associations
   has_many :layouts,          dependent: :destroy
@@ -19,6 +20,7 @@ class Restaurant < ApplicationRecord
   belongs_to :current_layout, class_name: "Layout", optional: true
   belongs_to :current_menu, class_name: "Menu", optional: true
   belongs_to :current_event, class_name: "SpecialEvent", optional: true
+  belongs_to :current_merchandise_collection, class_name: "MerchandiseCollection", optional: true
 
   validates :time_zone, presence: true
 
@@ -104,5 +106,13 @@ class Restaurant < ApplicationRecord
   def set_active_menu(menu_id)
     menu = self.menus.find(menu_id)
     update(current_menu_id: menu.id)
+  end
+  
+  #--------------------------------------------------------------------------
+  # Helper to set the active merchandise collection:
+  #--------------------------------------------------------------------------
+  def set_active_merchandise_collection(collection_id)
+    collection = self.merchandise_collections.find(collection_id)
+    update(current_merchandise_collection_id: collection.id)
   end
 end
