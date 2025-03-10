@@ -55,6 +55,7 @@ class MenuItem < ApplicationRecord
   def as_json(options = {})
     super(options).merge(
       'price'                => price.to_f,
+      'cost_to_make'         => cost_to_make.to_f,
       'image_url'            => image_url,
       'advance_notice_hours' => advance_notice_hours,
       'seasonal'             => seasonal,

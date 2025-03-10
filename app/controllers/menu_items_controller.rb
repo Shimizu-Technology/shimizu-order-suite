@@ -176,6 +176,7 @@ class MenuItemsController < ApplicationController
       :name,
       :description,
       :price,
+      :cost_to_make,
       :available,
       :menu_id,
       :image_url,

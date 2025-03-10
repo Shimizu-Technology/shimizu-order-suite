@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_10_180000) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_11_050000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -98,6 +98,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_10_180000) do
     t.boolean "featured"
     t.integer "stock_status"
     t.text "status_note"
+    t.decimal "cost_to_make", precision: 8, scale: 2, default: "0.0"
     t.index ["menu_id", "available"], name: "index_menu_items_on_menu_id_and_available"
     t.index ["menu_id", "category"], name: "index_menu_items_on_menu_id_and_category"
     t.index ["menu_id"], name: "index_menu_items_on_menu_id"
