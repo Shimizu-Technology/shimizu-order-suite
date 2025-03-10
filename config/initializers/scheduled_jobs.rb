@@ -8,21 +8,8 @@ Rails.application.config.after_initialize do
   if defined?(Rails::Server) || (defined?(Sidekiq) && Sidekiq.server?)
     Rails.logger.info "Initializing scheduled jobs"
     
-    # Schedule the persistent low stock notification job
-    if Rails.env.production? || Rails.env.staging?
-      # In production/staging, schedule the job to start immediately unless already scheduled
-      PersistentLowStockNotificationJob.schedule_job
-      Rails.logger.info "PersistentLowStockNotificationJob scheduled in #{Rails.env} environment"
-    else
-      # In development/test, only log that we would schedule but don't actually do it
-      # unless explicitly requested via env var
-      if ENV['SCHEDULE_DEV_JOBS'] == 'true'
-        PersistentLowStockNotificationJob.schedule_job
-        Rails.logger.info "PersistentLowStockNotificationJob scheduled in #{Rails.env} environment"
-      else
-        Rails.logger.info "PersistentLowStockNotificationJob would be scheduled in production (skipped in #{Rails.env})"
-      end
-    end
+    # Scheduled jobs will be added here as needed
+    Rails.logger.info "No scheduled jobs to initialize"
     
     # Add other scheduled jobs here as needed
   end
