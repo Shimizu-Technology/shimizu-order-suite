@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_10_160001) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_10_180000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -302,6 +302,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_10_160001) do
     t.boolean "vip_enabled", default: false
     t.string "code_prefix"
     t.bigint "current_merchandise_collection_id"
+    t.string "contact_email"
     t.index ["current_event_id"], name: "index_restaurants_on_current_event_id"
     t.index ["current_layout_id"], name: "index_restaurants_on_current_layout_id"
     t.index ["current_menu_id"], name: "index_restaurants_on_current_menu_id"

@@ -166,6 +166,7 @@ class RestaurantsController < ApplicationController
       :default_reservation_length,
       :time_slot_interval,
       :time_zone,
+      :contact_email,
       admin_settings: {},
       allowed_origins: []
     )
@@ -184,6 +185,7 @@ class RestaurantsController < ApplicationController
       name:                       restaurant.name,
       address:                    restaurant.address,
       phone_number:               restaurant.phone_number,
+      contact_email:              restaurant.contact_email,
       layout_type:                restaurant.layout_type,
       current_layout_id:          restaurant.current_layout_id,
       default_reservation_length: restaurant.default_reservation_length,
