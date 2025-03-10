@@ -16,15 +16,18 @@ class MenuItemsController < ApplicationController
     restaurant_id = params[:restaurant_id]
     restaurant = Restaurant.find_by(id: restaurant_id) if restaurant_id.present?
     
-    # If admin AND params[:show_all] => show all. Otherwise only unexpired.
-    if is_admin? && params[:show_all].present?
+    # If admin AND params[:admin] or params[:show_all] => show all. Otherwise only unexpired.
+    if is_admin? && (params[:admin].present? || params[:show_all].present?)
       base_scope = MenuItem.all
     else
       base_scope = MenuItem.currently_available
     end
     
-    # Filter by the restaurant's current menu if available
-    if restaurant&.current_menu_id.present?
+    # Filter by specific menu_id if provided in params
+    if params[:menu_id].present?
+      base_scope = base_scope.where(menu_id: params[:menu_id])
+    # Filter by the restaurant's current menu if available and admin is not requesting all items
+    elsif restaurant&.current_menu_id.present? && !(is_admin? && params[:admin].present?)
       base_scope = base_scope.where(menu_id: restaurant.current_menu_id)
     end
 

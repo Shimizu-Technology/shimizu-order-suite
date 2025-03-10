@@ -107,18 +107,42 @@ class MenusController < ApplicationController
     )
     
     if new_menu.save
-      # Clone all menu items
-      original_menu.menu_items.each do |item|
-        new_item = item.dup
-        new_item.menu_id = new_menu.id
-        new_item.save
-        
-        # Clone the category associations
-        item.menu_item_categories.each do |mic|
-          MenuItemCategory.create(
-            menu_item_id: new_item.id,
-            category_id: mic.category_id
-          )
+      # Use a transaction to ensure all operations succeed or fail together
+      ActiveRecord::Base.transaction do
+        # Clone all menu items
+        original_menu.menu_items.each do |original_item|
+          # Duplicate the menu item but don't save it yet
+          new_item = original_item.dup
+          new_item.menu_id = new_menu.id
+          
+          # Save without validation first to bypass the category validation temporarily
+          new_item.save(validate: false)
+          
+          # Clone the category associations - must be done before validating the item
+          original_item.menu_item_categories.each do |mic|
+            MenuItemCategory.create!(
+              menu_item_id: new_item.id,
+              category_id: mic.category_id
+            )
+          end
+          
+          # Now validate and save again to ensure all other validations pass
+          new_item.validate!
+          
+          # Clone option groups and their options
+          original_item.option_groups.each do |original_group|
+            # Duplicate the option group
+            new_group = original_group.dup
+            new_group.menu_item_id = new_item.id
+            new_group.save!
+            
+            # Clone options within the group
+            original_group.options.each do |original_option|
+              new_option = original_option.dup
+              new_option.option_group_id = new_group.id
+              new_option.save!
+            end
+          end
         end
       end
       
