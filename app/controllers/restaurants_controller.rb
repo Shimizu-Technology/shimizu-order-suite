@@ -167,6 +167,7 @@ class RestaurantsController < ApplicationController
       :time_slot_interval,
       :time_zone,
       :contact_email,
+      :custom_pickup_location,
       admin_settings: {},
       allowed_origins: []
     )
@@ -193,6 +194,7 @@ class RestaurantsController < ApplicationController
       time_zone:                  restaurant.time_zone,
       admin_settings:             restaurant.admin_settings,
       allowed_origins:            restaurant.allowed_origins,
+      custom_pickup_location:     restaurant.custom_pickup_location,
       # VIP-related fields
       vip_only_checkout:          restaurant.vip_only_checkout?,
       vip_enabled:                restaurant.vip_enabled,
