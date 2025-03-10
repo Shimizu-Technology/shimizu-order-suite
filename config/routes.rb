@@ -75,7 +75,17 @@ Rails.application.routes.draw do
     end
   end
   resources :menu_items, only: [:index, :show, :create, :update, :destroy]
-  resources :notifications, only: [:index, :show, :create, :update, :destroy]
+  resources :notifications, only: [:index, :show, :create, :update, :destroy] do
+    member do
+      post :acknowledge
+      post :take_action
+    end
+    
+    collection do
+      get :unacknowledged
+      post :acknowledge_all
+    end
+  end
 
   # Layouts
   resources :layouts, only: [:index, :show, :create, :update, :destroy] do
@@ -157,12 +167,24 @@ Rails.application.routes.draw do
   resources :merchandise_items, only: [:index, :show, :create, :update, :destroy] do
     member do
       post :upload_image
+      patch :update_threshold
+      post :upload_second_image
+    end
+    
+    collection do
+      get :low_stock
+      get :out_of_stock
     end
   end
   
   resources :merchandise_variants, only: [:index, :show, :create, :update, :destroy] do
     collection do
       post :batch_create
+    end
+    
+    member do
+      post :add_stock
+      post :reduce_stock
     end
   end
 

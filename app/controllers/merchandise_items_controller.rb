@@ -60,7 +60,7 @@ class MerchandiseItemsController < ApplicationController
     Rails.logger.info "=== MerchandiseItemsController#create ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
-    @merchandise_item = MerchandiseItem.new(merchandise_item_params.except(:image))
+    @merchandise_item = MerchandiseItem.new(merchandise_item_params.except(:image, :second_image))
 
     if @merchandise_item.save
       Rails.logger.info "Created MerchandiseItem => #{@merchandise_item.inspect}"
@@ -72,6 +72,15 @@ class MerchandiseItemsController < ApplicationController
         new_filename = "merchandise_item_#{@merchandise_item.id}_#{Time.now.to_i}#{ext}"
         public_url   = S3Uploader.upload(file, new_filename)
         @merchandise_item.update!(image_url: public_url)
+      end
+
+      # Handle second image upload if present
+      second_file = merchandise_item_params[:second_image]
+      if second_file.present? && second_file.respond_to?(:original_filename)
+        ext = File.extname(second_file.original_filename)
+        new_filename = "merchandise_item_second_#{@merchandise_item.id}_#{Time.now.to_i}#{ext}"
+        public_url   = S3Uploader.upload(second_file, new_filename)
+        @merchandise_item.update!(second_image_url: public_url)
       end
 
       render json: @merchandise_item, status: :created
@@ -89,7 +98,7 @@ class MerchandiseItemsController < ApplicationController
     @merchandise_item = MerchandiseItem.find(params[:id])
     Rails.logger.info "Updating MerchandiseItem => #{@merchandise_item.id}"
 
-    if @merchandise_item.update(merchandise_item_params.except(:image))
+    if @merchandise_item.update(merchandise_item_params.except(:image, :second_image))
       Rails.logger.info "Update success => #{@merchandise_item.inspect}"
 
       # Handle image if present
@@ -99,6 +108,16 @@ class MerchandiseItemsController < ApplicationController
         new_filename = "merchandise_item_#{@merchandise_item.id}_#{Time.now.to_i}#{ext}"
         public_url   = S3Uploader.upload(file, new_filename)
         @merchandise_item.update!(image_url: public_url)
+      end
+
+      # Handle second image if present
+      second_file = merchandise_item_params[:second_image]
+      if second_file.present? && second_file.respond_to?(:original_filename)
+        ext = File.extname(second_file.original_filename)
+        new_filename = "merchandise_item_second_#{@merchandise_item.id}_#{Time.now.to_i}#{ext}"
+        public_url   = S3Uploader.upload(second_file, new_filename)
+        @merchandise_item.update!(second_image_url: public_url)
+        Rails.logger.info "merchandise_item updated with second image => second_image_url: #{public_url}"
       end
 
       render json: @merchandise_item
@@ -143,7 +162,26 @@ class MerchandiseItemsController < ApplicationController
     render json: merchandise_item, status: :ok
   end
 
-  private
+  # POST /merchandise_items/:id/upload_second_image
+  def upload_second_image
+    Rails.logger.info "=== MerchandiseItemsController#upload_second_image ==="
+    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
+
+    merchandise_item = MerchandiseItem.find(params[:id])
+    file = params[:image]
+    unless file
+      Rails.logger.info "No file param"
+      return render json: { error: 'No image file uploaded' }, status: :unprocessable_entity
+    end
+
+    ext = File.extname(file.original_filename)
+    new_filename = "merchandise_item_second_#{merchandise_item.id}_#{Time.now.to_i}#{ext}"
+    public_url   = S3Uploader.upload(file, new_filename)
+    merchandise_item.update!(second_image_url: public_url)
+
+    Rails.logger.info "merchandise_item updated => second_image_url: #{merchandise_item.second_image_url.inspect}"
+    render json: merchandise_item, status: :ok
+  end
 
   def merchandise_item_params
     params.require(:merchandise_item).permit(
@@ -154,7 +192,10 @@ class MerchandiseItemsController < ApplicationController
       :merchandise_collection_id,
       :image_url,
       :image,
+      :second_image_url,
+      :second_image,
       :stock_status,
+      :low_stock_threshold,
       :status_note
     )
   end

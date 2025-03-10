@@ -212,8 +212,60 @@ class OrdersController < ApplicationController
         end
       end
     end
+    
+    # Validate merchandise stock levels before accepting the order
+    if @order.merchandise_items.present?
+      insufficient_items = []
+      
+      @order.merchandise_items.each do |item|
+        variant = MerchandiseVariant.find_by(id: item[:merchandise_variant_id])
+        if variant.nil?
+          insufficient_items << { name: item[:name], reason: "variant not found" }
+        elsif variant.stock_quantity < item[:quantity].to_i
+          insufficient_items << { 
+            name: "#{item[:name]} (#{variant.color}, #{variant.size})", 
+            available: variant.stock_quantity,
+            requested: item[:quantity].to_i
+          }
+        end
+      end
+      
+      if insufficient_items.any?
+        return render json: { 
+          error: "Some items have insufficient stock",
+          insufficient_items: insufficient_items
+        }, status: :unprocessable_entity
+      end
+    end
 
     if @order.save
+      ActiveRecord::Base.transaction do
+        # Process merchandise stock adjustments
+        if @order.merchandise_items.present?
+          @order.merchandise_items.each do |item|
+            # Find the merchandise variant
+            variant = MerchandiseVariant.find_by(id: item[:merchandise_variant_id])
+            
+            if variant.present?
+              # Adjust stock based on quantity ordered
+              quantity = item[:quantity].to_i
+              variant.reduce_stock!(
+                quantity, 
+                false, # Don't allow negative stock
+                @order, # Reference to the order
+                @current_user # Reference to the user who placed the order
+              )
+              
+              # If stock is now below threshold after this order, send notification
+              # But only if we're not testing
+              if variant.low_stock? && !Rails.env.test? && !test_mode
+                StockNotificationJob.perform_later(variant)
+              end
+            end
+          end
+        end
+      end
+      
       # Get notification preferences - only don't send if explicitly set to false
       notification_channels = @order.restaurant.admin_settings&.dig('notification_channels', 'orders') || {}
       
@@ -228,7 +280,13 @@ class OrdersController < ApplicationController
         # Use custom SMS sender ID if set, otherwise use restaurant name
         sms_sender = @order.restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
         
+        # Build the item list from both regular menu items and merchandise
         item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
+        if @order.merchandise_items.present?
+          merch_list = @order.merchandise_items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
+          item_list += ", " + merch_list unless merch_list.blank?
+        end
+        
         msg = <<~TXT.squish
           Hi #{@order.contact_name.presence || 'Customer'},
           thanks for ordering from #{restaurant_name}!
@@ -400,6 +458,16 @@ class OrdersController < ApplicationController
         :quantity,
         :notes,
         { customizations: {} }
+      ],
+      merchandise_items: [
+        :id,
+        :merchandise_variant_id,
+        :name,
+        :size,
+        :color,
+        :price,
+        :quantity,
+        :image_url
       ]
     )
   end

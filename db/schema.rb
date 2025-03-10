@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_09_141900) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_10_160001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -134,6 +134,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_09_141900) do
     t.bigint "merchandise_collection_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "additional_images", default: "[]"
+    t.integer "low_stock_threshold", default: 5
+    t.string "second_image_url"
     t.index ["merchandise_collection_id", "available"], name: "idx_on_merchandise_collection_id_available_397f61ae61"
     t.index ["merchandise_collection_id"], name: "index_merchandise_items_on_merchandise_collection_id"
   end
@@ -147,19 +150,31 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_09_141900) do
     t.integer "stock_quantity", default: 0
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "low_stock_threshold", default: 5
     t.index ["merchandise_item_id", "size", "color"], name: "index_merch_variants_on_item_size_color"
     t.index ["merchandise_item_id"], name: "index_merchandise_variants_on_merchandise_item_id"
+    t.index ["stock_quantity"], name: "index_merchandise_variants_on_stock_quantity"
   end
 
   create_table "notifications", force: :cascade do |t|
-    t.bigint "reservation_id", null: false
     t.string "notification_type"
     t.string "delivery_method"
     t.datetime "scheduled_for"
     t.string "status", default: "pending"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["reservation_id"], name: "index_notifications_on_reservation_id"
+    t.string "resource_type"
+    t.bigint "resource_id"
+    t.bigint "restaurant_id"
+    t.string "title"
+    t.text "body"
+    t.boolean "acknowledged", default: false
+    t.datetime "acknowledged_at"
+    t.bigint "acknowledged_by_id"
+    t.index ["acknowledged", "notification_type", "restaurant_id"], name: "idx_notifications_filter"
+    t.index ["acknowledged_by_id"], name: "index_notifications_on_acknowledged_by_id"
+    t.index ["resource_type", "resource_id"], name: "index_notifications_on_resource"
+    t.index ["restaurant_id"], name: "index_notifications_on_restaurant_id"
   end
 
   create_table "operating_hours", force: :cascade do |t|
@@ -433,7 +448,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_09_141900) do
   add_foreign_key "merchandise_collections", "restaurants"
   add_foreign_key "merchandise_items", "merchandise_collections"
   add_foreign_key "merchandise_variants", "merchandise_items"
-  add_foreign_key "notifications", "reservations"
+  add_foreign_key "notifications", "restaurants"
+  add_foreign_key "notifications", "users", column: "acknowledged_by_id"
   add_foreign_key "operating_hours", "restaurants"
   add_foreign_key "option_groups", "menu_items"
   add_foreign_key "options", "option_groups"

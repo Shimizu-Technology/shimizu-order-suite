@@ -1,7 +1,8 @@
 class MerchandiseVariantsController < ApplicationController
-  before_action :set_merchandise_variant, only: [:show, :update, :destroy]
+  before_action :set_merchandise_variant, only: [:show, :update, :destroy, :add_stock, :reduce_stock]
   before_action :authorize_request, except: [:index, :show]
   before_action :optional_authorize, only: [:index, :show]
+  before_action :require_admin!, only: [:add_stock, :reduce_stock]
   
   # Mark all actions as public endpoints that don't require restaurant context
   def public_endpoint?
@@ -10,10 +11,32 @@ class MerchandiseVariantsController < ApplicationController
 
   # GET /merchandise_variants
   def index
+    @variants = MerchandiseVariant.includes(:merchandise_item)
+    
+    # Filter by merchandise_item_id if provided
     if params[:merchandise_item_id].present?
-      @variants = MerchandiseVariant.where(merchandise_item_id: params[:merchandise_item_id])
-    else
-      @variants = MerchandiseVariant.all
+      @variants = @variants.where(merchandise_item_id: params[:merchandise_item_id])
+    end
+    
+    # Apply additional filters
+    if params[:color].present?
+      @variants = @variants.where(color: params[:color])
+    end
+    
+    if params[:size].present?
+      @variants = @variants.where(size: params[:size])
+    end
+    
+    # Filter by stock status
+    if params[:stock_status].present?
+      case params[:stock_status]
+      when 'in_stock'
+        @variants = @variants.where('stock_quantity > 0')
+      when 'out_of_stock'
+        @variants = @variants.where(stock_quantity: 0)
+      when 'low_stock'
+        @variants = @variants.where('stock_quantity > 0 AND stock_quantity <= COALESCE(low_stock_threshold, 5)')
+      end
     end
     
     render json: @variants
@@ -111,6 +134,48 @@ class MerchandiseVariantsController < ApplicationController
       }, status: :unprocessable_entity
     end
   end
+  
+  # POST /merchandise_variants/:id/add_stock
+  def add_stock
+    quantity = params[:quantity].to_i
+    reason = params[:reason].presence || "Manual addition"
+    
+    if quantity <= 0
+      return render json: { error: "Quantity must be greater than 0" }, status: :unprocessable_entity
+    end
+    
+    new_quantity = @merchandise_variant.add_stock!(quantity, reason)
+    
+    render json: {
+      message: "Successfully added #{quantity} to stock",
+      new_quantity: new_quantity,
+      variant: @merchandise_variant
+    }
+  end
+  
+  # POST /merchandise_variants/:id/reduce_stock
+  def reduce_stock
+    quantity = params[:quantity].to_i
+    reason = params[:reason].presence || "Manual reduction"
+    allow_negative = params[:allow_negative] == 'true'
+    
+    if quantity <= 0
+      return render json: { error: "Quantity must be greater than 0" }, status: :unprocessable_entity
+    end
+    
+    begin
+      new_quantity = @merchandise_variant.reduce_stock!(quantity, allow_negative)
+      
+      render json: {
+        message: "Successfully reduced stock by #{quantity}",
+        new_quantity: new_quantity,
+        variant: @merchandise_variant
+      }
+    rescue StandardError => e
+      render json: { error: e.message }, status: :unprocessable_entity
+    end
+  end
+  
 
   private
   
@@ -124,11 +189,19 @@ class MerchandiseVariantsController < ApplicationController
       :size,
       :color,
       :price_adjustment,
-      :stock_quantity
+      :stock_quantity,
+      :sku,
+      :low_stock_threshold
     )
   end
 
   def is_admin?
     current_user && current_user.role.in?(%w[admin super_admin])
+  end
+  
+  def require_admin!
+    unless is_admin?
+      render json: { error: "Forbidden - Admin access required" }, status: :forbidden
+    end
   end
 end
