@@ -264,6 +264,68 @@ class OrdersController < ApplicationController
             end
           end
         end
+        
+        # Process menu item stock adjustments
+        if @order.items.present?
+          # Debug log the actual items to see structure
+          Rails.logger.debug("Order items: #{@order.items.inspect}")
+          
+          @order.items.each do |item|
+            # Extract item_id - be extremely defensive since this could be multiple formats
+            item_id = nil
+            if item.is_a?(Hash)
+              item_id = item["id"] || item[:id]
+            elsif item.respond_to?(:id)
+              item_id = item.id
+            elsif item.respond_to?(:with_indifferent_access)
+              item_id = item.with_indifferent_access[:id]
+            end
+            
+            # Log the extracted ID for debugging
+            Rails.logger.debug("Extracted menu item ID: #{item_id.inspect}")
+            
+            # Skip if no valid ID
+            next unless item_id.present?
+            
+            # Find the menu item
+            menu_item = MenuItem.find_by(id: item_id)
+            
+            # Skip this item if not found or no inventory tracking
+            next unless menu_item&.enable_stock_tracking
+            
+            # Extract quantity - be extremely defensive
+            quantity = 0
+            if item.is_a?(Hash)
+              quantity = (item["quantity"] || item[:quantity] || 1).to_i
+            elsif item.respond_to?(:quantity)
+              quantity = item.quantity.to_i
+            elsif item.respond_to?(:with_indifferent_access)
+              quantity = item.with_indifferent_access[:quantity].to_i
+            end
+            
+            # Log the extracted quantity for debugging
+            Rails.logger.debug("Extracted quantity: #{quantity.inspect} for menu item #{menu_item.name}")
+            
+            # Calculate new stock quantity
+            current_stock = menu_item.stock_quantity.to_i
+            new_stock = [current_stock - quantity, 0].max  # Don't allow negative stock
+            
+            # Update stock and create audit record
+            menu_item.update_stock_quantity(
+              new_stock,
+              'order',                           # reason_type
+              "Order ##{@order.id} - #{quantity} items", # reason_details
+              @current_user,                     # user who placed the order
+              @order                             # reference to the order
+            )
+            
+            # Check if we need to send low stock notification
+            if menu_item.stock_status == 'low_stock' && !Rails.env.test? && !test_mode
+              # TODO: Implement notification for menu items if needed
+              # Similar to merchandise items
+            end
+          end
+        end
       end
       
       # Get notification preferences - only don't send if explicitly set to false
