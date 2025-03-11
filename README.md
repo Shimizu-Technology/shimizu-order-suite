@@ -47,6 +47,23 @@ The backend is built with **Ruby on Rails** in API-only mode, with a multi-tenan
 
 ---
 
+## **Recent Features**
+
+### Menu Item Inventory Tracking
+
+The platform now includes a comprehensive inventory tracking system for menu items, allowing restaurants to:
+
+- Enable/disable inventory tracking per menu item
+- Set and monitor stock quantities
+- Record damaged items with reasons and timestamps
+- View audit history of all inventory changes
+- Configure low stock thresholds for automated status updates
+- Automatically update item availability based on inventory levels
+
+For detailed documentation, see [Inventory Tracking System Documentation](docs/inventory_tracking_system.md).
+
+---
+
 ## **Multi-tenant Architecture**
 
 Hafaloha uses a multi-tenant architecture where all restaurants share the same database, but data is isolated through application-level controls. This provides efficient resource utilization while ensuring proper data separation.
@@ -609,6 +626,14 @@ Paginated endpoints return a consistent response format:
 - `PATCH /restaurants/:id/toggle_vip_mode` - Enable/disable VIP-only checkout mode
 
 For detailed documentation on the VIP Code System, see [VIP Code System Documentation](docs/vip_code_system.md).
+
+### Inventory Management
+- `PATCH /menu_items/:id` - Update menu item inventory settings
+- `POST /menu_items/:id/mark_damaged` - Record damaged items
+- `POST /menu_items/:id/update_stock` - Update stock quantity
+- `GET /menu_items/:id/stock_audits` - Get stock audit history
+
+For detailed documentation on the Inventory Management System, see [Inventory Tracking System Documentation](docs/inventory_tracking_system.md).
 
 ### Restaurant Scope
 All endpoints automatically filter data by the restaurant context from:

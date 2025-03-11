@@ -171,6 +171,73 @@ class MenuItemsController < ApplicationController
     render json: menu_item, status: :ok
   end
 
+  # POST /menu_items/:id/mark_as_damaged
+  def mark_as_damaged
+    Rails.logger.info "=== MenuItemsController#mark_as_damaged ==="
+    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
+
+    menu_item = MenuItem.find(params[:id])
+    
+    unless menu_item.enable_stock_tracking
+      return render json: { error: "Inventory tracking is not enabled for this item" }, status: :unprocessable_entity
+    end
+    
+    quantity = params[:quantity].to_i
+    reason = params[:reason].presence || "No reason provided"
+    
+    if quantity <= 0
+      return render json: { error: "Quantity must be greater than zero" }, status: :unprocessable_entity
+    end
+    
+    if menu_item.mark_as_damaged(quantity, reason, current_user)
+      render json: menu_item
+    else
+      render json: { error: "Failed to mark items as damaged" }, status: :unprocessable_entity
+    end
+  end
+  
+  # POST /menu_items/:id/update_stock
+  def update_stock
+    Rails.logger.info "=== MenuItemsController#update_stock ==="
+    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
+
+    menu_item = MenuItem.find(params[:id])
+    
+    unless menu_item.enable_stock_tracking
+      return render json: { error: "Inventory tracking is not enabled for this item" }, status: :unprocessable_entity
+    end
+    
+    new_quantity = params[:stock_quantity].to_i
+    reason_type = params[:reason_type] || "adjustment"
+    reason_details = params[:reason_details].presence
+    
+    if new_quantity < 0
+      return render json: { error: "Stock quantity cannot be negative" }, status: :unprocessable_entity
+    end
+    
+    if menu_item.update_stock_quantity(new_quantity, reason_type, reason_details, current_user)
+      render json: menu_item
+    else
+      render json: { error: "Failed to update stock quantity" }, status: :unprocessable_entity
+    end
+  end
+  
+  # GET /menu_items/:id/stock_audits
+  def stock_audits
+    Rails.logger.info "=== MenuItemsController#stock_audits ==="
+    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
+
+    menu_item = MenuItem.find(params[:id])
+    
+    unless menu_item.enable_stock_tracking
+      return render json: { error: "Inventory tracking is not enabled for this item" }, status: :unprocessable_entity
+    end
+    
+    audits = menu_item.menu_item_stock_audits.order(created_at: :desc).limit(50)
+    
+    render json: audits
+  end
+  
   private
 
   def menu_item_params
@@ -192,6 +259,10 @@ class MenuItemsController < ApplicationController
       :featured,
       :stock_status,
       :status_note,
+      :enable_stock_tracking,
+      :stock_quantity,
+      :damaged_quantity,
+      :low_stock_threshold,
       category_ids: []
     )
   end

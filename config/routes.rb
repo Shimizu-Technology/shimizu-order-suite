@@ -188,10 +188,13 @@ Rails.application.routes.draw do
     end
   end
 
-  # Enhanced menu_items with image uploading & option groups
+  # Enhanced menu_items with image uploading, option groups, and inventory tracking
   resources :menu_items do
     member do
       post :upload_image
+      post :mark_as_damaged
+      post :update_stock
+      get :stock_audits
     end
 
     # For listing or creating option groups under a given menu item:

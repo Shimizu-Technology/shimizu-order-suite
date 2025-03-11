@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_11_110000) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_11_140000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -80,6 +80,21 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_11_110000) do
     t.index ["menu_item_id"], name: "index_menu_item_categories_on_menu_item_id"
   end
 
+  create_table "menu_item_stock_audits", force: :cascade do |t|
+    t.bigint "menu_item_id", null: false
+    t.integer "previous_quantity", null: false
+    t.integer "new_quantity", null: false
+    t.string "reason"
+    t.bigint "user_id"
+    t.bigint "order_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_menu_item_stock_audits_on_created_at"
+    t.index ["menu_item_id"], name: "index_menu_item_stock_audits_on_menu_item_id"
+    t.index ["order_id"], name: "index_menu_item_stock_audits_on_order_id"
+    t.index ["user_id"], name: "index_menu_item_stock_audits_on_user_id"
+  end
+
   create_table "menu_items", force: :cascade do |t|
     t.string "name"
     t.text "description"
@@ -99,6 +114,10 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_11_110000) do
     t.integer "stock_status"
     t.text "status_note"
     t.decimal "cost_to_make", precision: 8, scale: 2, default: "0.0"
+    t.boolean "enable_stock_tracking", default: false
+    t.integer "stock_quantity"
+    t.integer "damaged_quantity", default: 0
+    t.integer "low_stock_threshold", default: 10
     t.index ["menu_id", "available"], name: "index_menu_items_on_menu_id_and_available"
     t.index ["menu_id", "category"], name: "index_menu_items_on_menu_id_and_category"
     t.index ["menu_id"], name: "index_menu_items_on_menu_id"
@@ -446,6 +465,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_11_110000) do
   add_foreign_key "layouts", "restaurants"
   add_foreign_key "menu_item_categories", "categories"
   add_foreign_key "menu_item_categories", "menu_items"
+  add_foreign_key "menu_item_stock_audits", "menu_items"
+  add_foreign_key "menu_item_stock_audits", "orders"
+  add_foreign_key "menu_item_stock_audits", "users"
   add_foreign_key "menu_items", "menus"
   add_foreign_key "menus", "restaurants"
   add_foreign_key "merchandise_collections", "restaurants"

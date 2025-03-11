@@ -5,8 +5,12 @@ class MenuItem < ApplicationRecord
   
   belongs_to :menu
   has_many :option_groups, dependent: :destroy
+  has_many :menu_item_stock_audits, dependent: :destroy
   # Define path to restaurant through associations for tenant isolation
   has_one :restaurant, through: :menu
+
+  # Callback to reset inventory fields when tracking is disabled
+  before_save :reset_inventory_fields_if_tracking_disabled
 
   # Many-to-many categories
   has_many :menu_item_categories, dependent: :destroy
@@ -16,6 +20,11 @@ class MenuItem < ApplicationRecord
   validates :price, numericality: { greater_than_or_equal_to: 0 }
   validates :advance_notice_hours, numericality: { greater_than_or_equal_to: 0 }
   validate :must_have_at_least_one_category, on: [:create, :update]
+  
+  # Inventory tracking validations
+  validates :stock_quantity, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
+  validates :damaged_quantity, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
+  validates :low_stock_threshold, numericality: { only_integer: true, greater_than_or_equal_to: 1 }, allow_nil: true
   
   # Override with_restaurant_scope for indirect restaurant association
   def self.with_restaurant_scope
@@ -31,6 +40,79 @@ class MenuItem < ApplicationRecord
 
   # Validation for Featured
   validate :limit_featured_items, on: [:create, :update]
+  
+  # Inventory tracking methods
+  def available_quantity
+    return nil unless enable_stock_tracking
+    
+    total = stock_quantity.to_i
+    damaged = damaged_quantity.to_i
+    total - damaged
+  end
+  
+  def actual_low_stock_threshold
+    low_stock_threshold || 10  # Default to 10 if not set
+  end
+  
+  # Mark a quantity as damaged
+  def mark_as_damaged(quantity, reason, user)
+    return false unless enable_stock_tracking
+    
+    transaction do
+      # Create audit record
+      stock_audit = MenuItemStockAudit.create_damaged_record(self, quantity, reason, user)
+      
+      # Update the damaged quantity
+      previous = self.damaged_quantity || 0
+      self.update!(damaged_quantity: previous + quantity.to_i)
+      
+      # Re-evaluate stock status based on available quantity
+      update_stock_status!
+      
+      true
+    end
+  rescue => e
+    Rails.logger.error("Failed to mark item as damaged: #{e.message}")
+    false
+  end
+  
+  # Update stock quantity
+  def update_stock_quantity(new_quantity, reason_type, reason_details = nil, user = nil, order = nil)
+    return false unless enable_stock_tracking
+    
+    transaction do
+      # Create audit record
+      stock_audit = MenuItemStockAudit.create_stock_record(self, new_quantity, reason_type, reason_details, user, order)
+      
+      # Update the stock quantity
+      self.update!(stock_quantity: new_quantity)
+      
+      # Re-evaluate stock status based on available quantity
+      update_stock_status!
+      
+      true
+    end
+  rescue => e
+    Rails.logger.error("Failed to update stock quantity: #{e.message}")
+    false
+  end
+  
+  # Update stock status based on available quantity
+  def update_stock_status!
+    return unless enable_stock_tracking
+    
+    available = available_quantity
+    
+    new_status = if available <= 0
+                  :out_of_stock
+                elsif available <= actual_low_stock_threshold
+                  :low_stock
+                else
+                  :in_stock
+                end
+    
+    update_column(:stock_status, stock_status_before_type_cast) unless stock_status == new_status.to_s
+  end
 
   # Stock status enum & optional note
   enum :stock_status, {
@@ -53,7 +135,7 @@ class MenuItem < ApplicationRecord
 
   # as_json => only expose category_ids, not full objects
   def as_json(options = {})
-    super(options).merge(
+    result = super(options).merge(
       'price'                => price.to_f,
       'cost_to_make'         => cost_to_make.to_f,
       'image_url'            => image_url,
@@ -68,9 +150,35 @@ class MenuItem < ApplicationRecord
       # Use numeric IDs only:
       'category_ids'         => categories.map(&:id)
     )
+    
+    # Add inventory tracking fields if enabled
+    if enable_stock_tracking
+      result.merge!(
+        'enable_stock_tracking' => enable_stock_tracking,
+        'stock_quantity' => stock_quantity.to_i,
+        'damaged_quantity' => damaged_quantity.to_i,
+        'available_quantity' => available_quantity,
+        'low_stock_threshold' => actual_low_stock_threshold
+      )
+    end
+    
+    result
   end
 
   private
+
+  # Reset inventory tracking fields when tracking is turned off
+  def reset_inventory_fields_if_tracking_disabled
+    if enable_stock_tracking_changed? && !enable_stock_tracking
+      # Set inventory fields to NULL in the database
+      self.stock_quantity = nil 
+      self.damaged_quantity = nil
+      self.low_stock_threshold = nil
+      
+      # Also ensure stock status is not based on inventory
+      self.stock_status = 'in_stock' unless stock_status_changed?
+    end
+  end
 
   # Enforce max 4 featured items
   def limit_featured_items
