@@ -135,10 +135,11 @@ Rails.application.routes.draw do
     get 'restaurant/allowed_origins',  to: 'restaurant#allowed_origins'
     post 'restaurant/allowed_origins', to: 'restaurant#update_allowed_origins'
 
-    # Admin users => create/edit/delete + resend_invite
+    # Admin users => create/edit/delete + resend_invite + reset password
     resources :users, only: [:index, :create, :update, :destroy] do
       member do
         post :resend_invite
+        post :admin_reset_password
       end
     end
   end

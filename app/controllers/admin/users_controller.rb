@@ -113,17 +113,41 @@ module Admin
       end
     end
 
-    # POST /admin/users/:id/resend_invite
-    def resend_invite
-      user = User.find(params[:id])
-      # Re-generate reset token & re-send the same "reset password" email
-      raw_token = user.generate_reset_password_token!
-      PasswordMailer.reset_password(user, raw_token).deliver_later
+  # POST /admin/users/:id/resend_invite
+  def resend_invite
+    user = User.find(params[:id])
+    # Re-generate reset token & re-send the same "reset password" email
+    raw_token = user.generate_reset_password_token!
+    PasswordMailer.reset_password(user, raw_token).deliver_later
 
-      render json: { message: "Invitation re-sent to #{user.email}" }, status: :ok
+    render json: { message: "Invitation re-sent to #{user.email}" }, status: :ok
+  end
+  
+  # POST /admin/users/:id/admin_reset_password
+  def admin_reset_password
+    user = User.find(params[:id])
+    
+    # Get the password from params
+    new_password = params[:password]
+    
+    # Validate password
+    if new_password.blank? || new_password.length < 6
+      return render json: { errors: ["Password must be at least 6 characters"] }, status: :unprocessable_entity
     end
+    
+    # Update the user's password
+    user.password = new_password
+    
+    if user.save
+      render json: { 
+        message: "Password has been reset successfully"
+      }, status: :ok
+    else
+      render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
+    end
+  end
 
-    private
+  private
 
     def require_admin!
       unless current_user && current_user.role.in?(%w[admin super_admin])
