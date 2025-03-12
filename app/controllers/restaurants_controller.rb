@@ -168,6 +168,9 @@ class RestaurantsController < ApplicationController
       :time_zone,
       :contact_email,
       :custom_pickup_location,
+      :facebook_url,
+      :instagram_url,
+      :twitter_url,
       admin_settings: {},
       allowed_origins: []
     )
@@ -195,6 +198,10 @@ class RestaurantsController < ApplicationController
       admin_settings:             restaurant.admin_settings,
       allowed_origins:            restaurant.allowed_origins,
       custom_pickup_location:     restaurant.custom_pickup_location,
+      # Social media fields
+      facebook_url:               restaurant.facebook_url,
+      instagram_url:              restaurant.instagram_url,
+      twitter_url:                restaurant.twitter_url,
       # VIP-related fields
       vip_only_checkout:          restaurant.vip_only_checkout?,
       vip_enabled:                restaurant.vip_enabled,
