@@ -217,7 +217,13 @@ Rails.application.routes.draw do
   # Payment routes
   get '/payments/client_token', to: 'payments#client_token'
   post '/payments/process', to: 'payments#process_payment'
+  post '/payments/create_order', to: 'payments#create_order'
+  post '/payments/capture_order', to: 'payments#capture_order'
   get '/payments/transaction/:id', to: 'payments#transaction'
+  
+  # PayPal routes
+  post '/paypal/create_order', to: 'paypal#create_order'
+  post '/paypal/capture_order', to: 'paypal#capture_order'
 
   resources :inventory_statuses, only: [:index, :show, :update]
 
