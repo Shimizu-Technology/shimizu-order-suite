@@ -184,15 +184,29 @@ class MenuItemsController < ApplicationController
     
     quantity = params[:quantity].to_i
     reason = params[:reason].presence || "No reason provided"
+    from_order = params[:order_id].present?
     
     if quantity <= 0
       return render json: { error: "Quantity must be greater than zero" }, status: :unprocessable_entity
     end
     
-    if menu_item.mark_as_damaged(quantity, reason, current_user)
-      render json: menu_item
+    # If this is coming from an order edit (through InventoryReversionDialog),
+    # we need special handling to avoid duplicate inventory adjustments
+    if from_order
+      Rails.logger.info "Mark as damaged called from order edit - only updating damaged count"
+      # Just increment the damaged count - the inventory adjustment will be handled by orders_controller
+      if menu_item.increment_damaged_only(quantity, reason, current_user)
+        render json: menu_item
+      else
+        render json: { error: "Failed to mark items as damaged" }, status: :unprocessable_entity
+      end
     else
-      render json: { error: "Failed to mark items as damaged" }, status: :unprocessable_entity
+      # Regular damaged marking (not from order edit)
+      if menu_item.mark_as_damaged(quantity, reason, current_user)
+        render json: menu_item
+      else
+        render json: { error: "Failed to mark items as damaged" }, status: :unprocessable_entity
+      end
     end
   end
   

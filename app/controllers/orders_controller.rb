@@ -1,10 +1,15 @@
 # app/controllers/orders_controller.rb
+
 class OrdersController < ApplicationController
   before_action :authorize_request, except: [:create, :show]
   
-  # Mark create, show, new_since, index, update, and destroy as public endpoints that don't require restaurant context
+  # Mark create, show, new_since, index, update, and destroy as public endpoints 
+  # that don't require restaurant context
   def public_endpoint?
-    action_name.in?(['create', 'show', 'new_since', 'index', 'update', 'destroy', 'acknowledge', 'unacknowledged'])
+    action_name.in?([
+      'create', 'show', 'new_since', 'index', 
+      'update', 'destroy', 'acknowledge', 'unacknowledged'
+    ])
   end
 
   # GET /orders
@@ -26,8 +31,8 @@ class OrdersController < ApplicationController
     
     # Apply sorting and pagination
     @orders = @orders.order(created_at: :desc)
-                    .offset((page - 1) * per_page)
-                    .limit(per_page)
+                     .offset((page - 1) * per_page)
+                     .limit(per_page)
     
     render json: {
       orders: @orders,
@@ -267,11 +272,9 @@ class OrdersController < ApplicationController
         
         # Process menu item stock adjustments
         if @order.items.present?
-          # Debug log the actual items to see structure
           Rails.logger.debug("Order items: #{@order.items.inspect}")
           
           @order.items.each do |item|
-            # Extract item_id - be extremely defensive since this could be multiple formats
             item_id = nil
             if item.is_a?(Hash)
               item_id = item["id"] || item[:id]
@@ -280,20 +283,13 @@ class OrdersController < ApplicationController
             elsif item.respond_to?(:with_indifferent_access)
               item_id = item.with_indifferent_access[:id]
             end
-            
-            # Log the extracted ID for debugging
+
             Rails.logger.debug("Extracted menu item ID: #{item_id.inspect}")
-            
-            # Skip if no valid ID
             next unless item_id.present?
             
-            # Find the menu item
             menu_item = MenuItem.find_by(id: item_id)
-            
-            # Skip this item if not found or no inventory tracking
             next unless menu_item&.enable_stock_tracking
             
-            # Extract quantity - be extremely defensive
             quantity = 0
             if item.is_a?(Hash)
               quantity = (item["quantity"] || item[:quantity] || 1).to_i
@@ -303,46 +299,38 @@ class OrdersController < ApplicationController
               quantity = item.with_indifferent_access[:quantity].to_i
             end
             
-            # Log the extracted quantity for debugging
             Rails.logger.debug("Extracted quantity: #{quantity.inspect} for menu item #{menu_item.name}")
             
-            # Calculate new stock quantity
             current_stock = menu_item.stock_quantity.to_i
-            new_stock = [current_stock - quantity, 0].max  # Don't allow negative stock
+            new_stock = [current_stock - quantity, 0].max
             
-            # Update stock and create audit record
             menu_item.update_stock_quantity(
               new_stock,
-              'order',                           # reason_type
-              "Order ##{@order.id} - #{quantity} items", # reason_details
-              @current_user,                     # user who placed the order
-              @order                             # reference to the order
+              'order',
+              "Order ##{@order.id} - #{quantity} items",
+              @current_user,
+              @order
             )
             
-            # Check if we need to send low stock notification
             if menu_item.stock_status == 'low_stock' && !Rails.env.test? && !test_mode
-              # TODO: Implement notification for menu items if needed
-              # Similar to merchandise items
+              # TODO: implement menu item low-stock notifications if needed
             end
           end
         end
       end
       
-      # Get notification preferences - only don't send if explicitly set to false
       notification_channels = @order.restaurant.admin_settings&.dig('notification_channels', 'orders') || {}
       
-      # 1) Confirmation email - send unless explicitly disabled
+      # 1) Confirmation email
       if notification_channels['email'] != false && @order.contact_email.present?
         OrderMailer.order_confirmation(@order).deliver_later
       end
 
-      # 2) Confirmation text (async) - send unless explicitly disabled
+      # 2) Confirmation text
       if notification_channels['sms'] != false && @order.contact_phone.present?
         restaurant_name = @order.restaurant.name
-        # Use custom SMS sender ID if set, otherwise use restaurant name
         sms_sender = @order.restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
         
-        # Build the item list from both regular menu items and merchandise
         item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
         if @order.merchandise_items.present?
           merch_list = @order.merchandise_items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
@@ -357,12 +345,7 @@ class OrdersController < ApplicationController
           We'll text you an ETA once we start preparing your order!
         TXT
 
-        # Replace direct ClicksendClient call with a background job
-        SendSmsJob.perform_later(
-          to:   @order.contact_phone,
-          body: msg,
-          from: sms_sender
-        )
+        SendSmsJob.perform_later(to: @order.contact_phone, body: msg, from: sms_sender)
       end
 
       render json: @order, status: :created
@@ -379,7 +362,10 @@ class OrdersController < ApplicationController
     old_status = order.status
     old_pickup_time = order.estimated_pickup_time
 
-    # If admin => allow full params, else only allow partial
+    # 1) Store original items for inventory comparison
+    original_items = order.items.deep_dup
+
+    # If admin => allow full params, else only partial
     permitted_params = if current_user&.role.in?(%w[admin super_admin])
                          order_params_admin
                        else
@@ -387,10 +373,15 @@ class OrdersController < ApplicationController
                        end
 
     if order.update(permitted_params)
-      # Get notification preferences - only don't send if explicitly set to false
+      # 2) If items changed, process inventory diffs
+      if permitted_params[:items].present?
+        process_inventory_changes(original_items, order.items, order)
+      end
+
+      # -- Existing notification logic below --
+
       notification_channels = order.restaurant.admin_settings&.dig('notification_channels', 'orders') || {}
       restaurant_name = order.restaurant.name
-      # Use custom SMS sender ID if set, otherwise use restaurant name
       sms_sender = order.restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
       
       # If status changed from 'pending' to 'preparing'
@@ -400,60 +391,41 @@ class OrdersController < ApplicationController
         end
         if notification_channels['sms'] != false && order.contact_phone.present?
           if order.requires_advance_notice?
-            # For orders with 24-hour notice items
             eta_date = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%A, %B %-d") : "tomorrow"
             eta_time = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "morning"
             txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
                        "is now being prepared! Your order contains items that require advance preparation. "\
                        "Pickup time: #{eta_time} TOMORROW (#{eta_date})."
           else
-            # For regular orders
             eta_str = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "soon"
             txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
                        "is now being prepared! ETA: #{eta_str} TODAY."
           end
-
-          # Send SMS asynchronously
-          SendSmsJob.perform_later(
-            to:   order.contact_phone,
-            body: txt_body,
-            from: sms_sender
-          )
+          SendSmsJob.perform_later(to: order.contact_phone, body: txt_body, from: sms_sender)
         end
       # If ETA was updated (and order is in preparing status)
-      elsif order.status == 'preparing' && 
-            old_pickup_time.present? && 
-            order.estimated_pickup_time.present? && 
+      elsif order.status == 'preparing' &&
+            old_pickup_time.present? &&
+            order.estimated_pickup_time.present? &&
             old_pickup_time != order.estimated_pickup_time
         
-        # Send ETA update notifications
         if notification_channels['email'] != false && order.contact_email.present?
-          # Use the dedicated mailer for ETA updates
           OrderMailer.order_eta_updated(order).deliver_later
         end
-        
         if notification_channels['sms'] != false && order.contact_phone.present?
           if order.requires_advance_notice?
-            # For orders with 24-hour notice items
             eta_date = order.estimated_pickup_time.strftime("%A, %B %-d")
             eta_time = order.estimated_pickup_time.strftime("%-I:%M %p")
             txt_body = "Hi #{order.contact_name.presence || 'Customer'}, the pickup time for your order ##{order.id} "\
                        "has been updated. New pickup time: #{eta_time} on #{eta_date}. "\
                        "Thank you for your patience."
           else
-            # For regular orders
             eta_str = order.estimated_pickup_time.strftime("%-I:%M %p")
             txt_body = "Hi #{order.contact_name.presence || 'Customer'}, the pickup time for your order ##{order.id} "\
                        "has been updated. New ETA: #{eta_str} TODAY. "\
                        "Thank you for your patience."
           end
-
-          # Send SMS asynchronously
-          SendSmsJob.perform_later(
-            to:   order.contact_phone,
-            body: txt_body,
-            from: sms_sender
-          )
+          SendSmsJob.perform_later(to: order.contact_phone, body: txt_body, from: sms_sender)
         end
       end
 
@@ -465,11 +437,7 @@ class OrdersController < ApplicationController
         if notification_channels['sms'] != false && order.contact_phone.present?
           msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
                 "is now ready for pickup! Thank you for choosing #{restaurant_name}."
-          SendSmsJob.perform_later(
-            to:   order.contact_phone,
-            body: msg,
-            from: sms_sender
-          )
+          SendSmsJob.perform_later(to: order.contact_phone, body: msg, from: sms_sender)
         end
       end
 
@@ -498,6 +466,7 @@ class OrdersController < ApplicationController
   # For admins: allow editing everything
   def order_params_admin
     params.require(:order).permit(
+      :id,
       :restaurant_id,
       :user_id,
       :status,
@@ -519,6 +488,10 @@ class OrdersController < ApplicationController
         :price,
         :quantity,
         :notes,
+        :enable_stock_tracking,
+        :stock_quantity,
+        :damaged_quantity,
+        :low_stock_threshold,
         { customizations: {} }
       ],
       merchandise_items: [
@@ -535,16 +508,139 @@ class OrdersController < ApplicationController
   end
 
   # For normal customers: allow only certain fields
-  # e.g. let them cancel, update special_instructions, or contact info
   def order_params_user
-    # If you want to let them set status to 'cancelled':
-    # maybe only if old_status == 'pending'?
     params.require(:order).permit(
       :special_instructions,
       :contact_name,
       :contact_phone,
       :contact_email,
       :status
+    )
+  end
+
+  # ----------------------------------------------------
+  # The key new method: process_inventory_changes
+  # ----------------------------------------------------
+  def process_inventory_changes(original_items, new_items, order)
+    # Calculate totals by menu item ID to properly handle duplicates
+    original_totals = {}
+    original_items.each do |item|
+      item_id = extract_item_id(item).to_s
+      quantity = extract_quantity(item)
+      original_totals[item_id] ||= 0
+      original_totals[item_id] += quantity
+    end
+
+    new_totals = {}
+    tracked_items = {}  # To keep track of inventory-tracked items
+    
+    new_items.each do |item|
+      item_id = extract_item_id(item).to_s
+      quantity = extract_quantity(item)
+      new_totals[item_id] ||= 0
+      new_totals[item_id] += quantity
+      
+      # Store reference to first item with this ID for enable_stock_tracking check
+      tracked_items[item_id] ||= item
+    end
+
+    Rails.logger.debug("Original totals: #{original_totals}")
+    Rails.logger.debug("New totals: #{new_totals}")
+
+    # Process inventory adjustments for each unique menu item ID
+    (original_totals.keys | new_totals.keys).uniq.each do |item_id|
+      menu_item = MenuItem.find_by(id: item_id)
+      next unless menu_item&.enable_stock_tracking
+
+      original_qty = original_totals[item_id] || 0
+      new_qty = new_totals[item_id] || 0
+      qty_diff = new_qty - original_qty
+
+      # Skip if no change in quantity
+      next if qty_diff == 0
+
+      # If item is new to the order (wasn't in original)
+      if original_qty == 0
+        process_new_item(menu_item, new_qty, order)
+      # If item was removed from the order
+      elsif new_qty == 0
+        process_removed_item(menu_item, original_qty, order)
+      # If quantity changed
+      else
+        process_quantity_change(menu_item, original_qty, new_qty, qty_diff, order)
+      end
+    end
+  end
+  
+  # Helper methods for inventory processing
+  
+  def extract_item_id(item)
+    if item.is_a?(Hash)
+      item[:id] || item["id"]
+    elsif item.respond_to?(:id)
+      item.id
+    elsif item.respond_to?(:with_indifferent_access)
+      item.with_indifferent_access[:id]
+    end
+  end
+  
+  def extract_quantity(item)
+    quantity = 1 # Default
+    if item.is_a?(Hash)
+      quantity = (item[:quantity] || item["quantity"] || 1).to_i
+    elsif item.respond_to?(:quantity)
+      quantity = item.quantity.to_i
+    elsif item.respond_to?(:with_indifferent_access)
+      quantity = item.with_indifferent_access[:quantity].to_i
+    end
+    quantity
+  end
+  
+  def process_new_item(menu_item, quantity, order)
+    current_stock = menu_item.stock_quantity.to_i
+    new_stock = [current_stock - quantity, 0].max
+    
+    menu_item.update_stock_quantity(
+      new_stock,
+      'order',
+      "Order ##{order.id} - Added item during edit (qty #{quantity})",
+      @current_user,
+      order
+    )
+  end
+  
+  def process_removed_item(menu_item, quantity, order)
+    # Only add back 1 at a time for removed items to prevent double-counting
+    # since the frontend InventoryReversionDialog may have already handled some
+    current_stock = menu_item.stock_quantity.to_i
+    
+    # Get the count of this item that was in the previous order
+    removed_qty = quantity
+    
+    # Add debug logging
+    Rails.logger.debug("Returning item to inventory: #{menu_item.name}, quantity: #{removed_qty}, current stock: #{current_stock}")
+    
+    new_stock = current_stock + removed_qty
+    
+    menu_item.update_stock_quantity(
+      new_stock,
+      'adjustment',
+      "Order ##{order.id} - Removed item during edit (qty #{removed_qty})",
+      @current_user,
+      order
+    )
+  end
+  
+  def process_quantity_change(menu_item, original_qty, new_qty, qty_diff, order)
+    current_stock = menu_item.stock_quantity.to_i
+    new_stock = current_stock - qty_diff  # negative diff => we add back, positive => we subtract
+    
+    menu_item.update_stock_quantity(
+      [new_stock, 0].max,
+      'adjustment',
+      "Order ##{order.id} - Quantity changed from #{original_qty} to #{new_qty}",
+      @current_user,
+      order
     )
   end
 end
