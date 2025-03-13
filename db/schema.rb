@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_12_142306) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_14_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -263,6 +263,10 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_12_142306) do
     t.string "vip_code"
     t.bigint "vip_access_code_id"
     t.jsonb "merchandise_items", default: []
+    t.decimal "refund_amount", precision: 10, scale: 2
+    t.string "dispute_reason"
+    t.string "payment_id"
+    t.index ["payment_id"], name: "index_orders_on_payment_id"
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
     t.index ["user_id", "created_at"], name: "index_orders_on_user_id_and_created_at"
