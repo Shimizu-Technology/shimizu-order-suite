@@ -169,7 +169,14 @@ class StripeController < ApplicationController
   private
   
   def find_restaurant
-    Restaurant.find_by(id: params[:restaurant_id])
+    # Try to get restaurant from restaurant_id parameter
+    restaurant = Restaurant.find_by(id: params[:restaurant_id])
+    
+    # If no restaurant_id parameter was provided, try to get the first restaurant
+    # This is a fallback for requests that don't specify a restaurant
+    restaurant ||= Restaurant.first if Restaurant.exists?
+    
+    return restaurant
   end
   
   def render_not_found
