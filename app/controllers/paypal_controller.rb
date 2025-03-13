@@ -2,7 +2,6 @@
 
 class PaypalController < ApplicationController
   include RestaurantScope
-  skip_before_action :verify_authenticity_token, only: [:create_order, :capture_order]
   before_action :validate_amount, only: [:create_order]
 
   # POST /paypal/create_order
