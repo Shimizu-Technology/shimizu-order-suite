@@ -1,8 +1,5 @@
 class StripeController < ApplicationController
   include RestaurantScope
-
-  # Skip CSRF protection for webhook endpoints as they come from Stripe
-  skip_before_action :verify_authenticity_token, only: [:webhook]
   
   # Create a payment intent for Stripe
   def create_intent
