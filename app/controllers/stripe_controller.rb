@@ -1,5 +1,10 @@
 class StripeController < ApplicationController
   include RestaurantScope
+
+  # Mark these as public endpoints that don't require restaurant context
+  def public_endpoint?
+    action_name.in?(['create_intent', 'webhook'])
+  end
   
   # Create a payment intent for Stripe
   def create_intent
@@ -162,6 +167,10 @@ class StripeController < ApplicationController
   end
   
   private
+  
+  def find_restaurant
+    Restaurant.find_by(id: params[:restaurant_id])
+  end
   
   def render_not_found
     render json: { error: 'Restaurant not found' }, status: :not_found
