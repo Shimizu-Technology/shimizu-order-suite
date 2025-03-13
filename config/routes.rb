@@ -224,6 +224,12 @@ Rails.application.routes.draw do
   # PayPal routes
   post '/paypal/create_order', to: 'paypal#create_order'
   post '/paypal/capture_order', to: 'paypal#capture_order'
+  
+  # Stripe routes
+  post '/stripe/create_intent', to: 'stripe#create_intent'
+  post '/stripe/confirm_intent', to: 'stripe#confirm_intent'
+  get '/stripe/payment_intent/:id', to: 'stripe#payment_intent'
+  post '/stripe/webhook/:restaurant_id', to: 'stripe#webhook'
 
   resources :inventory_statuses, only: [:index, :show, :update]
 

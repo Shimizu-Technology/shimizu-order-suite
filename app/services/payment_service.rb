@@ -10,10 +10,16 @@ class PaymentService
 
     # Get credentials from restaurant's admin_settings
     credentials = restaurant.admin_settings&.dig('payment_gateway') || {}
+    payment_processor = credentials['payment_processor'] || 'paypal'
     
-    # For PayPal, we just return the client ID as the token
-    # This will be used to initialize the PayPal SDK on the frontend
-    credentials['client_id']
+    if payment_processor == 'stripe'
+      # For Stripe, we return the publishable key
+      return credentials['publishable_key']
+    else
+      # For PayPal, we just return the client ID as the token
+      # This will be used to initialize the PayPal SDK on the frontend
+      return credentials['client_id']
+    end
   end
 
   # Create an order for specific restaurant
@@ -62,7 +68,7 @@ class PaymentService
     end
   end
 
-  # Process payment (capture order) for specific restaurant
+  # Process payment for specific restaurant
   def self.process_payment(restaurant, payment_method_nonce, order_id = nil)
     # Check if test mode is enabled
     if restaurant.admin_settings&.dig('payment_gateway', 'test_mode') == true
@@ -77,44 +83,55 @@ class PaymentService
       )
     end
 
-    # If we're using the old Braintree flow, delegate to braintree_process_payment
-    unless order_id
-      return braintree_process_payment(restaurant, payment_method_nonce)
-    end
+    # Get credentials from restaurant's admin_settings
+    credentials = restaurant.admin_settings&.dig('payment_gateway') || {}
+    payment_processor = credentials['payment_processor'] || 'paypal'
 
-    # Get a PayPal client instance for this restaurant
-    client = paypal_client_for(restaurant)
-    
-    # Create the capture request
-    request = PayPalCheckoutSdk::Orders::OrdersCaptureRequest.new(order_id)
-    
-    begin
-      # Execute the request
-      response = client.execute(request)
-      
-      # Extract amount from response
-      amount = nil
-      if response.result.purchase_units && !response.result.purchase_units.empty?
-        # Since we're using a mock, we need to handle this differently
-        amount = response.result.purchase_units[0].amount&.value rescue "0.00"
+    if payment_processor == 'stripe'
+      # For Stripe payments, payment_method_nonce will be the payment intent ID
+      # and order_id will be null
+      return stripe_process_payment(restaurant, payment_method_nonce)
+    else
+      # If we're using the old Braintree flow, delegate to braintree_process_payment
+      unless order_id
+        return braintree_process_payment(restaurant, payment_method_nonce)
       end
+
+      # Otherwise, use PayPal flow
+      # Get a PayPal client instance for this restaurant
+      client = paypal_client_for(restaurant)
       
-      # Return a success response
-      OpenStruct.new(
-        success?: true,
-        transaction: OpenStruct.new(
-          id: response.result.id,
-          status: response.result.status,
-          amount: amount
+      # Create the capture request
+      request = PayPalCheckoutSdk::Orders::OrdersCaptureRequest.new(order_id)
+      
+      begin
+        # Execute the request
+        response = client.execute(request)
+        
+        # Extract amount from response
+        amount = nil
+        if response.result.purchase_units && !response.result.purchase_units.empty?
+          # Since we're using a mock, we need to handle this differently
+          amount = response.result.purchase_units[0].amount&.value rescue "0.00"
+        end
+        
+        # Return a success response
+        OpenStruct.new(
+          success?: true,
+          transaction: OpenStruct.new(
+            id: response.result.id,
+            status: response.result.status,
+            amount: amount
+          )
         )
-      )
-    rescue => e
-      # Return a failure response
-      Rails.logger.error("PayPal process_payment error: #{e.message}")
-      OpenStruct.new(
-        success?: false,
-        message: e.message
-      )
+      rescue => e
+        # Return a failure response
+        Rails.logger.error("PayPal process_payment error: #{e.message}")
+        OpenStruct.new(
+          success?: false,
+          message: e.message
+        )
+      end
     end
   end
 
@@ -148,8 +165,15 @@ class PaymentService
       )
     end
 
-    # Try to find the transaction using PayPal first
-    if transaction_id.length > 10 # This is probably a PayPal order ID
+    # Get credentials from restaurant's admin_settings
+    credentials = restaurant.admin_settings&.dig('payment_gateway') || {}
+    payment_processor = credentials['payment_processor'] || 'paypal'
+
+    # Check if it's a Stripe payment intent
+    if payment_processor == 'stripe' && transaction_id.start_with?('pi_')
+      return find_stripe_transaction(restaurant, transaction_id)
+    # Try to find the transaction using PayPal 
+    elsif transaction_id.length > 10 # This is probably a PayPal order ID
       return find_paypal_transaction(restaurant, transaction_id)
     else
       # Fall back to Braintree if it looks like a Braintree transaction ID
@@ -206,6 +230,86 @@ class PaymentService
     
     # Find the transaction
     gateway.transaction.find(transaction_id)
+  end
+
+  # Process a Stripe payment
+  def self.stripe_process_payment(restaurant, payment_intent_id)
+    begin
+      # Get credentials from restaurant's admin_settings
+      credentials = restaurant.admin_settings&.dig('payment_gateway') || {}
+      secret_key = credentials['secret_key']
+      
+      # Initialize Stripe with the restaurant's API key
+      Stripe.api_key = secret_key
+      
+      # Retrieve the payment intent
+      payment_intent = Stripe::PaymentIntent.retrieve(payment_intent_id)
+      
+      # Return the payment intent details
+      return OpenStruct.new(
+        success?: true,
+        transaction: OpenStruct.new(
+          id: payment_intent.id,
+          status: payment_intent.status,
+          amount: (payment_intent.amount / 100.0).to_s # Convert from cents to dollars
+        )
+      )
+    rescue Stripe::StripeError => e
+      # Return a failure response
+      Rails.logger.error("Stripe process_payment error: #{e.message}")
+      return OpenStruct.new(
+        success?: false,
+        message: e.message
+      )
+    rescue => e
+      # Return a generic failure response
+      Rails.logger.error("Stripe process_payment error: #{e.message}")
+      return OpenStruct.new(
+        success?: false,
+        message: "An unexpected error occurred"
+      )
+    end
+  end
+
+  # Find a Stripe transaction
+  def self.find_stripe_transaction(restaurant, payment_intent_id)
+    begin
+      # Get credentials from restaurant's admin_settings
+      credentials = restaurant.admin_settings&.dig('payment_gateway') || {}
+      secret_key = credentials['secret_key']
+      
+      # Initialize Stripe with the restaurant's API key
+      Stripe.api_key = secret_key
+      
+      # Retrieve the payment intent
+      payment_intent = Stripe::PaymentIntent.retrieve(payment_intent_id)
+      
+      # Return a success response
+      return OpenStruct.new(
+        success?: true,
+        transaction: OpenStruct.new(
+          id: payment_intent.id,
+          status: payment_intent.status,
+          amount: (payment_intent.amount / 100.0).to_s, # Convert from cents to dollars
+          created_at: Time.at(payment_intent.created),
+          updated_at: payment_intent.canceled_at ? Time.at(payment_intent.canceled_at) : Time.current
+        )
+      )
+    rescue Stripe::StripeError => e
+      # Return a failure response
+      Rails.logger.error("Stripe find_transaction error: #{e.message}")
+      return OpenStruct.new(
+        success?: false,
+        message: e.message
+      )
+    rescue => e
+      # Return a generic failure response
+      Rails.logger.error("Stripe find_transaction error: #{e.message}")
+      return OpenStruct.new(
+        success?: false,
+        message: "An unexpected error occurred"
+      )
+    end
   end
 
   private
