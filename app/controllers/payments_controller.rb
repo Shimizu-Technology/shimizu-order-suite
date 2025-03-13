@@ -160,7 +160,7 @@ class PaymentsController < ApplicationController
       render json: { 
         success: false, 
         message: result.message,
-        errors: result.errors.map(&:message) rescue []
+        errors: (result.errors.map(&:message) rescue [])
       }, status: :unprocessable_entity
     end
   rescue => e
