@@ -35,14 +35,28 @@ class Order < ApplicationRecord
       
       # For Stripe payments, ensure payment_id starts with 'pi_' for test mode
       payment_id_to_use = payment_id
-      if payment_method == 'stripe' && payment_id.present? && !payment_id.start_with?('pi_')
+      if payment_method == 'stripe'
         # Check if we're in test mode
         test_mode = restaurant.admin_settings&.dig('payment_gateway', 'test_mode')
-        if test_mode
-          # Generate a Stripe-like payment intent ID for test mode
+        
+        if payment_id.present?
+          if !payment_id.start_with?('pi_') && test_mode
+            # Generate a Stripe-like payment intent ID for test mode
+            payment_id_to_use = "pi_test_#{SecureRandom.hex(16)}"
+            Rails.logger.info("Generated test mode payment_id: #{payment_id_to_use} for order #{id}")
+          end
+        elsif test_mode
+          # No payment_id but we're in test mode, generate one
           payment_id_to_use = "pi_test_#{SecureRandom.hex(16)}"
-          Rails.logger.info("Generated test mode payment_id: #{payment_id_to_use} for order #{id}")
+          Rails.logger.info("Generated test mode payment_id: #{payment_id_to_use} for order #{id} (no payment_id present)")
         end
+      end
+      
+      # Ensure we have a valid payment_id for Stripe payments
+      if payment_method == 'stripe' && (payment_id_to_use.nil? || payment_id_to_use.empty?)
+        # Generate a payment_id if none exists
+        payment_id_to_use = "pi_#{SecureRandom.hex(16)}"
+        Rails.logger.info("Generated payment_id: #{payment_id_to_use} for order #{id} (no valid payment_id)")
       end
       
       payment = order_payments.create(
@@ -55,6 +69,12 @@ class Order < ApplicationRecord
         description: "Initial payment"
       )
       Rails.logger.info("Created initial payment record for order #{id}: #{payment.inspect}")
+    end
+    
+    # If payment exists but payment_id is nil, update it with the order's payment_id
+    if payment && payment.payment_id.nil? && payment_id.present?
+      payment.update(payment_id: payment_id)
+      Rails.logger.info("Updated payment_id for order #{id} payment: #{payment.id} to #{payment_id}")
     end
     
     payment

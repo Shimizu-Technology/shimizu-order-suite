@@ -163,9 +163,22 @@ class OrderPaymentsController < ApplicationController
       return render json: { error: "No initial payment found" }, status: :unprocessable_entity
     end
     
-    # Process the refund through the appropriate payment processor
+    # For Stripe payments, ensure we have a valid payment_intent_id
     if restaurant.admin_settings&.dig('payment_gateway', 'payment_processor') == 'stripe'
-      result = create_stripe_refund(original_payment.payment_id, refund_amount)
+      # If payment_id is nil in the OrderPayment record, try to get it from the Order record
+      payment_intent_id = original_payment.payment_id
+      
+      # If still nil, check if the Order has a payment_id
+      if payment_intent_id.nil? && @order.payment_id.present?
+        payment_intent_id = @order.payment_id
+        Rails.logger.info("Using payment_id from Order record: #{payment_intent_id}")
+        
+        # Update the OrderPayment record with the payment_id from the Order
+        original_payment.update(payment_id: payment_intent_id)
+        Rails.logger.info("Updated OrderPayment record with payment_id: #{payment_intent_id}")
+      end
+      
+      result = create_stripe_refund(payment_intent_id, refund_amount)
     else
       result = create_paypal_refund(original_payment.transaction_id, refund_amount)
     end
