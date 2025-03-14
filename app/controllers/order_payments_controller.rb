@@ -107,15 +107,22 @@ class OrderPaymentsController < ApplicationController
     max_refundable = @order.total_paid - @order.total_refunded
     Rails.logger.info("Max refundable: #{max_refundable}, total_paid: #{@order.total_paid}, total_refunded: #{@order.total_refunded}")
     
-    # Only validate refund amount if not in test mode and if there's an actual payment
+    # Get restaurant settings
     restaurant = @order.restaurant
     test_mode = restaurant.admin_settings&.dig('payment_gateway', 'test_mode')
     
-    if !test_mode && (refund_amount <= 0 || refund_amount > max_refundable)
+    # Only validate refund amount in strict cases:
+    # 1. If refund amount is <= 0 (always invalid)
+    # 2. If there's an actual payment recorded AND we're not in test mode AND refund amount > max_refundable
+    if refund_amount <= 0 || 
+       (@order.total_paid > 0 && !test_mode && refund_amount > max_refundable)
       return render json: { 
         error: "Invalid refund amount. Maximum refundable: #{max_refundable}" 
       }, status: :unprocessable_entity
     end
+    
+    # Log that we're allowing the refund
+    Rails.logger.info("Allowing refund of #{refund_amount} for order #{@order.id}")
     
     # Create a fake initial payment if none exists
     if @order.initial_payment.nil?

@@ -139,11 +139,27 @@ class StripeController < ApplicationController
                 Order.find_by(transaction_id: payment_intent.id)
         
         if order
+          # Update order payment fields
           order.update(
             payment_status: 'paid',
             payment_method: 'stripe',
-            payment_id: payment_intent.id # Ensure payment_id is set
+            payment_id: payment_intent.id, # Ensure payment_id is set
+            payment_amount: payment_intent.amount / 100.0 # Convert from cents to dollars
           )
+          
+          # Create an OrderPayment record if one doesn't exist
+          unless order.order_payments.exists?(payment_type: 'initial')
+            order.order_payments.create(
+              payment_type: 'initial',
+              amount: payment_intent.amount / 100.0, # Convert from cents to dollars
+              payment_method: 'stripe',
+              status: 'paid',
+              transaction_id: payment_intent.id,
+              payment_id: payment_intent.id,
+              description: "Initial payment"
+            )
+            Rails.logger.info("Created initial payment record for order #{order.id} from webhook")
+          end
         end
         
       when 'payment_intent.payment_failed'
@@ -364,11 +380,27 @@ class StripeController < ApplicationController
                 Order.find_by(transaction_id: payment_intent.id)
         
         if order
+          # Update order payment fields
           order.update(
             payment_status: 'paid',
             payment_method: 'stripe',
-            payment_id: payment_intent.id # Ensure payment_id is set
+            payment_id: payment_intent.id, # Ensure payment_id is set
+            payment_amount: payment_intent.amount / 100.0 # Convert from cents to dollars
           )
+          
+          # Create an OrderPayment record if one doesn't exist
+          unless order.order_payments.exists?(payment_type: 'initial')
+            order.order_payments.create(
+              payment_type: 'initial',
+              amount: payment_intent.amount / 100.0, # Convert from cents to dollars
+              payment_method: 'stripe',
+              status: 'paid',
+              transaction_id: payment_intent.id,
+              payment_id: payment_intent.id,
+              description: "Initial payment"
+            )
+            Rails.logger.info("Created initial payment record for order #{order.id} from global webhook")
+          end
         end
         
       when 'payment_intent.payment_failed'

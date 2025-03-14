@@ -30,12 +30,14 @@ class Order < ApplicationRecord
     
     # If no initial payment exists but we have payment info in the order table,
     # create a new OrderPayment record based on the order's payment fields
-    if payment.nil? && payment_status == 'completed' && payment_method.present? && payment_amount.present?
+    if payment.nil? && payment_method.present? && payment_amount.present? && payment_amount.to_f > 0
+      payment_status_for_record = payment_status == 'paid' || payment_status == 'completed' ? 'paid' : payment_status
+      
       payment = order_payments.create(
         payment_type: 'initial',
         amount: payment_amount,
         payment_method: payment_method,
-        status: 'paid',
+        status: payment_status_for_record,
         transaction_id: transaction_id,
         payment_id: payment_id,
         description: "Initial payment"
