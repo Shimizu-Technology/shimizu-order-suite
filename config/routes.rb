@@ -239,6 +239,7 @@ Rails.application.routes.draw do
   post '/stripe/confirm_intent', to: 'stripe#confirm_intent'
   get '/stripe/payment_intent/:id', to: 'stripe#payment_intent'
   post '/stripe/webhook/:restaurant_id', to: 'stripe#webhook'
+  post '/stripe/webhook', to: 'stripe#global_webhook'
 
   resources :inventory_statuses, only: [:index, :show, :update]
 
