@@ -150,6 +150,15 @@ class OrderPaymentsController < ApplicationController
       Rails.logger.info("After creating payment: total_paid=#{@order.total_paid}, payment.status=#{payment.status}, payment_id=#{payment.payment_id || 'nil'}")
     end
     
+    # Ensure existing payment has a payment_id
+    original_payment = @order.initial_payment
+    if original_payment && original_payment.payment_id.nil?
+      # Generate a valid payment_id if none exists
+      fake_payment_id = test_mode ? "pi_test_#{SecureRandom.hex(16)}" : "pi_#{SecureRandom.hex(16)}"
+      original_payment.update(payment_id: fake_payment_id)
+      Rails.logger.info("Updated existing payment with generated payment_id: #{fake_payment_id}")
+    end
+    
     # Process the refund
     restaurant = @order.restaurant
     Rails.logger.info("Restaurant: #{restaurant.inspect}")

@@ -244,6 +244,33 @@ class OrdersController < ApplicationController
     end
 
     if @order.save
+      # Log payment information for debugging
+      Rails.logger.info("Order saved with payment_id: #{@order.payment_id}, transaction_id: #{@order.transaction_id}, payment_method: #{@order.payment_method}")
+      
+      # Create an OrderPayment record for the initial payment
+      if @order.payment_method.present? && @order.payment_amount.present? && @order.payment_amount.to_f > 0
+        payment_id = @order.payment_id || @order.transaction_id
+        
+        # For Stripe payments, ensure payment_id starts with 'pi_' for test mode
+        if @order.payment_method == 'stripe' && test_mode && (!payment_id || !payment_id.start_with?('pi_'))
+          payment_id = "pi_test_#{SecureRandom.hex(16)}"
+          # Update the order's payment_id as well
+          @order.update(payment_id: payment_id)
+          Rails.logger.info("Generated Stripe-like payment_id for test mode: #{payment_id}")
+        end
+        
+        payment = @order.order_payments.create(
+          payment_type: 'initial',
+          amount: @order.payment_amount,
+          payment_method: @order.payment_method,
+          status: 'paid',
+          transaction_id: @order.transaction_id || payment_id,
+          payment_id: payment_id,
+          description: "Initial payment"
+        )
+        Rails.logger.info("Created initial OrderPayment record: #{payment.inspect}")
+      end
+      
       ActiveRecord::Base.transaction do
         # Process merchandise stock adjustments
         if @order.merchandise_items.present?
