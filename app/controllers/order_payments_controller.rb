@@ -107,12 +107,15 @@ class OrderPaymentsController < ApplicationController
     max_refundable = @order.total_paid - @order.total_refunded
     Rails.logger.info("Max refundable: #{max_refundable}, total_paid: #{@order.total_paid}, total_refunded: #{@order.total_refunded}")
     
-    # For testing purposes, bypass the refund amount validation
-    # if refund_amount <= 0 || refund_amount > max_refundable
-    #   return render json: { 
-    #     error: "Invalid refund amount. Maximum refundable: #{max_refundable}" 
-    #   }, status: :unprocessable_entity
-    # }
+    # Only validate refund amount if not in test mode and if there's an actual payment
+    restaurant = @order.restaurant
+    test_mode = restaurant.admin_settings&.dig('payment_gateway', 'test_mode')
+    
+    if !test_mode && (refund_amount <= 0 || refund_amount > max_refundable)
+      return render json: { 
+        error: "Invalid refund amount. Maximum refundable: #{max_refundable}" 
+      }, status: :unprocessable_entity
+    end
     
     # Create a fake initial payment if none exists
     if @order.initial_payment.nil?
@@ -282,12 +285,27 @@ class OrderPaymentsController < ApplicationController
   def create_stripe_refund(payment_intent_id, amount)
     restaurant = @order.restaurant
     
-    # Get the API key - even in test mode, we'll use the Stripe API
+    # Get the API key for Stripe API calls
     secret_key = restaurant.admin_settings&.dig('payment_gateway', 'secret_key')
     Stripe.api_key = secret_key
     
+    # Check if we're in application test mode (not Stripe test mode)
+    test_mode = restaurant.admin_settings&.dig('payment_gateway', 'test_mode')
+    
+    # For orders without a real payment record or in app test mode, create a fake refund
+    if test_mode && !payment_intent_id.start_with?('pi_')
+      # In application test mode with fake payment IDs, return a successful fake refund
+      fake_refund_id = "test_refund_#{SecureRandom.hex(8)}"
+      return {
+        success: true,
+        transaction_id: fake_refund_id,
+        refund_id: fake_refund_id,
+        details: { status: 'succeeded', test_mode: true }
+      }
+    end
+    
     begin
-      
+      # This will work with both real payments and Stripe test mode payments
       refund = Stripe::Refund.create({
         payment_intent: payment_intent_id,
         amount: (amount * 100).to_i, # Convert to cents
@@ -304,6 +322,7 @@ class OrderPaymentsController < ApplicationController
         details: { status: refund.status }
       }
     rescue => e
+      Rails.logger.error("Stripe refund error: #{e.message}")
       {
         success: false,
         error: e.message
