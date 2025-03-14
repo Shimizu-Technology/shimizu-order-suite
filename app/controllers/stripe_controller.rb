@@ -149,7 +149,7 @@ class StripeController < ApplicationController
           
           # Create an OrderPayment record if one doesn't exist
           unless order.order_payments.exists?(payment_type: 'initial')
-            order.order_payments.create(
+            payment = order.order_payments.create(
               payment_type: 'initial',
               amount: payment_intent.amount / 100.0, # Convert from cents to dollars
               payment_method: 'stripe',
@@ -158,7 +158,7 @@ class StripeController < ApplicationController
               payment_id: payment_intent.id,
               description: "Initial payment"
             )
-            Rails.logger.info("Created initial payment record for order #{order.id} from webhook")
+            Rails.logger.info("Created initial payment record for order #{order.id} from webhook: #{payment.inspect}")
           end
         end
         
@@ -390,7 +390,7 @@ class StripeController < ApplicationController
           
           # Create an OrderPayment record if one doesn't exist
           unless order.order_payments.exists?(payment_type: 'initial')
-            order.order_payments.create(
+            payment = order.order_payments.create(
               payment_type: 'initial',
               amount: payment_intent.amount / 100.0, # Convert from cents to dollars
               payment_method: 'stripe',
@@ -399,7 +399,7 @@ class StripeController < ApplicationController
               payment_id: payment_intent.id,
               description: "Initial payment"
             )
-            Rails.logger.info("Created initial payment record for order #{order.id} from global webhook")
+            Rails.logger.info("Created initial payment record for order #{order.id} from global webhook: #{payment.inspect}")
           end
         end
         

@@ -33,13 +33,25 @@ class Order < ApplicationRecord
     if payment.nil? && payment_method.present? && payment_amount.present? && payment_amount.to_f > 0
       payment_status_for_record = payment_status == 'paid' || payment_status == 'completed' ? 'paid' : payment_status
       
+      # For Stripe payments, ensure payment_id starts with 'pi_' for test mode
+      payment_id_to_use = payment_id
+      if payment_method == 'stripe' && payment_id.present? && !payment_id.start_with?('pi_')
+        # Check if we're in test mode
+        test_mode = restaurant.admin_settings&.dig('payment_gateway', 'test_mode')
+        if test_mode
+          # Generate a Stripe-like payment intent ID for test mode
+          payment_id_to_use = "pi_test_#{SecureRandom.hex(16)}"
+          Rails.logger.info("Generated test mode payment_id: #{payment_id_to_use} for order #{id}")
+        end
+      end
+      
       payment = order_payments.create(
         payment_type: 'initial',
         amount: payment_amount,
         payment_method: payment_method,
         status: payment_status_for_record,
-        transaction_id: transaction_id,
-        payment_id: payment_id,
+        transaction_id: transaction_id || payment_id_to_use,
+        payment_id: payment_id_to_use || payment_id,
         description: "Initial payment"
       )
       Rails.logger.info("Created initial payment record for order #{id}: #{payment.inspect}")
