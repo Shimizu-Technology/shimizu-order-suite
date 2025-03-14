@@ -368,10 +368,20 @@ class OrderPaymentsController < ApplicationController
       # This will work with both real production payments and Stripe test mode payments
       Rails.logger.info("Attempting to create Stripe refund for payment_intent: #{payment_intent_id} (Stripe test mode: #{stripe_test_mode})")
       
+      # Ensure reason is one of the valid values accepted by Stripe
+      valid_reasons = ['duplicate', 'fraudulent', 'requested_by_customer']
+      reason = params[:reason] || 'requested_by_customer'
+      
+      # Default to 'requested_by_customer' if the provided reason is not valid
+      if !valid_reasons.include?(reason)
+        reason = 'requested_by_customer'
+        Rails.logger.info("Invalid reason '#{params[:reason]}' provided, defaulting to 'requested_by_customer'")
+      end
+      
       refund = Stripe::Refund.create({
         payment_intent: payment_intent_id,
         amount: (amount * 100).to_i, # Convert to cents
-        reason: params[:reason] || 'requested_by_customer',
+        reason: reason,
         metadata: {
           order_id: @order.id
         }
