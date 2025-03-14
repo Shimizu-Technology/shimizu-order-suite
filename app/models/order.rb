@@ -1,6 +1,96 @@
 # app/models/order.rb
 
 class Order < ApplicationRecord
+  # Order status constants
+  STATUS_PENDING = 'pending'
+  STATUS_PREPARING = 'preparing'
+  STATUS_READY = 'ready'
+  STATUS_COMPLETED = 'completed'
+  STATUS_CANCELLED = 'cancelled'
+  STATUS_REFUNDED = 'refunded'
+  STATUS_PARTIALLY_REFUNDED = 'partially_refunded'
+  
+  # Valid order statuses
+  VALID_STATUSES = [
+    STATUS_PENDING,
+    STATUS_PREPARING,
+    STATUS_READY,
+    STATUS_COMPLETED,
+    STATUS_CANCELLED,
+    STATUS_REFUNDED,
+    STATUS_PARTIALLY_REFUNDED
+  ]
+  
+  has_many :order_payments, dependent: :destroy
+  
+  # Payment helper methods
+  def initial_payment
+    # First try to find an existing initial payment
+    payment = order_payments.find_by(payment_type: 'initial')
+    
+    # If no initial payment exists but we have payment info in the order table,
+    # create a new OrderPayment record based on the order's payment fields
+    if payment.nil? && payment_status == 'completed' && payment_method.present? && payment_amount.present?
+      payment = order_payments.create(
+        payment_type: 'initial',
+        amount: payment_amount,
+        payment_method: payment_method,
+        status: 'paid',
+        transaction_id: transaction_id,
+        payment_id: payment_id,
+        description: "Initial payment"
+      )
+      Rails.logger.info("Created initial payment record for order #{id}: #{payment.inspect}")
+    end
+    
+    payment
+  end
+  
+  def additional_payments
+    order_payments.where(payment_type: 'additional')
+  end
+  
+  def refunds
+    order_payments.where(payment_type: 'refund')
+  end
+  
+  def total_paid
+    order_payments.where(status: 'paid', payment_type: ['initial', 'additional']).sum(:amount)
+  end
+  
+  def total_refunded
+    order_payments.where(payment_type: 'refund', status: 'completed').sum(:amount)
+  end
+  
+  def net_amount
+    total_paid - total_refunded
+  end
+  
+  # Refund status helper methods
+  def refunded?
+    status == STATUS_REFUNDED
+  end
+  
+  def partially_refunded?
+    status == STATUS_PARTIALLY_REFUNDED
+  end
+  
+  def has_refunds?
+    refunded? || partially_refunded? || total_refunded > 0
+  end
+  
+  def update_refund_status
+    if total_refunded > 0
+      if (total_paid - total_refunded).abs < 0.01
+        # Full refund (allowing for small floating point differences)
+        update(payment_status: STATUS_REFUNDED, status: STATUS_REFUNDED)
+      else
+        # Partial refund
+        update(payment_status: STATUS_PARTIALLY_REFUNDED, status: STATUS_PARTIALLY_REFUNDED)
+      end
+    end
+  end
+  
   # Virtual attribute for VIP code (not stored in database)
   attr_accessor :vip_code
   # Default scope to current restaurant

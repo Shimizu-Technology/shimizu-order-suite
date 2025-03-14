@@ -153,6 +153,15 @@ Rails.application.routes.draw do
     collection do
       get :unacknowledged
     end
+    
+    # Order payments routes
+    resources :payments, only: [:index], controller: 'order_payments' do
+      collection do
+        post :additional, to: 'order_payments#create_additional'
+        post 'additional/capture', to: 'order_payments#capture_additional'
+        post :refund, to: 'order_payments#create_refund'
+      end
+    end
   end
   
   resources :promo_codes, only: [:index, :show, :create, :update, :destroy]

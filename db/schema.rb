@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_14_000000) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_14_100000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -240,6 +240,23 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_14_000000) do
     t.index ["order_id", "user_id"], name: "index_order_acknowledgments_on_order_id_and_user_id", unique: true
     t.index ["order_id"], name: "index_order_acknowledgments_on_order_id"
     t.index ["user_id"], name: "index_order_acknowledgments_on_user_id"
+  end
+
+  create_table "order_payments", force: :cascade do |t|
+    t.bigint "order_id", null: false
+    t.string "payment_type", null: false
+    t.decimal "amount", precision: 10, scale: 2, null: false
+    t.string "payment_method"
+    t.string "transaction_id"
+    t.string "payment_id"
+    t.jsonb "payment_details"
+    t.string "status"
+    t.string "description"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["order_id"], name: "index_order_payments_on_order_id"
+    t.index ["payment_id"], name: "index_order_payments_on_payment_id"
+    t.index ["transaction_id"], name: "index_order_payments_on_transaction_id"
   end
 
   create_table "orders", force: :cascade do |t|
@@ -487,6 +504,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_14_000000) do
   add_foreign_key "options", "option_groups"
   add_foreign_key "order_acknowledgments", "orders"
   add_foreign_key "order_acknowledgments", "users"
+  add_foreign_key "order_payments", "orders"
   add_foreign_key "orders", "restaurants"
   add_foreign_key "orders", "users"
   add_foreign_key "orders", "vip_access_codes"
