@@ -141,20 +141,12 @@ class OrderPaymentsController < ApplicationController
       return render json: { error: "No initial payment found" }, status: :unprocessable_entity
     end
     
-    # For testing, let's create a mock successful result
-    result = {
-      success: true,
-      transaction_id: "test_refund_#{SecureRandom.hex(8)}",
-      refund_id: "test_refund_#{SecureRandom.hex(8)}",
-      details: { status: 'succeeded', test_mode: true }
-    }
-    
-    # Comment out the actual payment processor code for now
-    # if restaurant.admin_settings&.dig('payment_gateway', 'payment_processor') == 'stripe'
-    #   result = create_stripe_refund(original_payment.payment_id, refund_amount)
-    # else
-    #   result = create_paypal_refund(original_payment.transaction_id, refund_amount)
-    # end
+    # Process the refund through the appropriate payment processor
+    if restaurant.admin_settings&.dig('payment_gateway', 'payment_processor') == 'stripe'
+      result = create_stripe_refund(original_payment.payment_id, refund_amount)
+    else
+      result = create_paypal_refund(original_payment.transaction_id, refund_amount)
+    end
     
     if result[:success]
       # Create a refund record
@@ -225,18 +217,11 @@ class OrderPaymentsController < ApplicationController
   def create_stripe_payment_intent(amount)
     restaurant = @order.restaurant
     
-    # Test mode handling
-    if restaurant.admin_settings&.dig('payment_gateway', 'test_mode') == true
-      return {
-        success: true,
-        client_secret: "pi_test_#{SecureRandom.hex(16)}_secret_#{SecureRandom.hex(16)}",
-        payment_id: "pi_test_#{SecureRandom.hex(16)}"
-      }
-    end
+    # Get the API key - even in test mode, we'll use the Stripe API
+    secret_key = restaurant.admin_settings&.dig('payment_gateway', 'secret_key')
+    Stripe.api_key = secret_key
     
     begin
-      secret_key = restaurant.admin_settings&.dig('payment_gateway', 'secret_key')
-      Stripe.api_key = secret_key
       
       intent = Stripe::PaymentIntent.create({
         amount: (amount * 100).to_i, # Convert to cents
@@ -265,19 +250,11 @@ class OrderPaymentsController < ApplicationController
     # Stripe auto-captures, just verify the payment status
     restaurant = @order.restaurant
     
-    # Test mode handling
-    if restaurant.admin_settings&.dig('payment_gateway', 'test_mode') == true
-      return {
-        success: true,
-        transaction_id: payment_intent_id,
-        payment_id: payment_intent_id,
-        details: { status: 'succeeded', test_mode: true }
-      }
-    end
+    # Get the API key - even in test mode, we'll use the Stripe API
+    secret_key = restaurant.admin_settings&.dig('payment_gateway', 'secret_key')
+    Stripe.api_key = secret_key
     
     begin
-      secret_key = restaurant.admin_settings&.dig('payment_gateway', 'secret_key')
-      Stripe.api_key = secret_key
       
       intent = Stripe::PaymentIntent.retrieve(payment_intent_id)
       
@@ -305,19 +282,11 @@ class OrderPaymentsController < ApplicationController
   def create_stripe_refund(payment_intent_id, amount)
     restaurant = @order.restaurant
     
-    # Test mode handling
-    if restaurant.admin_settings&.dig('payment_gateway', 'test_mode') == true
-      return {
-        success: true,
-        transaction_id: "re_test_#{SecureRandom.hex(16)}",
-        refund_id: "re_test_#{SecureRandom.hex(16)}",
-        details: { status: 'succeeded', test_mode: true }
-      }
-    end
+    # Get the API key - even in test mode, we'll use the Stripe API
+    secret_key = restaurant.admin_settings&.dig('payment_gateway', 'secret_key')
+    Stripe.api_key = secret_key
     
     begin
-      secret_key = restaurant.admin_settings&.dig('payment_gateway', 'secret_key')
-      Stripe.api_key = secret_key
       
       refund = Stripe::Refund.create({
         payment_intent: payment_intent_id,
