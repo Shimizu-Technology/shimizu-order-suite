@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_14_100000) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_15_085000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -254,6 +254,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_14_100000) do
     t.string "description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.jsonb "refunded_items"
     t.index ["order_id"], name: "index_order_payments_on_order_id"
     t.index ["payment_id"], name: "index_order_payments_on_payment_id"
     t.index ["transaction_id"], name: "index_order_payments_on_transaction_id"
@@ -415,6 +416,21 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_14_100000) do
     t.string "code_prefix"
     t.index ["restaurant_id", "event_date"], name: "index_special_events_on_restaurant_id_and_event_date", unique: true
     t.index ["restaurant_id"], name: "index_special_events_on_restaurant_id"
+  end
+
+  create_table "store_credits", force: :cascade do |t|
+    t.bigint "order_id"
+    t.string "customer_email", null: false
+    t.decimal "amount", precision: 10, scale: 2, null: false
+    t.string "reason"
+    t.string "status", default: "active"
+    t.datetime "expires_at", precision: nil
+    t.decimal "remaining_amount", precision: 10, scale: 2
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["customer_email"], name: "index_store_credits_on_customer_email"
+    t.index ["order_id"], name: "index_store_credits_on_order_id"
+    t.index ["status"], name: "index_store_credits_on_status"
   end
 
   create_table "users", force: :cascade do |t|

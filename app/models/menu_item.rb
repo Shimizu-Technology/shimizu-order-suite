@@ -47,7 +47,11 @@ class MenuItem < ApplicationRecord
     
     total = stock_quantity.to_i
     damaged = damaged_quantity.to_i
-    total - damaged
+    available = total - damaged
+    
+    Rails.logger.info("INVENTORY DEBUG: available_quantity for #{id} (#{name}) - Stock: #{total}, Damaged: #{damaged}, Available: #{available}")
+    
+    available
   end
   
   def actual_low_stock_threshold
@@ -92,22 +96,44 @@ class MenuItem < ApplicationRecord
     false
   end
   
-  # Only increment damaged quantity without changing stock (for order edits)
+  # Only increment damaged quantity without changing available quantity (for order edits)
   def increment_damaged_only(quantity, reason, user)
     return false unless enable_stock_tracking
+    
+    # Add debug logging
+    Rails.logger.info("INVENTORY DEBUG: Before increment_damaged_only - Item #{id} (#{name}) - Stock: #{stock_quantity}, Damaged: #{damaged_quantity}, Available: #{available_quantity}")
     
     transaction do
       # Create audit record
       stock_audit = MenuItemStockAudit.create_damaged_record(self, quantity, reason, user)
       
       # Update the damaged quantity
-      previous = self.damaged_quantity || 0
-      self.update!(damaged_quantity: previous + quantity.to_i)
+      previous_damaged = self.damaged_quantity || 0
+      
+      # IMPORTANT: Also increment the stock quantity by the same amount
+      # This ensures that available_quantity (stock - damaged) remains the same
+      previous_stock = self.stock_quantity || 0
+      
+      # Update both quantities
+      self.update!(
+        damaged_quantity: previous_damaged + quantity.to_i,
+        stock_quantity: previous_stock + quantity.to_i
+      )
+      
+      # Create a stock adjustment audit record to track the stock increase
+      stock_audit = MenuItemStockAudit.create_stock_record(
+        self,
+        previous_stock + quantity.to_i,
+        'adjustment',
+        "Stock adjusted to match damaged items from order",
+        user
+      )
       
       # DO NOT re-evaluate stock status - these items are already
       # removed from inventory, we're just tracking if they're damaged
-      # The line below is the cause of the bug:
-      # update_stock_status!
+      
+      # Log after update
+      Rails.logger.info("INVENTORY DEBUG: After increment_damaged_only - Item #{id} (#{name}) - Stock: #{stock_quantity}, Damaged: #{damaged_quantity}, Available: #{available_quantity}")
       
       true
     end

@@ -162,6 +162,10 @@ Rails.application.routes.draw do
         post :refund, to: 'order_payments#create_refund'
       end
     end
+    
+    # New routes for store credit and order total adjustment
+    post 'store-credit', to: 'order_payments#add_store_credit'
+    post 'adjust-total', to: 'order_payments#adjust_total'
   end
   
   resources :promo_codes, only: [:index, :show, :create, :update, :destroy]

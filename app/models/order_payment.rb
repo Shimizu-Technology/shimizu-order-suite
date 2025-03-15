@@ -7,6 +7,18 @@ class OrderPayment < ApplicationRecord
   # For refunds, amount should not exceed the order total
   validate :refund_amount_valid, if: -> { payment_type == 'refund' }
   
+  # Helper method to get refunded items from either direct column or payment_details
+  def get_refunded_items
+    # First check direct column
+    return refunded_items if refunded_items.present?
+    
+    # Then check payment_details
+    return payment_details['refunded_items'] if payment_details.present? && payment_details['refunded_items'].present?
+    
+    # Return empty array if nothing found
+    []
+  end
+  
   private
   
   def refund_amount_valid

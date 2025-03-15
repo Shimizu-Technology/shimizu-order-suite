@@ -98,6 +98,68 @@ class OrderPaymentsController < ApplicationController
     end
   end
   
+  # POST /orders/:order_id/store-credit
+  def add_store_credit
+    amount = params[:amount].to_f
+    reason = params[:reason]
+    
+    if amount <= 0
+      return render json: { error: "Invalid amount for store credit" }, status: :unprocessable_entity
+    end
+    
+    # Create a store credit entry
+    # Note: This assumes you have a StoreCredit model. If not, you'll need to create one.
+    @store_credit = StoreCredit.create(
+      customer_email: params[:email] || @order.contact_email,
+      amount: amount,
+      reason: reason,
+      order_id: @order.id,
+      status: 'active'
+    )
+    
+    # Also create a record in order_payments to track this
+    @payment = @order.order_payments.create(
+      payment_type: 'refund',
+      amount: amount,
+      payment_method: 'store_credit',
+      status: 'completed',
+      description: "Store credit: #{reason}"
+    )
+    
+    render json: { 
+      store_credit: @store_credit,
+      payment: @payment
+    }
+  end
+  
+  # POST /orders/:order_id/adjust-total
+  def adjust_total
+    new_total = params[:new_total].to_f
+    reason = params[:reason]
+    
+    if new_total < 0
+      return render json: { error: "New total cannot be negative" }, status: :unprocessable_entity
+    end
+    
+    # Update the order total
+    old_total = @order.total
+    @order.update(total: new_total)
+    
+    # Create an adjustment record in order_payments
+    @payment = @order.order_payments.create(
+      payment_type: old_total > new_total ? 'refund' : 'additional',
+      amount: (old_total - new_total).abs,
+      payment_method: 'adjustment',
+      status: 'completed',
+      description: "Total adjusted: #{reason}"
+    )
+    
+    render json: { 
+      order: { id: @order.id, total: @order.total },
+      payment: @payment
+    }
+  end
+  
   # POST /orders/:order_id/payments/refund
   def create_refund
     refund_amount = params[:amount].to_f
@@ -193,6 +255,9 @@ class OrderPaymentsController < ApplicationController
     end
     
     if result[:success]
+      # Store refunded items if provided
+      refunded_items = params[:refunded_items]
+      
       # Create a refund record
       @refund = @order.order_payments.create(
         payment_type: 'refund',
@@ -201,8 +266,9 @@ class OrderPaymentsController < ApplicationController
         status: 'completed',
         transaction_id: result[:transaction_id],
         payment_id: result[:refund_id],
-        payment_details: result[:details],
-        description: params[:reason] || "Refund"
+        payment_details: result[:details].merge(refunded_items: refunded_items),
+        description: params[:description] || params[:reason] || "Refund",
+        refunded_items: refunded_items # Store refunded items directly on the record
       )
       
       # Update the order status based on refund amount

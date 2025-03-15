@@ -194,10 +194,14 @@ class MenuItemsController < ApplicationController
     # we need special handling to avoid duplicate inventory adjustments
     if from_order
       Rails.logger.info "Mark as damaged called from order edit - only updating damaged count"
+      Rails.logger.info "INVENTORY DEBUG: Before increment_damaged_only - Item #{menu_item.id} (#{menu_item.name}) - Stock: #{menu_item.stock_quantity}, Damaged: #{menu_item.damaged_quantity}, Available: #{menu_item.available_quantity}"
+      
       # Just increment the damaged count - the inventory adjustment will be handled by orders_controller
       if menu_item.increment_damaged_only(quantity, reason, current_user)
+        Rails.logger.info "INVENTORY DEBUG: After increment_damaged_only - Item #{menu_item.id} (#{menu_item.name}) - Stock: #{menu_item.stock_quantity}, Damaged: #{menu_item.damaged_quantity}, Available: #{menu_item.available_quantity}"
         render json: menu_item
       else
+        Rails.logger.error "INVENTORY DEBUG: Failed to increment_damaged_only"
         render json: { error: "Failed to mark items as damaged" }, status: :unprocessable_entity
       end
     else
