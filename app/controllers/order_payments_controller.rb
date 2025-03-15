@@ -394,10 +394,24 @@ class OrderPaymentsController < ApplicationController
     
     # Get the API key for Stripe API calls
     secret_key = restaurant.admin_settings&.dig('payment_gateway', 'secret_key')
-    Stripe.api_key = secret_key
     
     # Check if we're in application test mode
     app_test_mode = restaurant.admin_settings&.dig('payment_gateway', 'test_mode')
+    
+    # If secret_key is blank and we're in test mode, create a fake refund
+    if secret_key.blank? && app_test_mode
+      Rails.logger.info("Stripe API key is blank and app is in test mode, creating fake refund")
+      fake_refund_id = "test_refund_#{SecureRandom.hex(8)}"
+      return {
+        success: true,
+        transaction_id: fake_refund_id,
+        refund_id: fake_refund_id,
+        details: { status: 'succeeded', test_mode: true }
+      }
+    end
+    
+    # Set the API key for Stripe
+    Stripe.api_key = secret_key
     
     # Handle nil payment_intent_id
     if payment_intent_id.nil?
