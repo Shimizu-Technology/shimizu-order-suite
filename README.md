@@ -35,7 +35,8 @@ The backend is built with **Ruby on Rails** in API-only mode, with a multi-tenan
 - **SendGrid** for email notifications
 - **ClickSend** for SMS notifications
 - **Wassenger** for WhatsApp group messaging
-- **PayPal/Stripe** for flexible payment processing (see /docs/payment_processing.md)
+- **PayPal** for payment processing with SDK integration
+- **Stripe** for credit card payment processing with webhooks
 
 ### Data Flow
 
@@ -49,24 +50,84 @@ The backend is built with **Ruby on Rails** in API-only mode, with a multi-tenan
 
 ## **Recent Features**
 
-### Menu Item Inventory Tracking
+### Inventory Tracking System
 
-The platform now includes a comprehensive inventory tracking system for menu items, allowing restaurants to:
+The platform includes a comprehensive inventory tracking system for both menu items and merchandise, allowing restaurants to:
 
-- Enable/disable inventory tracking per menu item
+- Enable/disable inventory tracking per item
 - Set and monitor stock quantities
 - Record damaged items with reasons and timestamps
 - View audit history of all inventory changes
 - Configure low stock thresholds for automated status updates
 - Automatically update item availability based on inventory levels
+- Perform bulk inventory operations
+- Generate inventory reports
 
 For detailed documentation, see [Inventory Tracking System Documentation](docs/inventory_tracking_system.md).
+
+### Payment Processing System
+
+The platform supports multiple payment methods and advanced payment operations:
+
+- PayPal integration with SDK for direct checkout
+- Stripe integration with webhooks for payment processing
+- Order payment history tracking
+- Refund processing (full or partial)
+- Additional payment collection
+- Store credit system for customer account balances
+
+For detailed documentation, see:
+- [Payment Processing Documentation](docs/payment_processing.md)
+- [PayPal Integration Documentation](docs/paypal_integration.md)
+- [Stripe Integration Documentation](docs/stripe_integration.md)
+
+### Enhanced Notification System
+
+The notification system has been expanded to include:
+
+- Customizable notification templates
+- Multiple delivery channels (email, SMS, WhatsApp)
+- Notification history tracking
+- Scheduled notifications
+- Batch processing for notifications
+
+For detailed documentation, see [Notification System Documentation](docs/notification_system.md).
+
+### Store Credit System
+
+The platform now includes a comprehensive store credit system:
+
+- Customer account balances with expiration dates
+- Transaction history tracking
+- Integration with order payment system
+- Refund-to-store-credit functionality
+- Admin tools for managing customer credits
+
+For detailed documentation, see [Store Credit System Documentation](docs/store_credit_system.md).
+
+### Merchandise Categories and Stock Management
+
+The merchandise system now includes:
+
+- Category-based organization for merchandise items
+- Stock auditing for merchandise items
+- Low stock threshold configuration
+- Multiple images per merchandise item
+- Enhanced filtering capabilities
+
+For detailed documentation, see [Inventory Tracking System Documentation](docs/inventory_tracking_system.md).
+
+### Custom Pickup Locations
+
+Restaurants can now configure custom pickup locations for orders, providing more flexibility in order fulfillment logistics.
 
 ---
 
 ## **Multi-tenant Architecture**
 
 Hafaloha uses a multi-tenant architecture where all restaurants share the same database, but data is isolated through application-level controls. This provides efficient resource utilization while ensuring proper data separation.
+
+For comprehensive documentation on the multi-tenant architecture, see [Multi-tenant Architecture Documentation](docs/multi_tenant_architecture.md).
 
 ### Key Components of Multi-tenancy
 
@@ -213,6 +274,7 @@ origins lambda { |source, env|
   - Contains basic information like name, address, phone number, time zone
   - Includes vip_enabled flag to toggle VIP-only checkout mode
   - Has current_merchandise_collection_id to set active merchandise collection
+  - Has custom_pickup_location for order fulfillment flexibility
 
 - **SiteSetting**: Stores site-wide settings for each restaurant
   - Belongs to a restaurant
@@ -232,6 +294,18 @@ origins lambda { |source, env|
   - Has many order_acknowledgments for tracking admin notifications
   - Optional vip_access_code association for VIP-only orders
   - Has many merchandise_items (for merchandise purchases)
+  - Has many order_payments for payment history tracking
+  - Includes payment_status for tracking payment state
+
+- **OrderPayment**: Payment history for orders
+  - Belongs to order
+  - Tracks payment method, amount, status, and timestamps
+  - Includes refunded_items for partial refunds
+
+- **StoreCredit**: Customer account balances
+  - Belongs to user
+  - Belongs to restaurant
+  - Tracks balance, expiration, and usage history
 
 - **OrderAcknowledgment**: Tracks which orders have been acknowledged by which admin users
   - Belongs to order
@@ -251,6 +325,8 @@ origins lambda { |source, env|
   - Menu items can have advance_notice_hours for items requiring preparation time (e.g., 24 hours)
   - Restaurants can have multiple menus with one set as active via current_menu_id
   - Menus can be cloned to create variations for special events
+  - Menu items have inventory tracking fields and low_stock_threshold
+  - Menu items have cost_to_make for profitability analysis
 
 - **MerchandiseCollection**: Merchandise collection management
   - Belongs to restaurant
@@ -260,10 +336,13 @@ origins lambda { |source, env|
 
 - **MerchandiseItem**: Merchandise item management
   - Belongs to merchandise_collection
+  - Belongs to merchandise_category (optional)
   - Has many merchandise_variants (for size/color options)
-  - Contains name, description, base_price, and image_url
+  - Contains name, description, base_price, and multiple image URLs
   - Includes stock_status tracking (in_stock, low_stock, out_of_stock)
+  - Has configurable low_stock_threshold
   - Uses S3 for image storage with unique filenames
+  - Has many merchandise_stock_audits for inventory tracking
 
 - **MerchandiseVariant**: Merchandise variants
   - Belongs to merchandise_item
@@ -275,8 +354,14 @@ origins lambda { |source, env|
   - Used for visualizing and managing the physical space
 
 - **Notification**: Notification records
-  - Belongs to a reservation
+  - Belongs to a notifiable object (polymorphic)
   - Tracks notification type, delivery method, and status
+  - Includes recipient information and message content
+
+- **NotificationTemplate**: Customizable notification templates
+  - Belongs to restaurant
+  - Contains template content and variables
+  - Used for generating consistent notifications
 
 ---
 
@@ -375,11 +460,16 @@ The Notification model tracks all sent notifications:
 ```ruby
 # app/models/notification.rb
 class Notification < ApplicationRecord
-  belongs_to :reservation
+  belongs_to :notifiable, polymorphic: true
   
   enum status: { pending: 'pending', sent: 'sent', failed: 'failed' }
   enum notification_type: { confirmation: 'confirmation', reminder: 'reminder', update: 'update' }
   enum delivery_method: { email: 'email', sms: 'sms', whatsapp: 'whatsapp' }
+  
+  # Enhanced with additional fields for better tracking
+  attribute :recipient_info, :jsonb, default: {}
+  attribute :message_content, :text
+  attribute :error_details, :jsonb, default: {}
 end
 ```
 
@@ -415,6 +505,14 @@ end
   - `AWS_SECRET_ACCESS_KEY`
   - `AWS_REGION`
   - `S3_BUCKET_NAME`
+- **PayPal**:
+  - `PAYPAL_CLIENT_ID`
+  - `PAYPAL_CLIENT_SECRET`
+  - `PAYPAL_MODE` (sandbox/live)
+- **Stripe**:
+  - `STRIPE_SECRET_KEY`
+  - `STRIPE_PUBLISHABLE_KEY`
+  - `STRIPE_WEBHOOK_SECRET`
 
 ---
 
@@ -510,6 +608,15 @@ The API is organized into several main groups:
 - `DELETE /orders/:id` - Cancel order
 - `GET /orders/unacknowledged` - Get orders not yet acknowledged by current user
 - `POST /orders/:id/acknowledge` - Mark an order as acknowledged by current user
+
+### Payments
+- `POST /payments/process` - Process a payment
+- `GET /order_payments` - List payment history
+- `POST /order_payments` - Create additional payment
+- `POST /order_payments/:id/refund` - Process refund
+- `GET /store_credits` - Get store credit balance
+- `POST /store_credits/add` - Add store credit
+- `POST /store_credits/use` - Use store credit
 
 ### Merchandise
 - `GET /merchandise_collections` - List merchandise collections
@@ -632,6 +739,7 @@ For detailed documentation on the VIP Code System, see [VIP Code System Document
 - `POST /menu_items/:id/mark_damaged` - Record damaged items
 - `POST /menu_items/:id/update_stock` - Update stock quantity
 - `GET /menu_items/:id/stock_audits` - Get stock audit history
+- `POST /menu_items/bulk_update` - Update multiple items at once
 
 For detailed documentation on the Inventory Management System, see [Inventory Tracking System Documentation](docs/inventory_tracking_system.md).
 
@@ -669,6 +777,7 @@ All endpoints automatically filter data by the restaurant context from:
    - SendGrid for email
    - ClickSend for SMS
    - Wassenger for WhatsApp (if needed)
+   - PayPal and Stripe for payment processing
 
 ---
 
@@ -721,14 +830,20 @@ The database includes these key tables:
 - `users` - Authentication and roles
 - `reservations` - Table bookings
 - `orders` - Food orders
+- `order_payments` - Payment history for orders
+- `store_credits` - Customer account balances
 - `menus`/`menu_items`/`categories` - Menu structure
+- `menu_item_stock_audits` - Inventory tracking for menu items
 - `merchandise_collections`/`merchandise_items`/`merchandise_variants` - Merchandise structure
+- `merchandise_categories` - Categories for merchandise items
+- `merchandise_stock_audits` - Inventory tracking for merchandise
 - `layouts`/`seat_sections`/`seats` - Physical layout
 - `option_groups`/`options` - Menu item customization
 - `promo_codes` - Discount codes
 - `operating_hours` - Restaurant opening times
 - `special_events` - Special bookings or closed days
 - `notifications` - Notification tracking
+- `notification_templates` - Customizable notification templates
 
 ---
 
@@ -752,10 +867,13 @@ The codebase is organized following Rails conventions with some additional struc
    - `app/mailers/order_mailer.rb` - Order-related emails
    - `app/mailers/reservation_mailer.rb` - Reservation-related emails
    - `app/mailers/password_mailer.rb` - Password reset emails
+   - `app/mailers/vip_code_mailer.rb` - VIP code emails
+   - `app/mailers/generic_mailer.rb` - Custom emails from templates
 
 5. **Jobs** - Background processing
    - `app/jobs/send_sms_job.rb` - Asynchronous SMS sending
    - `app/jobs/send_whatsapp_job.rb` - Asynchronous WhatsApp messaging
+   - `app/jobs/send_vip_codes_batch_job.rb` - Batch processing for VIP codes
 
 ---
 
@@ -766,6 +884,7 @@ If you have questions about:
 - **Architecture** (multi-tenant design, reservations, ordering)
 - **Messaging logic** (SMS/WhatsApp/Email)
 - **Sidekiq background jobs**
+- **Payment processing** (PayPal/Stripe)
 
 Please check the inline code comments or contact the dev team.
 
