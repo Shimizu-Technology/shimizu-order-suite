@@ -132,10 +132,12 @@ begin
   if webhook_id.blank?
     print_status("PayPal webhook ID is not configured.", :warning)
     print_status("Skipping webhook verification test.")
+    print_status("The webhook ID is required for verifying webhook notifications from PayPal.", :warning)
   else
     print_status("Webhook ID found: #{webhook_id}")
+    print_status("This ID will be used to verify webhook notifications from PayPal.")
+    print_status("PayPal uses HTTP headers along with this webhook ID to verify the authenticity of webhook notifications.")
     print_status("Webhook verification would be tested here in a real implementation.")
-    print_status("For now, this is just a placeholder for future webhook testing.")
   end
 rescue => e
   print_status("Error during webhook verification test: #{e.message}", :error)

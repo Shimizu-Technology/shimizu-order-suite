@@ -54,6 +54,21 @@ Webhooks allow PayPal to notify your application about payment events in real-ti
 6. After saving, you'll see your webhook details including the **Webhook ID**
 7. Copy the **Webhook ID** as you'll need it for the Hafaloha admin settings
 
+#### How PayPal Webhook Verification Works
+
+PayPal uses a different approach than Stripe for webhook verification:
+
+1. PayPal includes several HTTP headers in each webhook notification:
+   - `PAYPAL-TRANSMISSION-ID`: A unique identifier for the transmission
+   - `PAYPAL-TRANSMISSION-TIME`: The timestamp of when the notification was sent
+   - `PAYPAL-TRANSMISSION-SIG`: The actual signature of the transmission
+   - `PAYPAL-CERT-URL`: The URL to PayPal's public certificate
+   - `PAYPAL-AUTH-ALGO`: The algorithm used to generate the signature
+
+2. Our application uses these headers along with the **Webhook ID** to verify that the webhook notification is authentic and hasn't been tampered with.
+
+3. Unlike Stripe, PayPal doesn't use a "Webhook Secret" - instead, the **Webhook ID** is the key piece of information needed for verification.
+
 ### 4. Configure Hafaloha Admin Settings
 
 1. Log in to your Hafaloha admin dashboard
@@ -63,7 +78,7 @@ Webhooks allow PayPal to notify your application about payment events in real-ti
    - **Client ID**: Your PayPal app client ID
    - **Client Secret**: Your PayPal app secret
    - **Environment**: Select "Sandbox" for testing or "Production" for live payments
-   - **Webhook ID**: The ID of the webhook you created in step 3
+   - **Webhook ID**: The ID of the webhook you created in step 3 (this is used for webhook verification)
 5. Toggle "Test Mode" on or off as needed
    - When "Test Mode" is on, no real payments will be processed
    - Use "Test Mode" for testing your integration

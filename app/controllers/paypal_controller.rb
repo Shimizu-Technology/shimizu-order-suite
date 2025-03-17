@@ -81,6 +81,12 @@ class PaypalController < ApplicationController
     restaurant = find_restaurant
     paypal_webhook_id = restaurant&.admin_settings&.dig('payment_gateway', 'paypal_webhook_id')
     
+    if paypal_webhook_id.blank?
+      Rails.logger.error "PayPal webhook verification failed: No webhook ID configured"
+      render json: { error: 'Webhook ID not configured' }, status: :unauthorized
+      return
+    end
+    
     begin
       # Verify the webhook signature
       if verify_paypal_webhook_signature(webhook_body, webhook_id, timestamp, signature, cert_url, auth_algo, paypal_webhook_id)
