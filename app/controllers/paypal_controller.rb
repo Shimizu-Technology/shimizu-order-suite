@@ -7,11 +7,14 @@ class PaypalController < ApplicationController
   # POST /paypal/create_order
   def create_order
     request = PayPalCheckoutSdk::Orders::OrdersCreateRequest.new
+    # Get currency from params or default to USD
+    currency = params[:currency] || 'USD'
+    
     request.request_body({
       intent: 'CAPTURE',
       purchase_units: [{
         amount: {
-          currency_code: 'USD',
+          currency_code: currency,
           value: params[:amount]
         },
         # Add reference_id for tracking which restaurant the order belongs to
@@ -50,6 +53,7 @@ class PaypalController < ApplicationController
       # Extract transaction details for your records
       transaction_id = response.result.purchase_units[0].payments.captures[0].id
       payment_amount = response.result.purchase_units[0].payments.captures[0].amount.value
+      payment_currency = response.result.purchase_units[0].payments.captures[0].amount.currency_code
       
       # Update your order/payment records based on the transaction details
       # Note: In production, you'll want to validate the amount against your records
@@ -57,7 +61,8 @@ class PaypalController < ApplicationController
       render json: {
         status: capture_status,
         transaction_id: transaction_id,
-        amount: payment_amount
+        amount: payment_amount,
+        currency: payment_currency
       }, status: :ok
     rescue PayPalHttp::HttpError => e
       Rails.logger.error "PayPal Order Capture Failed: #{e.status_code} #{e.message}"
