@@ -159,18 +159,18 @@ module Admin
     def user_params
       # Get basic user attributes
       permitted = params.permit(:email, :first_name, :last_name, :phone, :restaurant_id)
-      
+
       # For role, ensure we're not creating a user with higher privileges than the current user
       if params[:role].present?
-        # Only allow 'customer' or 'admin' roles (no super_admin)
-        if params[:role].in?(['customer', 'admin'])
+        # Only allow "customer" or "admin" roles (no super_admin)
+        if params[:role].in?(%w[customer admin])
           permitted[:role] = params[:role]
         else
           # Default to customer if an invalid role is provided
-          permitted[:role] = 'customer'
+          permitted[:role] = "customer"
         end
       end
-      
+
       permitted
     end
   end
