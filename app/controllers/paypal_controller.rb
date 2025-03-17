@@ -3,7 +3,6 @@
 class PaypalController < ApplicationController
   include RestaurantScope
   before_action :validate_amount, only: [:create_order]
-  skip_before_action :verify_authenticity_token, only: [:webhook]
 
   # POST /paypal/create_order
   def create_order
