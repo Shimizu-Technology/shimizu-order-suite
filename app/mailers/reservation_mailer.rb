@@ -5,7 +5,7 @@ class ReservationMailer < ApplicationMailer
     @reservation = reservation
     @restaurant = get_restaurant_for(@reservation)
     @header_color = email_header_color_for(@restaurant)
-    
+
     mail(
       to: @reservation.contact_email,
       from: restaurant_from_address(@restaurant),

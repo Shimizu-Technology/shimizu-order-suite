@@ -4,7 +4,7 @@ class AddEmailHeaderColorToAdminSettings < ActiveRecord::Migration[7.2]
     Restaurant.find_each do |restaurant|
       # Get current admin_settings or initialize with empty hash
       admin_settings = restaurant.admin_settings || {}
-      
+
       # Add email_header_color if it doesn't exist
       unless admin_settings.key?('email_header_color')
         admin_settings['email_header_color'] = '#D4AF37' # Default Hafaloha gold color

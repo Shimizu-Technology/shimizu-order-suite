@@ -1,11 +1,11 @@
 # app/controllers/restaurants_controller.rb
 class RestaurantsController < ApplicationController
-  before_action :authorize_request, except: [:show]
-  before_action :set_restaurant, only: [:show, :update, :destroy]
-  
+  before_action :authorize_request, except: [ :show ]
+  before_action :set_restaurant, only: [ :show, :update, :destroy ]
+
   # Override public_endpoint? to mark index, show, update, and toggle_vip_mode as public endpoints
   def public_endpoint?
-    action_name.in?(['index', 'show', 'update', 'toggle_vip_mode'])
+    action_name.in?([ "index", "show", "update", "toggle_vip_mode" ])
   end
 
   # GET /restaurants
@@ -57,10 +57,10 @@ class RestaurantsController < ApplicationController
       ext = File.extname(file.original_filename)
       new_filename = "hero_#{@restaurant.id}_#{Time.now.to_i}#{ext}"
       public_url = S3Uploader.upload(file, new_filename)
-      
+
       # Initialize admin_settings if it doesn't exist
       @restaurant.admin_settings ||= {}
-      @restaurant.admin_settings['hero_image_url'] = public_url
+      @restaurant.admin_settings["hero_image_url"] = public_url
     end
 
     if params[:spinner_image].present?
@@ -68,10 +68,10 @@ class RestaurantsController < ApplicationController
       ext = File.extname(file.original_filename)
       new_filename = "spinner_#{@restaurant.id}_#{Time.now.to_i}#{ext}"
       public_url = S3Uploader.upload(file, new_filename)
-      
+
       # Initialize admin_settings if it doesn't exist
       @restaurant.admin_settings ||= {}
-      @restaurant.admin_settings['spinner_image_url'] = public_url
+      @restaurant.admin_settings["spinner_image_url"] = public_url
     end
 
     if @restaurant.update(restaurant_params)
@@ -97,24 +97,24 @@ class RestaurantsController < ApplicationController
     unless current_user.role.in?(%w[admin super_admin]) || current_user.restaurant_id == @restaurant.id
       return render json: { error: "Forbidden" }, status: :forbidden
     end
-    
+
     # Extract vip_enabled from params, handling both formats
     vip_enabled = if params[:restaurant] && params[:restaurant][:vip_enabled].present?
                     params[:restaurant][:vip_enabled]
-                  else
+    else
                     params[:vip_enabled]
-                  end
-    
+    end
+
     if @restaurant.update(vip_enabled: vip_enabled)
-      render json: { 
-        success: true, 
+      render json: {
+        success: true,
         vip_enabled: @restaurant.vip_enabled,
         restaurant: restaurant_json(@restaurant)
       }
     else
-      render json: { 
-        success: false, 
-        errors: @restaurant.errors.full_messages 
+      render json: {
+        success: false,
+        errors: @restaurant.errors.full_messages
       }, status: :unprocessable_entity
     end
   end
@@ -125,16 +125,16 @@ class RestaurantsController < ApplicationController
     unless current_user.role.in?(%w[admin super_admin]) || current_user.restaurant_id == @restaurant.id
       return render json: { error: "Forbidden" }, status: :forbidden
     end
-    
+
     event_id = params[:event_id]
-    
+
     if event_id.present?
       event = @restaurant.special_events.find_by(id: event_id)
-      
+
       if event.nil?
         return render json: { error: "Event not found" }, status: :not_found
       end
-      
+
       if @restaurant.update(current_event_id: event.id)
         render json: restaurant_json(@restaurant)
       else
@@ -149,7 +149,7 @@ class RestaurantsController < ApplicationController
       end
     end
   end
-  
+
   private
 
   def set_restaurant
@@ -174,12 +174,12 @@ class RestaurantsController < ApplicationController
       admin_settings: {},
       allowed_origins: []
     )
-    
+
     # Handle allowed_origins as a special case if it's a string
     if params[:restaurant][:allowed_origins].is_a?(String)
-      permitted[:allowed_origins] = params[:restaurant][:allowed_origins].split(',').map(&:strip)
+      permitted[:allowed_origins] = params[:restaurant][:allowed_origins].split(",").map(&:strip)
     end
-    
+
     permitted
   end
 
@@ -208,8 +208,8 @@ class RestaurantsController < ApplicationController
       code_prefix:                restaurant.code_prefix,
       current_event_id:           restaurant.current_event_id,
       # Calculate seat count directly instead of using the private method
-      current_seat_count:         restaurant.current_layout ? 
-                                  restaurant.current_layout.seat_sections.includes(:seats).flat_map(&:seats).count : 
+      current_seat_count:         restaurant.current_layout ?
+                                  restaurant.current_layout.seat_sections.includes(:seats).flat_map(&:seats).count :
                                   0
     }
   end

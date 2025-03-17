@@ -43,10 +43,10 @@ Rails.application.configure do
   # change these settings accordingly.
   config.action_mailer.delivery_method = :smtp
   config.action_mailer.smtp_settings = {
-    user_name: 'apikey',                 # SendGrid requirement
-    password:  ENV['SENDGRID_API_KEY'],  # must be set in your environment
-    domain:    'gmail.com',              # or your custom domain
-    address:   'smtp.sendgrid.net',
+    user_name: "apikey",                 # SendGrid requirement
+    password:  ENV["SENDGRID_API_KEY"],  # must be set in your environment
+    domain:    "gmail.com",              # or your custom domain
+    address:   "smtp.sendgrid.net",
     port:      587,
     authentication: :plain,
     enable_starttls_auto: true

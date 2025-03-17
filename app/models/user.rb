@@ -1,11 +1,11 @@
 # app/models/user.rb
 
-require 'securerandom'
-require 'digest'
+require "securerandom"
+require "digest"
 
 class User < ApplicationRecord
   belongs_to :restaurant, optional: true
-  
+
   # Add associations for order acknowledgments
   has_many :order_acknowledgments, dependent: :destroy
   has_many :acknowledged_orders, through: :order_acknowledgments, source: :order
@@ -37,7 +37,7 @@ class User < ApplicationRecord
   end
 
   def admin?
-    role == 'admin'
+    role == "admin"
   end
 
   # -----------------------------------------------------------

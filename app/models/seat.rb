@@ -1,9 +1,9 @@
 # app/models/seat.rb
 class Seat < ApplicationRecord
   apply_default_scope
-  
+
   # Even if you see status in an attribute hash, don't treat it as a DB column
-  self.ignored_columns = [:status]
+  self.ignored_columns = [ :status ]
 
   belongs_to :seat_section
   # Define path to restaurant through associations for tenant isolation
@@ -15,7 +15,7 @@ class Seat < ApplicationRecord
   has_many :waitlist_entries, through: :seat_allocations
 
   validates :capacity, numericality: { greater_than: 0 }
-  
+
   # Override with_restaurant_scope for indirect restaurant association
   def self.with_restaurant_scope
     if current_restaurant

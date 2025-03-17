@@ -3,14 +3,14 @@ require 'rails_helper'
 RSpec.describe S3Uploader do
   describe '.upload' do
     let(:file) do
-      double('file', 
+      double('file',
         original_filename: 'test_image.jpg',
         content_type: 'image/jpeg',
         read: 'fake image data',
         path: '/tmp/test_image.jpg'
       )
     end
-    
+
     let(:filename) { 'custom_filename.jpg' }
     let(:s3_object) { double('s3_object', key: filename) }
     let(:s3_bucket) { double('s3_bucket') }
@@ -23,7 +23,7 @@ RSpec.describe S3Uploader do
       allow(s3_bucket).to receive(:object).with(filename).and_return(s3_object)
       allow(s3_object).to receive(:upload_file).and_return(true)
       allow(s3_object).to receive(:public_url).and_return(public_url)
-      
+
       # Mock ENV variables
       stub_const('ENV', ENV.to_hash.merge({
         'S3_BUCKET' => 'test-bucket',
@@ -35,7 +35,7 @@ RSpec.describe S3Uploader do
 
     it 'uploads the file to S3 and returns the public URL' do
       expect(S3Uploader.upload(file, filename)).to eq(public_url)
-      
+
       # Verify S3 client was initialized with correct parameters
       expect(Aws::S3::Resource).to have_received(:new).with(
         hash_including(
@@ -43,13 +43,13 @@ RSpec.describe S3Uploader do
           credentials: instance_of(Aws::Credentials)
         )
       )
-      
+
       # Verify correct bucket was used
       expect(s3_resource).to have_received(:bucket).with('hafaloha')
-      
+
       # Verify object was created with correct filename
       expect(s3_bucket).to have_received(:object).with(filename)
-      
+
       # Verify upload_file was called with correct parameters
       expect(s3_object).to have_received(:upload_file).with(file.path)
     end
@@ -57,7 +57,7 @@ RSpec.describe S3Uploader do
     it 'raises an error if S3 configuration is missing' do
       # Mock missing ENV variables
       stub_const('ENV', {})
-      
+
       expect {
         S3Uploader.upload(file, filename)
       }.to raise_error(RuntimeError, /Missing S3 configuration/)

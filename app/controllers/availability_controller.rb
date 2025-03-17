@@ -2,7 +2,7 @@
 
 class AvailabilityController < ApplicationController
   before_action :optional_authorize
-  
+
   # Mark this as a public endpoint that doesn't require restaurant context
   def public_endpoint?
     true
@@ -11,16 +11,16 @@ class AvailabilityController < ApplicationController
   def index
     date_str   = params[:date]
     party_size = params[:party_size].to_i
-    
+
     # Get restaurant from current context or from params
     restaurant = if @current_restaurant
                    @current_restaurant
-                 elsif params[:restaurant_id].present?
+    elsif params[:restaurant_id].present?
                    Restaurant.find_by(id: params[:restaurant_id])
-                 else
+    else
                    render json: { error: "Restaurant ID is required" }, status: :unprocessable_entity
                    return
-                 end
+    end
 
     # 1) Generate local timeslots for that date
     slots = generate_timeslots_for_date(restaurant, date_str)
@@ -69,7 +69,7 @@ class AvailabilityController < ApplicationController
       # 2) If event.exclusive_booking => maybe just 1 big slot at base_open
       if event&.exclusive_booking
         # Return single slot => [ 09:00 for example ]
-        return [base_open]
+        return [ base_open ]
       end
 
       # 3) If event.start_time + event.end_time exist => clamp open/close times
@@ -78,8 +78,8 @@ class AvailabilityController < ApplicationController
         event_start = local_date.change(hour: event.start_time.hour, min: event.start_time.min)
         event_end   = local_date.change(hour: event.end_time.hour,   min: event.end_time.min)
 
-        base_open  = [base_open,  event_start].max
-        base_close = [base_close, event_end].min
+        base_open  = [ base_open,  event_start ].max
+        base_close = [ base_close, event_end ].min
         return [] if base_close <= base_open
       end
 
@@ -93,7 +93,7 @@ class AvailabilityController < ApplicationController
           hour: event.start_time.hour,
           min:  event.start_time.min
         )
-        return [single_slot] # just one slot
+        return [ single_slot ] # just one slot
       end
 
       # If no special logic => build normal half-hour increments

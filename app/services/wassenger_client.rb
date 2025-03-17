@@ -1,11 +1,11 @@
 # app/services/wassenger_client.rb
-require 'net/http'
-require 'json'
+require "net/http"
+require "json"
 
 class WassengerClient
-  BASE_URL = 'https://api.wassenger.com/v1'
+  BASE_URL = "https://api.wassenger.com/v1"
 
-  def initialize(api_token: ENV['WASSENGER_API_TOKEN'])
+  def initialize(api_token: ENV["WASSENGER_API_TOKEN"])
     @api_token = api_token
   end
 
@@ -15,8 +15,8 @@ class WassengerClient
     http.use_ssl = true
 
     request = Net::HTTP::Post.new(uri)
-    request['Content-Type'] = 'application/json'
-    request['Token']        = @api_token  # Wassenger expects `Token: ...`
+    request["Content-Type"] = "application/json"
+    request["Token"]        = @api_token  # Wassenger expects `Token: ...`
 
     request.body = {
       group:   group_wid,

@@ -4,9 +4,9 @@ module MailerHelper
   # Falls back to a default gold color if not set
   def email_header_color_for(restaurant)
     return "#c1902f" unless restaurant
-    
+
     # Get the color from the restaurant's admin_settings, or use the default
-    restaurant.admin_settings&.dig('email_header_color') || "#c1902f"
+    restaurant.admin_settings&.dig("email_header_color") || "#c1902f"
   end
 
   # Get the from address for a given restaurant
@@ -17,10 +17,10 @@ module MailerHelper
 
     # Always use the restaurant name as the display name
     email_name = restaurant.name
-    
+
     # Ensure the name is properly formatted for email headers
     formatted_name = email_name.gsub('"', '\\"')
-    
+
     # Always use the verified email address from environment variables
     "#{formatted_name} <#{default_from_email}>"
   end
@@ -28,7 +28,7 @@ module MailerHelper
   # Get the default from email address from environment variables
   # or fall back to a hardcoded value
   def default_from_email
-    'shimizutechnology@gmail.com'
+    "shimizutechnology@gmail.com"
   end
 
   # Get the default from address (name + email)
@@ -37,10 +37,10 @@ module MailerHelper
     first_restaurant = Restaurant.first
     default_name = if first_restaurant
                      first_restaurant.name
-                   else
-                     'ShimizuTechnology'
-                   end
-    
+    else
+                     "ShimizuTechnology"
+    end
+
     "#{default_name} <#{default_from_email}>"
   end
 

@@ -1,5 +1,5 @@
 # app/services/s3_uploader.rb
-require 'aws-sdk-s3'
+require "aws-sdk-s3"
 
 class S3Uploader
   # Uploads the file to S3, returning the public URL
@@ -7,20 +7,20 @@ class S3Uploader
     Rails.logger.info "=== S3Uploader.upload ==="
     Rails.logger.info "AWS_REGION: #{ENV['AWS_REGION'].inspect}"
     Rails.logger.info "AWS_BUCKET: #{ENV['AWS_BUCKET'].inspect}"
-    Rails.logger.info "AWS_ACCESS_KEY_ID: #{ENV['AWS_ACCESS_KEY_ID']&.slice(0,4)}****"
+    Rails.logger.info "AWS_ACCESS_KEY_ID: #{ENV['AWS_ACCESS_KEY_ID']&.slice(0, 4)}****"
     Rails.logger.info "file path: #{file.path.inspect}"
     Rails.logger.info "filename: #{filename.inspect}"
 
     # Check for required configuration
-    region = ENV['AWS_REGION']
-    access_key = ENV['AWS_ACCESS_KEY_ID']
-    secret_key = ENV['AWS_SECRET_ACCESS_KEY']
-    bucket_name = ENV['AWS_BUCKET'] || ENV['S3_BUCKET']
-    
+    region = ENV["AWS_REGION"]
+    access_key = ENV["AWS_ACCESS_KEY_ID"]
+    secret_key = ENV["AWS_SECRET_ACCESS_KEY"]
+    bucket_name = ENV["AWS_BUCKET"] || ENV["S3_BUCKET"]
+
     if region.blank? || access_key.blank? || secret_key.blank? || bucket_name.blank?
       raise "Missing S3 configuration. Please check AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_BUCKET/S3_BUCKET environment variables."
     end
-    
+
     s3 = Aws::S3::Resource.new(
       region: region,
       credentials: Aws::Credentials.new(
@@ -31,7 +31,7 @@ class S3Uploader
     Rails.logger.info "bucket_name => #{bucket_name.inspect}"
 
     # sanitize the filename just to be safe
-    safe_filename = filename.strip.gsub(/[^\w.\-]/, '_')
+    safe_filename = filename.strip.gsub(/[^\w.\-]/, "_")
     Rails.logger.info "safe_filename => #{safe_filename.inspect}"
 
     obj = s3.bucket(bucket_name).object(safe_filename)
@@ -50,15 +50,15 @@ class S3Uploader
     Rails.logger.info "Deleting => #{filename.inspect}"
 
     # Check for required configuration
-    region = ENV['AWS_REGION']
-    access_key = ENV['AWS_ACCESS_KEY_ID']
-    secret_key = ENV['AWS_SECRET_ACCESS_KEY']
-    bucket_name = ENV['AWS_BUCKET'] || ENV['S3_BUCKET']
-    
+    region = ENV["AWS_REGION"]
+    access_key = ENV["AWS_ACCESS_KEY_ID"]
+    secret_key = ENV["AWS_SECRET_ACCESS_KEY"]
+    bucket_name = ENV["AWS_BUCKET"] || ENV["S3_BUCKET"]
+
     if region.blank? || access_key.blank? || secret_key.blank? || bucket_name.blank?
       raise "Missing S3 configuration. Please check AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_BUCKET/S3_BUCKET environment variables."
     end
-    
+
     s3 = Aws::S3::Resource.new(
       region: region,
       credentials: Aws::Credentials.new(
@@ -68,7 +68,7 @@ class S3Uploader
     )
     Rails.logger.info "bucket_name => #{bucket_name.inspect}"
 
-    safe_filename = filename.strip.gsub(/[^\w.\-]/, '_')
+    safe_filename = filename.strip.gsub(/[^\w.\-]/, "_")
     Rails.logger.info "safe_filename => #{safe_filename.inspect}"
 
     obj = s3.bucket(bucket_name).object(safe_filename)

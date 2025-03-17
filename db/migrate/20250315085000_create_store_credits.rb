@@ -8,10 +8,10 @@ class CreateStoreCredits < ActiveRecord::Migration[6.1]
       t.string :status, default: 'active'
       t.datetime :expires_at
       t.decimal :remaining_amount, precision: 10, scale: 2
-      
+
       t.timestamps
     end
-    
+
     add_index :store_credits, :customer_email
     add_index :store_credits, :status
   end

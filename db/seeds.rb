@@ -7,7 +7,7 @@ begin
   # TRUNCATE all the relevant tables we want to clear, then RESTART IDENTITY to reset PKs
   # CASCADE drops dependent data in referencing tables, e.g. foreign keys.
   ActiveRecord::Base.connection.execute("
-    TRUNCATE 
+    TRUNCATE
       reservations,
       waitlist_entries,
       users,
@@ -287,7 +287,7 @@ table_2_hash = {
 
 main_layout.update!(
   sections_data: {
-    "sections" => [bar_section_hash, table_a_hash, table_2_hash]
+    "sections" => [ bar_section_hash, table_a_hash, table_2_hash ]
   }
 )
 puts "Updated Layout##{main_layout.id} sections_data."
@@ -309,35 +309,35 @@ reservation_data = [
     start_time: today_17,
     party_size: 2,
     status: "booked",
-    preferences: [["Seat #5", "Seat #6"]]
+    preferences: [ [ "Seat #5", "Seat #6" ] ]
   },
   {
     name: "Kami",
     start_time: today_17,
     party_size: 3,
     status: "booked",
-    preferences: [["Seat #7", "Seat #8", "Seat #9"]]
+    preferences: [ [ "Seat #7", "Seat #8", "Seat #9" ] ]
   },
   {
     name: "Group of Two",
     start_time: today_18,
     party_size: 2,
     status: "booked",
-    preferences: [["A1", "A2"]]
+    preferences: [ [ "A1", "A2" ] ]
   },
   {
     name: "Late Nighters",
     start_time: today_19,
     party_size: 2,
     status: "booked",
-    preferences: [["A3","A4"]]
+    preferences: [ [ "A3", "A4" ] ]
   },
   {
     name: "Tomorrow Group",
     start_time: tomorrow_17,
     party_size: 4,
     status: "booked",
-    preferences: [["Seat #2","Seat #3","Seat #4","Seat #9"]]
+    preferences: [ [ "Seat #2", "Seat #3", "Seat #4", "Seat #9" ] ]
   },
   {
     name: "Canceled Example",
@@ -345,7 +345,7 @@ reservation_data = [
     party_size: 2,
     status: "canceled",
     preferences: []
-  },
+  }
 ]
 
 reservation_data.each do |data|
@@ -364,7 +364,7 @@ reservation_data.each do |data|
   existing_prefs = data[:preferences] || []
   filtered = existing_prefs.select { |arr| arr.size == r.party_size }
   if filtered.size < 3
-    def build_seat_prefs_for_party_size(party_size, total_seats=10, max_sets=3)
+    def build_seat_prefs_for_party_size(party_size, total_seats = 10, max_sets = 3)
       seat_labels = (1..total_seats).map { |i| "Seat ##{i}" }
       results = []
       idx = 0
@@ -860,7 +860,7 @@ sample_orders_data = [
         quantity: 1,
         price: 13.95,
         notes: "No onions please",
-        customizations: { "Add-ons" => ["Bacon"] }
+        customizations: { "Add-ons" => [ "Bacon" ] }
       }
     ],
     status: 'preparing',

@@ -5,25 +5,25 @@ gem "rails", "~> 7.2.2", ">= 7.2.2.1"
 # Use postgresql as the database for Active Record
 gem "pg", "~> 1.1"
 # For CORS handling:
-gem 'rack-cors', require: 'rack/cors'
+gem "rack-cors", require: "rack/cors"
 # Authentication
-gem 'bcrypt', '~> 3.1.7'
+gem "bcrypt", "~> 3.1.7"
 # Authentication
-gem 'jwt', '~> 2.2'
+gem "jwt", "~> 2.2"
 # Create fake data
-gem 'faker'
+gem "faker"
 # Allow rails to use the .env file
-gem 'dotenv-rails'
+gem "dotenv-rails"
 # Rails background job adapter
-gem 'sidekiq'
+gem "sidekiq"
 # AWS S3
-gem 'aws-sdk-s3', require: false
+gem "aws-sdk-s3", require: false
 # Pagination
-gem 'kaminari'
+gem "kaminari"
 # Payment processing
-gem 'braintree'
-gem 'paypal-checkout-sdk'
-gem 'stripe'
+gem "braintree"
+gem "paypal-checkout-sdk"
+gem "stripe"
 # Use the Puma web server [https://github.com/puma/puma]
 gem "puma", ">= 5.0"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
@@ -56,16 +56,16 @@ group :development, :test do
 
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
-  
+
   # Testing gems
-  gem 'rspec-rails'
-  gem 'shoulda-matchers'  # For testing ActiveRecord relationships and validations
-  gem 'factory_bot_rails' # You already have factories but this makes the integration explicit
+  gem "rspec-rails"
+  gem "shoulda-matchers"  # For testing ActiveRecord relationships and validations
+  gem "factory_bot_rails" # You already have factories but this makes the integration explicit
   # faker is already included in the main gems section
-  gem 'database_cleaner-active_record' # For cleaning test database between runs
+  gem "database_cleaner-active_record" # For cleaning test database between runs
 end
 
 group :test do
-  gem 'simplecov', require: false # For tracking test coverage
-  gem 'webmock'    # For mocking external API calls
+  gem "simplecov", require: false # For tracking test coverage
+  gem "webmock"    # For mocking external API calls
 end

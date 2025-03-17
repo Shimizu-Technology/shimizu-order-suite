@@ -1,5 +1,5 @@
 # app/mailers/password_mailer.rb
-require 'cgi'  # for CGI.escape
+require "cgi"  # for CGI.escape
 
 class PasswordMailer < ApplicationMailer
   def reset_password(user, raw_token)
@@ -14,7 +14,7 @@ class PasswordMailer < ApplicationMailer
     @url = "#{ENV['FRONTEND_URL']}/reset-password?token=#{raw_token}&email=#{safe_email}"
 
     mail(
-      to: @user.email, 
+      to: @user.email,
       from: restaurant_from_address(@restaurant),
       subject: "Reset your #{@restaurant&.name || 'Restaurant'} password"
     )

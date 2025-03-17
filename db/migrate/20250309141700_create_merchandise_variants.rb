@@ -7,10 +7,10 @@ class CreateMerchandiseVariants < ActiveRecord::Migration[7.2]
       t.string :sku
       t.decimal :price_adjustment, precision: 8, scale: 2, default: 0.0
       t.integer :stock_quantity, default: 0
-      
+
       t.timestamps
     end
-    
-    add_index :merchandise_variants, [:merchandise_item_id, :size, :color], name: 'index_merch_variants_on_item_size_color'
+
+    add_index :merchandise_variants, [ :merchandise_item_id, :size, :color ], name: 'index_merch_variants_on_item_size_color'
   end
 end

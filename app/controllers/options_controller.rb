@@ -1,8 +1,8 @@
 # app/controllers/options_controller.rb
 class OptionsController < ApplicationController
   before_action :authorize_request
-  before_action :set_option, only: [:update, :destroy]
-  
+  before_action :set_option, only: [ :update, :destroy ]
+
   # Mark all actions as public endpoints that don't require restaurant context
   def public_endpoint?
     true
@@ -16,7 +16,7 @@ class OptionsController < ApplicationController
     option = option_group.options.build(option_params)
 
     if option.save
-      render json: option.as_json(methods: [:additional_price_float]), status: :created
+      render json: option.as_json(methods: [ :additional_price_float ]), status: :created
     else
       render json: { errors: option.errors.full_messages }, status: :unprocessable_entity
     end
@@ -27,7 +27,7 @@ class OptionsController < ApplicationController
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
     if @option.update(option_params)
-      render json: @option.as_json(methods: [:additional_price_float])
+      render json: @option.as_json(methods: [ :additional_price_float ])
     else
       render json: { errors: @option.errors.full_messages }, status: :unprocessable_entity
     end

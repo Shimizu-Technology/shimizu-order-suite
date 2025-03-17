@@ -46,9 +46,9 @@ Rails.application.configure do
     .then { |logger| ActiveSupport::TaggedLogging.new(logger) }
 
   # Prepend all log lines with the following tags.
-  config.log_tags = [:request_id]
+  config.log_tags = [ :request_id ]
 
-  # "info" includes generic and useful information about system operation, 
+  # "info" includes generic and useful information about system operation,
   # but avoids logging too much info.
   config.log_level = ENV.fetch("RAILS_LOG_LEVEL", "info")
 
@@ -59,13 +59,13 @@ Rails.application.configure do
   else
     config.cache_store = :memory_store, { size: 64.megabytes }
   end
-  
+
   # Enable fragment and page caching in ActionController
   config.action_controller.perform_caching = true
-  
+
   # Set cache headers for static assets
   config.public_file_server.headers = {
-    'Cache-Control' => 'public, max-age=31536000'
+    "Cache-Control" => "public, max-age=31536000"
   }
 
   # Use a real queuing backend for Active Job
@@ -81,11 +81,11 @@ Rails.application.configure do
   # Use SMTP for SendGrid.
   config.action_mailer.delivery_method = :smtp
   config.action_mailer.smtp_settings = {
-    user_name: 'apikey',                # This is required by SendGrid
-    password:  ENV['SENDGRID_API_KEY'], # Make sure you set this in Render/Heroku/wherever
-    domain:    'hafaloha.netlify.app', 
-      # or your own custom domain if you have one
-    address:   'smtp.sendgrid.net',
+    user_name: "apikey",                # This is required by SendGrid
+    password:  ENV["SENDGRID_API_KEY"], # Make sure you set this in Render/Heroku/wherever
+    domain:    "hafaloha.netlify.app",
+    # or your own custom domain if you have one
+    address:   "smtp.sendgrid.net",
     port:      587,
     authentication: :plain,
     enable_starttls_auto: true
@@ -95,8 +95,8 @@ Rails.application.configure do
   # Typically, you'd use your production frontend host if that's where
   # users land to confirm or reset password, etc.
   config.action_mailer.default_url_options = {
-    host:     'hafaloha.netlify.app',
-    protocol: 'https'  # ensures links are https://...
+    host:     "hafaloha.netlify.app",
+    protocol: "https"  # ensures links are https://...
   }
 
   # Disable caching for Action Mailer templates even if you have caching on.
@@ -115,7 +115,7 @@ Rails.application.configure do
   config.active_record.dump_schema_after_migration = false
 
   # Only use :id for inspections in production.
-  config.active_record.attributes_for_inspect = [:id]
+  config.active_record.attributes_for_inspect = [ :id ]
 
   # Additional DNS rebind etc…
   # config.hosts = [...]

@@ -6,9 +6,9 @@ class CreateOrderAcknowledgments < ActiveRecord::Migration[7.2]
       t.datetime :acknowledged_at, null: false, default: -> { 'CURRENT_TIMESTAMP' }
 
       t.timestamps
-      
+
       # Ensure a user can only acknowledge an order once
-      t.index [:order_id, :user_id], unique: true
+      t.index [ :order_id, :user_id ], unique: true
     end
   end
 end

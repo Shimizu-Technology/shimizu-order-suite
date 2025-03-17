@@ -13,12 +13,12 @@ require File.expand_path('../../config/environment', __FILE__)
 # Helper method to print colored output
 def print_status(message, status = :info)
   color_code = case status
-               when :success then "\e[32m" # Green
-               when :error then "\e[31m"   # Red
-               when :warning then "\e[33m" # Yellow
-               else "\e[36m"               # Cyan (info)
-               end
-  
+  when :success then "\e[32m" # Green
+  when :error then "\e[31m"   # Red
+  when :warning then "\e[33m" # Yellow
+  else "\e[36m"               # Cyan (info)
+  end
+
   puts "#{color_code}#{message}\e[0m"
 end
 
@@ -61,7 +61,7 @@ print_status("Test mode: #{test_mode ? 'Enabled' : 'Disabled'}")
 # Create a PayPal client
 begin
   print_status("Creating PayPal client...")
-  
+
   # Create the appropriate environment
   if test_mode
     environment = PayPal::SandboxEnvironment.new(client_id, client_secret)
@@ -70,7 +70,7 @@ begin
     environment = PayPal::LiveEnvironment.new(client_id, client_secret)
     print_status("Using Production environment")
   end
-  
+
   client = PayPal::PayPalHttpClient.new(environment)
   print_status("PayPal client created successfully.", :success)
 rescue => e
@@ -81,21 +81,21 @@ end
 # Create a test order
 begin
   print_status("Creating a test order...")
-  
+
   request = PayPalCheckoutSdk::Orders::OrdersCreateRequest.new
   request.request_body({
     intent: 'CAPTURE',
-    purchase_units: [{
+    purchase_units: [ {
       amount: {
         currency_code: 'USD',
         value: '1.00'
       },
       reference_id: "test_order_#{Time.now.to_i}"
-    }]
+    } ]
   })
-  
+
   response = client.execute(request)
-  
+
   order_id = response.result.id
   print_status("Test order created successfully. Order ID: #{order_id}", :success)
 rescue => e
@@ -106,14 +106,14 @@ end
 # Capture the test order
 begin
   print_status("Capturing the test order...")
-  
+
   request = PayPalCheckoutSdk::Orders::OrdersCaptureRequest.new(order_id)
   response = client.execute(request)
-  
+
   capture_status = response.result.status
   transaction_id = response.result.purchase_units[0].payments.captures[0].id
   payment_amount = response.result.purchase_units[0].payments.captures[0].amount.value
-  
+
   print_status("Test order captured successfully.", :success)
   print_status("Capture Status: #{capture_status}")
   print_status("Transaction ID: #{transaction_id}")
@@ -126,9 +126,9 @@ end
 # Test webhook verification
 begin
   print_status("Testing webhook verification...")
-  
+
   webhook_id = payment_gateway['paypal_webhook_id']
-  
+
   if webhook_id.blank?
     print_status("PayPal webhook ID is not configured.", :warning)
     print_status("Skipping webhook verification test.")

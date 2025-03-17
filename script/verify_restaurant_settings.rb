@@ -14,18 +14,18 @@ Restaurant.find_each do |restaurant|
     missing_settings << "Restaurant ##{restaurant.id} (#{restaurant.name}) has nil admin_settings"
     next
   end
-  
+
   unless restaurant.admin_settings.is_a?(Hash)
     invalid_settings << "Restaurant ##{restaurant.id} (#{restaurant.name}) has invalid admin_settings: #{restaurant.admin_settings.inspect}"
     next
   end
-  
+
   unless restaurant.admin_settings.key?('email_header_color')
     missing_settings << "Restaurant ##{restaurant.id} (#{restaurant.name}) is missing email_header_color in admin_settings"
   end
-  
+
   # Check if the color is the Hafaloha gold
-  if restaurant.admin_settings.key?('email_header_color') && 
+  if restaurant.admin_settings.key?('email_header_color') &&
      restaurant.admin_settings['email_header_color'] != '#D4AF37'
     puts "Note: Restaurant ##{restaurant.id} (#{restaurant.name}) is using a custom color: #{restaurant.admin_settings['email_header_color']}"
   end
@@ -33,20 +33,20 @@ end
 
 if missing_settings.any? || invalid_settings.any?
   puts "\n[!] Issues found:"
-  
+
   if invalid_settings.any?
     puts "\nInvalid settings:"
     invalid_settings.each { |msg| puts "  - #{msg}" }
   end
-  
+
   if missing_settings.any?
     puts "\nMissing settings:"
     missing_settings.each { |msg| puts "  - #{msg}" }
   end
-  
+
   puts "\nTo fix these issues, run the following migration:"
   puts "  rails db:migrate"
-  
+
   exit 1
 else
   puts "\n[✓] All restaurants have valid admin_settings with email_header_color!"

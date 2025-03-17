@@ -7,10 +7,10 @@ class CreateMenuItemStockAudits < ActiveRecord::Migration[7.2]
       t.string :reason
       t.references :user, foreign_key: true
       t.references :order, foreign_key: true
-      
+
       t.timestamps
     end
-    
+
     add_index :menu_item_stock_audits, :created_at
   end
 end

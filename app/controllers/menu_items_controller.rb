@@ -1,10 +1,10 @@
 class MenuItemsController < ApplicationController
   # 1) For index & show, optional_authorize => public can see
-  before_action :optional_authorize, only: [:index, :show]
+  before_action :optional_authorize, only: [ :index, :show ]
 
   # 2) For other actions, require token + admin
-  before_action :authorize_request, except: [:index, :show]
-  
+  before_action :authorize_request, except: [ :index, :show ]
+
   # Mark all actions as public endpoints that don't require restaurant context
   def public_endpoint?
     true
@@ -15,14 +15,14 @@ class MenuItemsController < ApplicationController
     # Get the restaurant from the params
     restaurant_id = params[:restaurant_id]
     restaurant = Restaurant.find_by(id: restaurant_id) if restaurant_id.present?
-    
+
     # If admin AND params[:admin] or params[:show_all] => show all. Otherwise only unexpired.
     if is_admin? && (params[:admin].present? || params[:show_all].present?)
       base_scope = MenuItem.all
     else
       base_scope = MenuItem.currently_available
     end
-    
+
     # Filter by specific menu_id if provided in params
     if params[:menu_id].present?
       base_scope = base_scope.where(menu_id: params[:menu_id])
@@ -47,8 +47,8 @@ class MenuItemsController < ApplicationController
         option_groups: {
           include: {
             options: {
-              only: [:id, :name, :available],
-              methods: [:additional_price_float]
+              only: [ :id, :name, :available ],
+              methods: [ :additional_price_float ]
             }
           }
         }
@@ -64,8 +64,8 @@ class MenuItemsController < ApplicationController
         option_groups: {
           include: {
             options: {
-              only: [:id, :name, :available],
-              methods: [:additional_price_float]
+              only: [ :id, :name, :available ],
+              methods: [ :additional_price_float ]
             }
           }
         }
@@ -79,7 +79,7 @@ class MenuItemsController < ApplicationController
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
     @menu_item = MenuItem.new(menu_item_params.except(:image))
-    
+
     # Assign categories before saving if category_ids param is given
     if params[:menu_item][:category_ids].present?
       @menu_item.category_ids = Array(params[:menu_item][:category_ids])
@@ -111,7 +111,7 @@ class MenuItemsController < ApplicationController
 
     @menu_item = MenuItem.find(params[:id])
     Rails.logger.info "Updating MenuItem => #{@menu_item.id}"
-    
+
     # Assign categories before updating if category_ids param is given
     if params[:menu_item][:category_ids].present?
       @menu_item.category_ids = Array(params[:menu_item][:category_ids])
@@ -159,7 +159,7 @@ class MenuItemsController < ApplicationController
     file = params[:image]
     unless file
       Rails.logger.info "No file param"
-      return render json: { error: 'No image file uploaded' }, status: :unprocessable_entity
+      return render json: { error: "No image file uploaded" }, status: :unprocessable_entity
     end
 
     ext = File.extname(file.original_filename)
@@ -177,25 +177,25 @@ class MenuItemsController < ApplicationController
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
     menu_item = MenuItem.find(params[:id])
-    
+
     unless menu_item.enable_stock_tracking
       return render json: { error: "Inventory tracking is not enabled for this item" }, status: :unprocessable_entity
     end
-    
+
     quantity = params[:quantity].to_i
     reason = params[:reason].presence || "No reason provided"
     from_order = params[:order_id].present?
-    
+
     if quantity <= 0
       return render json: { error: "Quantity must be greater than zero" }, status: :unprocessable_entity
     end
-    
+
     # If this is coming from an order edit (through InventoryReversionDialog),
     # we need special handling to avoid duplicate inventory adjustments
     if from_order
       Rails.logger.info "Mark as damaged called from order edit - only updating damaged count"
       Rails.logger.info "INVENTORY DEBUG: Before increment_damaged_only - Item #{menu_item.id} (#{menu_item.name}) - Stock: #{menu_item.stock_quantity}, Damaged: #{menu_item.damaged_quantity}, Available: #{menu_item.available_quantity}"
-      
+
       # Just increment the damaged count - the inventory adjustment will be handled by orders_controller
       if menu_item.increment_damaged_only(quantity, reason, current_user)
         Rails.logger.info "INVENTORY DEBUG: After increment_damaged_only - Item #{menu_item.id} (#{menu_item.name}) - Stock: #{menu_item.stock_quantity}, Damaged: #{menu_item.damaged_quantity}, Available: #{menu_item.available_quantity}"
@@ -213,49 +213,49 @@ class MenuItemsController < ApplicationController
       end
     end
   end
-  
+
   # POST /menu_items/:id/update_stock
   def update_stock
     Rails.logger.info "=== MenuItemsController#update_stock ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
     menu_item = MenuItem.find(params[:id])
-    
+
     unless menu_item.enable_stock_tracking
       return render json: { error: "Inventory tracking is not enabled for this item" }, status: :unprocessable_entity
     end
-    
+
     new_quantity = params[:stock_quantity].to_i
     reason_type = params[:reason_type] || "adjustment"
     reason_details = params[:reason_details].presence
-    
+
     if new_quantity < 0
       return render json: { error: "Stock quantity cannot be negative" }, status: :unprocessable_entity
     end
-    
+
     if menu_item.update_stock_quantity(new_quantity, reason_type, reason_details, current_user)
       render json: menu_item
     else
       render json: { error: "Failed to update stock quantity" }, status: :unprocessable_entity
     end
   end
-  
+
   # GET /menu_items/:id/stock_audits
   def stock_audits
     Rails.logger.info "=== MenuItemsController#stock_audits ==="
     return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
 
     menu_item = MenuItem.find(params[:id])
-    
+
     unless menu_item.enable_stock_tracking
       return render json: { error: "Inventory tracking is not enabled for this item" }, status: :unprocessable_entity
     end
-    
+
     audits = menu_item.menu_item_stock_audits.order(created_at: :desc).limit(50)
-    
+
     render json: audits
   end
-  
+
   private
 
   def menu_item_params

@@ -37,9 +37,9 @@ class SeatAllocationsController < ApplicationController
     results = seat_allocations.map do |alloc|
       occupant_type = if alloc.reservation_id.present?
                         "reservation"
-                      elsif alloc.waitlist_entry_id.present?
+      elsif alloc.waitlist_entry_id.present?
                         "waitlist"
-                      end
+      end
 
       occupant_id         = nil
       occupant_name       = nil
@@ -105,7 +105,7 @@ class SeatAllocationsController < ApplicationController
       seat_ids.each do |sid|
         seat = Seat.find_by(id: sid) or raise ActiveRecord::RecordNotFound, "Seat #{sid} not found"
 
-        # *** Overlap check *** 
+        # *** Overlap check ***
         conflict = SeatAllocation.where(seat_id: sid, released_at: nil)
                                  .where("start_time < ? AND end_time > ?", en, st).exists?
         raise StandardError, "Seat #{sid} is not free" if conflict
@@ -142,7 +142,7 @@ class SeatAllocationsController < ApplicationController
 
     # Convert seat_labels -> seat_ids if seat_ids is empty
     if seat_ids.empty? && seat_labels.any?
-      seat_ids = seat_labels.map {|lbl| Seat.find_by(label: lbl)&.id }.compact
+      seat_ids = seat_labels.map { |lbl| Seat.find_by(label: lbl)&.id }.compact
     end
 
     if occupant_type.blank? || occupant_id.blank? || seat_ids.empty?
@@ -312,10 +312,10 @@ class SeatAllocationsController < ApplicationController
 
   def find_occupant(occupant_type, occupant_id)
     occupant = case occupant_type
-               when "reservation" then Reservation.find_by(id: occupant_id)
-               when "waitlist"    then WaitlistEntry.find_by(id: occupant_id)
-               else nil
-               end
+    when "reservation" then Reservation.find_by(id: occupant_id)
+    when "waitlist"    then WaitlistEntry.find_by(id: occupant_id)
+    else nil
+    end
     render(json: { error: "Could not find occupant" }, status: :not_found) unless occupant
     occupant
   end

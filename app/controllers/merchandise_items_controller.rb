@@ -1,10 +1,10 @@
 class MerchandiseItemsController < ApplicationController
   # 1) For index & show, optional_authorize => public can see
-  before_action :optional_authorize, only: [:index, :show]
+  before_action :optional_authorize, only: [ :index, :show ]
 
   # 2) For other actions, require token + admin
-  before_action :authorize_request, except: [:index, :show]
-  
+  before_action :authorize_request, except: [ :index, :show ]
+
   # Mark all actions as public endpoints that don't require restaurant context
   def public_endpoint?
     true
@@ -15,14 +15,14 @@ class MerchandiseItemsController < ApplicationController
     # Get the restaurant from the params
     restaurant_id = params[:restaurant_id]
     restaurant = Restaurant.find_by(id: restaurant_id) if restaurant_id.present?
-    
+
     # If admin AND params[:show_all] => show all. Otherwise only available.
     if is_admin? && params[:show_all].present?
       base_scope = MerchandiseItem.all
     else
       base_scope = MerchandiseItem.where(available: true)
     end
-    
+
     # Filter by collection_id if provided
     if params[:collection_id].present?
       base_scope = base_scope.where(merchandise_collection_id: params[:collection_id])
@@ -40,7 +40,7 @@ class MerchandiseItemsController < ApplicationController
     if params[:include_collection_names].present?
       items_with_collection = items.map do |item|
         item_json = item.as_json(include_variants: true)
-        item_json['collection_name'] = item.merchandise_collection&.name
+        item_json["collection_name"] = item.merchandise_collection&.name
         item_json
       end
       render json: items_with_collection
@@ -150,7 +150,7 @@ class MerchandiseItemsController < ApplicationController
     file = params[:image]
     unless file
       Rails.logger.info "No file param"
-      return render json: { error: 'No image file uploaded' }, status: :unprocessable_entity
+      return render json: { error: "No image file uploaded" }, status: :unprocessable_entity
     end
 
     ext = File.extname(file.original_filename)
@@ -171,7 +171,7 @@ class MerchandiseItemsController < ApplicationController
     file = params[:image]
     unless file
       Rails.logger.info "No file param"
-      return render json: { error: 'No image file uploaded' }, status: :unprocessable_entity
+      return render json: { error: "No image file uploaded" }, status: :unprocessable_entity
     end
 
     ext = File.extname(file.original_filename)

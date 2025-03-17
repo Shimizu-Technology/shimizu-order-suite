@@ -11,10 +11,10 @@ class CreateVipAccessCodes < ActiveRecord::Migration[7.0]
       t.boolean :is_active, default: true
       t.references :user, foreign_key: true, null: true
       t.string :group_id
-      
+
       t.timestamps
     end
-    
-    add_index :vip_access_codes, [:code, :restaurant_id], unique: true
+
+    add_index :vip_access_codes, [ :code, :restaurant_id ], unique: true
   end
 end

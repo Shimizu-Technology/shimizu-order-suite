@@ -33,7 +33,7 @@ rescue ActiveRecord::PendingMigrationError => e
 end
 RSpec.configure do |config|
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
-  config.fixture_paths = ["#{::Rails.root}/spec/fixtures"]
+  config.fixture_paths = [ "#{::Rails.root}/spec/fixtures" ]
 
   # If you're not using ActiveRecord, or you'd prefer not to run each of your
   # examples within a transaction, remove the following line or assign false
@@ -62,14 +62,14 @@ RSpec.configure do |config|
   config.filter_rails_from_backtrace!
   # arbitrary gems may also be filtered via:
   # config.filter_gems_from_backtrace("gem name")
-  
+
   # Include FactoryBot methods
   config.include FactoryBot::Syntax::Methods
-  
+
   # Include spec helpers
   config.include RequestSpecHelper, type: :request
   config.include ControllerSpecHelper, type: :controller
-  
+
   # Configure ActiveJob to use the test adapter
   config.before(:each) do
     ActiveJob::Base.queue_adapter = :test

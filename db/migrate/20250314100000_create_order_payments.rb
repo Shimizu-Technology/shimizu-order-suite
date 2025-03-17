@@ -10,10 +10,10 @@ class CreateOrderPayments < ActiveRecord::Migration[7.2]
       t.jsonb :payment_details
       t.string :status
       t.string :description # e.g., "Additional items", "Partial refund"
-      
+
       t.timestamps
     end
-    
+
     add_index :order_payments, :transaction_id
     add_index :order_payments, :payment_id
   end

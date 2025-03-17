@@ -15,6 +15,6 @@ class CreateSpecialEvents < ActiveRecord::Migration[7.0]
       t.timestamps
     end
 
-    add_index :special_events, [:restaurant_id, :event_date], unique: true
+    add_index :special_events, [ :restaurant_id, :event_date ], unique: true
   end
 end

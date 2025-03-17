@@ -4,7 +4,7 @@ class Menu < ApplicationRecord
   default_scope { with_restaurant_scope }
   belongs_to :restaurant
   has_many :menu_items, dependent: :destroy
-  
+
   validates :name, presence: true
 
   # Ensure we call each MenuItem's as_json override (for numeric price).

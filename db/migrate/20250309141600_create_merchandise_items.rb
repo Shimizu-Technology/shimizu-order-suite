@@ -9,10 +9,10 @@ class CreateMerchandiseItems < ActiveRecord::Migration[7.2]
       t.integer :stock_status, default: 0
       t.text :status_note
       t.references :merchandise_collection, null: false, foreign_key: true
-      
+
       t.timestamps
     end
-    
-    add_index :merchandise_items, [:merchandise_collection_id, :available]
+
+    add_index :merchandise_items, [ :merchandise_collection_id, :available ]
   end
 end

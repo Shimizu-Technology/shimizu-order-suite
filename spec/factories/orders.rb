@@ -14,7 +14,7 @@ FactoryBot.define do
     transaction_id { nil }
     payment_status { "pending" }
     payment_amount { nil }
-    
+
     # Add a trait for orders with users
     trait :with_user do
       association :user

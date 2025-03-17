@@ -1,11 +1,11 @@
 # app/controllers/layouts_controller.rb
 class LayoutsController < ApplicationController
   before_action :authorize_request
-  before_action :set_layout, only: [:show, :update, :destroy, :activate]
+  before_action :set_layout, only: [ :show, :update, :destroy, :activate ]
 
   # GET /layouts
   def index
-    if current_user.role == 'super_admin'
+    if current_user.role == "super_admin"
       layouts = Layout.all
     else
       layouts = Layout.where(restaurant_id: current_user.restaurant_id)
@@ -93,8 +93,8 @@ class LayoutsController < ApplicationController
 
   # POST /layouts
   def create
-    assigned_restaurant_id = 
-      if current_user.role == 'super_admin'
+    assigned_restaurant_id =
+      if current_user.role == "super_admin"
         layout_params[:restaurant_id]
       else
         current_user.restaurant_id
@@ -113,7 +113,7 @@ class LayoutsController < ApplicationController
 
         sections_array.each do |sec_data|
           existing_section_id = sec_data["id"].to_i if sec_data["id"].to_s.match?(/^\d+$/)
-          seat_section = existing_section_id && existing_section_id > 0 ? 
+          seat_section = existing_section_id && existing_section_id > 0 ?
                            @layout.seat_sections.find_by(id: existing_section_id) : nil
           seat_section ||= @layout.seat_sections.build
 
@@ -133,7 +133,7 @@ class LayoutsController < ApplicationController
           seat_ids_in_use = []
           seats_array.each do |seat_data|
             existing_seat_id = seat_data["id"].to_i if seat_data["id"].to_s.match?(/^\d+$/)
-            seat = existing_seat_id && existing_seat_id > 0 ? 
+            seat = existing_seat_id && existing_seat_id > 0 ?
                      seat_section.seats.find_by(id: existing_seat_id) : nil
             seat ||= seat_section.seats.build
 
@@ -166,7 +166,7 @@ class LayoutsController < ApplicationController
 
   # PATCH/PUT /layouts/:id
   def update
-    if current_user.role != 'super_admin'
+    if current_user.role != "super_admin"
       @layout.restaurant_id = current_user.restaurant_id
     elsif layout_params[:restaurant_id].present?
       @layout.restaurant_id = layout_params[:restaurant_id]
@@ -182,7 +182,7 @@ class LayoutsController < ApplicationController
 
       sections_array.each do |sec_data|
         existing_section_id = sec_data["id"].to_i if sec_data["id"].to_s.match?(/^\d+$/)
-        seat_section = existing_section_id && existing_section_id > 0 ? 
+        seat_section = existing_section_id && existing_section_id > 0 ?
                          @layout.seat_sections.find_by(id: existing_section_id) : nil
         seat_section ||= @layout.seat_sections.build
 
@@ -201,7 +201,7 @@ class LayoutsController < ApplicationController
         seat_ids_in_use = []
         seats_array.each do |seat_data|
           existing_seat_id = seat_data["id"].to_i if seat_data["id"].to_s.match?(/^\d+$/)
-          seat = existing_seat_id && existing_seat_id > 0 ? 
+          seat = existing_seat_id && existing_seat_id > 0 ?
                    seat_section.seats.find_by(id: existing_seat_id) : nil
           seat ||= seat_section.seats.build
 
@@ -225,7 +225,7 @@ class LayoutsController < ApplicationController
     render json: @layout
   rescue => e
     Rails.logger.error("Error updating layout with seat sections: #{e.message}")
-    render json: { errors: [e.message] }, status: :unprocessable_entity
+    render json: { errors: [ e.message ] }, status: :unprocessable_entity
   end
 
   # DELETE /layouts/:id
@@ -240,7 +240,7 @@ class LayoutsController < ApplicationController
       return render json: { error: "Forbidden" }, status: :forbidden
     end
 
-    if @layout.restaurant_id != current_user.restaurant_id && current_user.role != 'super_admin'
+    if @layout.restaurant_id != current_user.restaurant_id && current_user.role != "super_admin"
       return render json: { error: "Layout does not belong to your restaurant" }, status: :forbidden
     end
 

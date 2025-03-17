@@ -4,7 +4,7 @@ module Admin
   class UsersController < ApplicationController
     before_action :authorize_request
     before_action :require_admin!
-    
+
     # Mark all actions as public endpoints that don't require restaurant context
     def public_endpoint?
       true
@@ -18,8 +18,8 @@ module Admin
 
       # Sorting
       # For simplicity, let's allow only a couple of fields, e.g. email or created_at.
-      sort_by  = params[:sort_by].presence_in(%w[email created_at]) || 'created_at'
-      sort_dir = params[:sort_dir] == 'asc' ? 'asc' : 'desc'
+      sort_by  = params[:sort_by].presence_in(%w[email created_at]) || "created_at"
+      sort_dir = params[:sort_dir] == "asc" ? "asc" : "desc"
 
       # Start building query
       users = User.order("#{sort_by} #{sort_dir}")
@@ -34,7 +34,7 @@ module Admin
       end
 
       # Role filter
-      if params[:role].present? && params[:role] != 'all'
+      if params[:role].present? && params[:role] != "all"
         users = users.where(role: params[:role])
       end
 
@@ -85,27 +85,27 @@ module Admin
     # DELETE /admin/users/:id
     def destroy
       user = User.find(params[:id])
-      
+
       # Prevent deleting self
       if user.id == current_user.id
         return render json: { error: "Cannot delete your own account" }, status: :unprocessable_entity
       end
-      
+
       # Check if this is the last admin
       if user.role.in?(%w[admin super_admin]) && User.where(role: %w[admin super_admin]).count <= 1
         return render json: { error: "Cannot delete the last admin user" }, status: :unprocessable_entity
       end
-      
+
       begin
         # Start a transaction
         ActiveRecord::Base.transaction do
           # Nullify user_id in associated orders
           Order.where(user_id: user.id).update_all(user_id: nil)
-          
+
           # Now delete the user
           user.destroy!
         end
-        
+
         head :no_content
       rescue => e
         Rails.logger.error("Failed to delete user: #{e.message}")
@@ -122,24 +122,24 @@ module Admin
 
     render json: { message: "Invitation re-sent to #{user.email}" }, status: :ok
   end
-  
+
   # POST /admin/users/:id/admin_reset_password
   def admin_reset_password
     user = User.find(params[:id])
-    
+
     # Get the password from params
     new_password = params[:password]
-    
+
     # Validate password
     if new_password.blank? || new_password.length < 6
-      return render json: { errors: ["Password must be at least 6 characters"] }, status: :unprocessable_entity
+      return render json: { errors: [ "Password must be at least 6 characters" ] }, status: :unprocessable_entity
     end
-    
+
     # Update the user's password
     user.password = new_password
-    
+
     if user.save
-      render json: { 
+      render json: {
         message: "Password has been reset successfully"
       }, status: :ok
     else
@@ -151,13 +151,27 @@ module Admin
 
     def require_admin!
       unless current_user && current_user.role.in?(%w[admin super_admin])
-        render json: { error: 'Forbidden' }, status: :forbidden
+        render json: { error: "Forbidden" }, status: :forbidden
       end
     end
 
     # Admin can't directly set user password => no :password param
     def user_params
-      params.permit(:email, :first_name, :last_name, :phone, :role, :restaurant_id)
+      # Get basic user attributes
+      permitted = params.permit(:email, :first_name, :last_name, :phone, :restaurant_id)
+      
+      # For role, ensure we're not creating a user with higher privileges than the current user
+      if params[:role].present?
+        # Only allow 'customer' or 'admin' roles (no super_admin)
+        if params[:role].in?(['customer', 'admin'])
+          permitted[:role] = params[:role]
+        else
+          # Default to customer if an invalid role is provided
+          permitted[:role] = 'customer'
+        end
+      end
+      
+      permitted
     end
   end
 end

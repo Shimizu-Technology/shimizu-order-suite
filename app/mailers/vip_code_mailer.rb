@@ -6,7 +6,7 @@ class VipCodeMailer < ApplicationMailer
     @vip_code = vip_code
     @restaurant = restaurant
     @header_color = email_header_color_for(restaurant)
-    
+
     mail(
       from: restaurant_from_address(restaurant),
       to: email,

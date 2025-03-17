@@ -8,6 +8,5 @@ class CreateUsers < ActiveRecord::Migration[7.2]
       t.references :restaurant, foreign_key: true, null: true
       t.timestamps
     end
-    
   end
 end

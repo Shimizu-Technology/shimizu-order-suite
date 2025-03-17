@@ -61,12 +61,12 @@ RSpec.describe Admin::SiteSettingsController, type: :controller do
 
       it 'updates text fields' do
         new_url = 'https://example.com/new-hero.jpg'
-        
+
         # Mock the update to avoid actual S3 uploads
         allow_any_instance_of(SiteSetting).to receive(:save!).and_return(true)
-        
+
         patch :update, params: { hero_image_url: new_url }
-        
+
         expect(response).to have_http_status(:ok)
         # We can't check the actual value since we mocked the save
         expect(response.content_type).to include('application/json')
@@ -75,13 +75,13 @@ RSpec.describe Admin::SiteSettingsController, type: :controller do
       it 'handles file uploads' do
         # For simplicity, we'll just test that the controller accepts the hero_image_url parameter
         # This avoids the complexity of mocking file uploads
-        
+
         # Mock the SiteSetting to avoid actual database updates
         allow_any_instance_of(SiteSetting).to receive(:hero_image_url=)
         allow_any_instance_of(SiteSetting).to receive(:save!)
-        
+
         patch :update, params: { hero_image_url: 'https://example.com/new-image.jpg' }
-        
+
         expect(response).to have_http_status(:ok)
       end
     end

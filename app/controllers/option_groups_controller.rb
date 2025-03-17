@@ -1,8 +1,8 @@
 # app/controllers/option_groups_controller.rb
 class OptionGroupsController < ApplicationController
   before_action :authorize_request
-  before_action :set_option_group, only: [:update, :destroy]
-  
+  before_action :set_option_group, only: [ :update, :destroy ]
+
   # Mark all actions as public endpoints that don't require restaurant context
   def public_endpoint?
     true
@@ -18,7 +18,7 @@ class OptionGroupsController < ApplicationController
     render json: option_groups.as_json(
       include: {
         options: {
-          methods: [:additional_price_float]
+          methods: [ :additional_price_float ]
         }
       }
     )
@@ -35,7 +35,7 @@ class OptionGroupsController < ApplicationController
       render json: option_group.as_json(
         include: {
           options: {
-            methods: [:additional_price_float]
+            methods: [ :additional_price_float ]
           }
         }
       ), status: :created
@@ -52,7 +52,7 @@ class OptionGroupsController < ApplicationController
       render json: @option_group.as_json(
         include: {
           options: {
-            methods: [:additional_price_float]
+            methods: [ :additional_price_float ]
           }
         }
       )

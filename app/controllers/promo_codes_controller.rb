@@ -1,10 +1,10 @@
 # app/controllers/promo_codes_controller.rb
 class PromoCodesController < ApplicationController
-  before_action :authorize_request, except: [:index, :show]
-  
+  before_action :authorize_request, except: [ :index, :show ]
+
   # Mark index and show as public endpoints that don't require restaurant context
   def public_endpoint?
-    action_name.in?(['index', 'show'])
+    action_name.in?([ "index", "show" ])
   end
 
   # GET /promo_codes

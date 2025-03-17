@@ -12,6 +12,6 @@ class CreateOperatingHours < ActiveRecord::Migration[7.0]
     end
 
     # Ensure each restaurant has at most 1 record for each day_of_week
-    add_index :operating_hours, [:restaurant_id, :day_of_week], unique: true
+    add_index :operating_hours, [ :restaurant_id, :day_of_week ], unique: true
   end
 end

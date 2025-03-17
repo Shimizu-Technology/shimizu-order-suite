@@ -4,7 +4,7 @@ class Reservation < ApplicationRecord
   # Force ActiveRecord to treat them as real columns:
   attribute :seat_preferences, :json, default: []
   attribute :duration_minutes, :integer, default: 60
-  
+
   belongs_to :restaurant
   has_many :seat_allocations, dependent: :nullify
   has_many :seats, through: :seat_allocations
@@ -40,7 +40,7 @@ class Reservation < ApplicationRecord
   private
 
   def default_status
-    self.status = 'booked' if status.blank?
+    self.status = "booked" if status.blank?
   end
 
   def normalize_seat_preferences

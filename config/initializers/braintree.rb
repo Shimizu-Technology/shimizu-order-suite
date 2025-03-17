@@ -4,4 +4,4 @@
 # We don't initialize it here because we'll create a gateway per restaurant.
 # This is just to ensure the Braintree module is loaded.
 
-require 'braintree'
+require "braintree"

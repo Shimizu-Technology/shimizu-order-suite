@@ -1,10 +1,10 @@
 # app/controllers/users_controller.rb
 class UsersController < ApplicationController
-  before_action :authorize_request, only: [:show_profile, :update_profile, :verify_phone, :resend_code]
+  before_action :authorize_request, only: [ :show_profile, :update_profile, :verify_phone, :resend_code ]
 
   # Mark create, verify_phone, resend_code, show_profile, and update_profile as public endpoints that don't require restaurant context
   def public_endpoint?
-    action_name.in?(['create', 'verify_phone', 'resend_code', 'show_profile', 'update_profile'])
+    action_name.in?([ "create", "verify_phone", "resend_code", "show_profile", "update_profile" ])
   end
 
   # POST /signup
@@ -12,11 +12,11 @@ class UsersController < ApplicationController
     user = User.new(user_params)
 
     # Default role to 'customer' if not provided
-    user.role = 'customer' if user.role.blank?
+    user.role = "customer" if user.role.blank?
 
     # Assign a fallback restaurant if none specified
     unless user.restaurant_id
-      default_rest = Restaurant.find_by(name: 'Hafaloha')
+      default_rest = Restaurant.find_by(name: "Hafaloha")
       user.restaurant_id = default_rest.id if default_rest
     end
 
@@ -36,8 +36,8 @@ class UsersController < ApplicationController
         restaurant = Restaurant.find(user.restaurant_id)
         restaurant_name = restaurant.name
         # Use custom SMS sender ID if set, otherwise use restaurant name
-        sms_sender = restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
-        
+        sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+
         SendSmsJob.perform_later(
           to:   user.phone,
           body: "Your verification code is #{user.verification_code}",
@@ -51,7 +51,7 @@ class UsersController < ApplicationController
         restaurant_id: user.restaurant_id,
         exp: 24.hours.from_now.to_i
       }
-      
+
       token = JWT.encode(token_payload, Rails.application.secret_key_base)
       render json: { jwt: token, user: user }, status: :created
     else
@@ -114,8 +114,8 @@ class UsersController < ApplicationController
     restaurant = Restaurant.find(user.restaurant_id)
     restaurant_name = restaurant.name
     # Use custom SMS sender ID if set, otherwise use restaurant name
-    sms_sender = restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
-    
+    sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+
     SendSmsJob.perform_later(
       to:   user.phone,
       body: "Your new verification code is #{new_code}",
@@ -149,16 +149,20 @@ class UsersController < ApplicationController
   end
 
   def user_params
-    params.require(:user).permit(
+    # Only allow basic user information for signup
+    permitted = params.require(:user).permit(
       :first_name,
       :last_name,
       :phone,
       :email,
       :password,
-      :password_confirmation,
-      :restaurant_id,
-      :role
+      :password_confirmation
     )
+
+    # For security, ensure role is always 'customer' for user signup
+    permitted[:role] = "customer"
+
+    permitted
   end
 
   def generate_code

@@ -1,9 +1,9 @@
 # app/controllers/admin/site_settings_controller.rb
 module Admin
   class SiteSettingsController < ApplicationController
-    before_action :authorize_request, except: [:show]
-    before_action :require_admin!, except: [:show]
-    
+    before_action :authorize_request, except: [ :show ]
+    before_action :require_admin!, except: [ :show ]
+
     # Mark all actions as public endpoints that don't require restaurant context
     def public_endpoint?
       true

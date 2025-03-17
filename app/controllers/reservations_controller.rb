@@ -3,7 +3,7 @@
 class ReservationsController < ApplicationController
   # Only staff/admin can do index/show/update/destroy
   # but 'create' is public (no login required).
-  before_action :authorize_request, except: [:create]
+  before_action :authorize_request, except: [ :create ]
 
   def index
     unless current_user && %w[admin staff super_admin].include?(current_user.role)
@@ -88,7 +88,7 @@ class ReservationsController < ApplicationController
       return render json: { error: "Invalid end_time format" }, status: :unprocessable_entity if parsed_end.nil?
       @reservation.end_time = parsed_end
     else
-      # If your model sets end_time automatically based on duration_minutes, 
+      # If your model sets end_time automatically based on duration_minutes,
       # you can skip assigning it here.
     end
 
@@ -104,14 +104,14 @@ class ReservationsController < ApplicationController
     @reservation.status             = reservation_params[:status]
     @reservation.duration_minutes   = reservation_params[:duration_minutes] if reservation_params[:duration_minutes].present?
 
-    # 4) seat_preferences: need seat_preferences: [[]] in strong parameters 
+    # 4) seat_preferences: need seat_preferences: [[]] in strong parameters
     if reservation_params[:seat_preferences].present?
       Rails.logger.debug "DEBUG: seat_preferences from params = #{reservation_params[:seat_preferences].inspect}"
       @reservation.seat_preferences = reservation_params[:seat_preferences]
     end
 
     # If staff/admin, force the restaurant_id
-    if current_user && current_user.role != 'super_admin'
+    if current_user && current_user.role != "super_admin"
       @reservation.restaurant_id = current_user.restaurant_id
     else
       # If no user or super_admin, default to 1 if not provided
@@ -135,19 +135,19 @@ class ReservationsController < ApplicationController
     # 6) Save
     if @reservation.save
       # Get notification preferences - only don't send if explicitly set to false
-      notification_channels = restaurant.admin_settings&.dig('notification_channels', 'reservations') || {}
-      
+      notification_channels = restaurant.admin_settings&.dig("notification_channels", "reservations") || {}
+
       # Optionally send a confirmation email - send unless explicitly disabled
-      if notification_channels['email'] != false && @reservation.contact_email.present?
+      if notification_channels["email"] != false && @reservation.contact_email.present?
         ReservationMailer.booking_confirmation(@reservation).deliver_later
       end
 
       # Optionally send a text message - send unless explicitly disabled
-      if notification_channels['sms'] != false && @reservation.contact_phone.present?
+      if notification_channels["sms"] != false && @reservation.contact_phone.present?
         restaurant_name = restaurant.name
         # Use custom SMS sender ID if set, otherwise use restaurant name
-        sms_sender = restaurant.admin_settings&.dig('sms_sender_id').presence || restaurant_name
-        
+        sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+
         message_body = <<~MSG.squish
           Hi #{@reservation.contact_name}, your #{restaurant_name} reservation is confirmed
           on #{@reservation.start_time.strftime("%B %d at %I:%M %p")}.
@@ -208,14 +208,14 @@ class ReservationsController < ApplicationController
       :duration_minutes
       # Not seat_preferences here
     )
-  
+
     # Manually insert seat_preferences if present
     if params[:reservation].key?(:seat_preferences)
       allowed[:seat_preferences] = params[:reservation][:seat_preferences]
     end
-  
+
     allowed
-  end  
+  end
 
   def exceeds_capacity?(restaurant, start_dt, end_dt, new_party_size)
     total_seats = restaurant.current_seats.count

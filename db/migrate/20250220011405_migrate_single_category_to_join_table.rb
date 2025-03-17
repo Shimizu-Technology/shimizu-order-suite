@@ -26,7 +26,7 @@ class MigrateSingleCategoryToJoinTable < ActiveRecord::Migration[7.2]
 
   def down
     # Usually just a no‐op or you can remove the created joins
-    # and re‐add the old column. 
+    # and re‐add the old column.
     # For simplicity, we’ll leave it empty.
   end
 end

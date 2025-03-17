@@ -3,9 +3,9 @@
 class PasswordsController < ApplicationController
   # Mark forgot and reset as public endpoints that don't require restaurant context
   def public_endpoint?
-    action_name.in?(['forgot', 'reset'])
+    action_name.in?([ "forgot", "reset" ])
   end
-  
+
   # POST /password/forgot
   def forgot
     user = User.find_by(email: params[:email].to_s.downcase)

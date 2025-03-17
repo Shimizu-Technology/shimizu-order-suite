@@ -28,7 +28,7 @@ RSpec.describe SiteSetting, type: :model do
 
     it 'returns existing record if one exists' do
       existing = create(:site_setting)
-      
+
       expect {
         result = SiteSetting.first_or_create!
         expect(result.id).to eq(existing.id)

@@ -13,7 +13,7 @@ class CreateCategoriesAndJoinTable < ActiveRecord::Migration[7.0]
       t.references :category, null: false, foreign_key: true
 
       t.timestamps
-      t.index [:menu_item_id, :category_id], unique: true
+      t.index [ :menu_item_id, :category_id ], unique: true
     end
   end
 end

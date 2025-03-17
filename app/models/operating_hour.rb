@@ -14,7 +14,7 @@ class OperatingHour < ApplicationRecord
   def close_after_open
     return if closed? || open_time.nil? || close_time.nil?
     if close_time <= open_time
-      errors.add(:close_time, 'must be later than open_time')
+      errors.add(:close_time, "must be later than open_time")
     end
   end
 end

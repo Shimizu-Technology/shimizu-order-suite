@@ -2,14 +2,14 @@
 
 class Order < ApplicationRecord
   # Order status constants
-  STATUS_PENDING = 'pending'
-  STATUS_PREPARING = 'preparing'
-  STATUS_READY = 'ready'
-  STATUS_COMPLETED = 'completed'
-  STATUS_CANCELLED = 'cancelled'
-  STATUS_REFUNDED = 'refunded'
-  STATUS_PARTIALLY_REFUNDED = 'partially_refunded'
-  
+  STATUS_PENDING = "pending"
+  STATUS_PREPARING = "preparing"
+  STATUS_READY = "ready"
+  STATUS_COMPLETED = "completed"
+  STATUS_CANCELLED = "cancelled"
+  STATUS_REFUNDED = "refunded"
+  STATUS_PARTIALLY_REFUNDED = "partially_refunded"
+
   # Valid order statuses
   VALID_STATUSES = [
     STATUS_PENDING,
@@ -20,27 +20,27 @@ class Order < ApplicationRecord
     STATUS_REFUNDED,
     STATUS_PARTIALLY_REFUNDED
   ]
-  
+
   has_many :order_payments, dependent: :destroy
-  
+
   # Payment helper methods
   def initial_payment
     # First try to find an existing initial payment
-    payment = order_payments.find_by(payment_type: 'initial')
-    
+    payment = order_payments.find_by(payment_type: "initial")
+
     # If no initial payment exists but we have payment info in the order table,
     # create a new OrderPayment record based on the order's payment fields
     if payment.nil? && payment_method.present? && payment_amount.present? && payment_amount.to_f > 0
-      payment_status_for_record = payment_status == 'paid' || payment_status == 'completed' ? 'paid' : payment_status
-      
+      payment_status_for_record = payment_status == "paid" || payment_status == "completed" ? "paid" : payment_status
+
       # For Stripe payments, ensure payment_id starts with 'pi_' for test mode
       payment_id_to_use = payment_id
-      if payment_method == 'stripe'
+      if payment_method == "stripe"
         # Check if we're in test mode
-        test_mode = restaurant.admin_settings&.dig('payment_gateway', 'test_mode')
-        
+        test_mode = restaurant.admin_settings&.dig("payment_gateway", "test_mode")
+
         if payment_id.present?
-          if !payment_id.start_with?('pi_') && test_mode
+          if !payment_id.start_with?("pi_") && test_mode
             # Generate a Stripe-like payment intent ID for test mode
             payment_id_to_use = "pi_test_#{SecureRandom.hex(16)}"
             Rails.logger.info("Generated test mode payment_id: #{payment_id_to_use} for order #{id}")
@@ -51,16 +51,16 @@ class Order < ApplicationRecord
           Rails.logger.info("Generated test mode payment_id: #{payment_id_to_use} for order #{id} (no payment_id present)")
         end
       end
-      
+
       # Ensure we have a valid payment_id for Stripe payments
-      if payment_method == 'stripe' && (payment_id_to_use.nil? || payment_id_to_use.empty?)
+      if payment_method == "stripe" && (payment_id_to_use.nil? || payment_id_to_use.empty?)
         # Generate a payment_id if none exists
         payment_id_to_use = "pi_#{SecureRandom.hex(16)}"
         Rails.logger.info("Generated payment_id: #{payment_id_to_use} for order #{id} (no valid payment_id)")
       end
-      
+
       payment = order_payments.create(
-        payment_type: 'initial',
+        payment_type: "initial",
         amount: payment_amount,
         payment_method: payment_method,
         status: payment_status_for_record,
@@ -70,49 +70,49 @@ class Order < ApplicationRecord
       )
       Rails.logger.info("Created initial payment record for order #{id}: #{payment.inspect}")
     end
-    
+
     # If payment exists but payment_id is nil, update it with the order's payment_id
     if payment && payment.payment_id.nil? && payment_id.present?
       payment.update(payment_id: payment_id)
       Rails.logger.info("Updated payment_id for order #{id} payment: #{payment.id} to #{payment_id}")
     end
-    
+
     payment
   end
-  
+
   def additional_payments
-    order_payments.where(payment_type: 'additional')
+    order_payments.where(payment_type: "additional")
   end
-  
+
   def refunds
-    order_payments.where(payment_type: 'refund')
+    order_payments.where(payment_type: "refund")
   end
-  
+
   def total_paid
-    order_payments.where(status: 'paid', payment_type: ['initial', 'additional']).sum(:amount)
+    order_payments.where(status: "paid", payment_type: [ "initial", "additional" ]).sum(:amount)
   end
-  
+
   def total_refunded
-    order_payments.where(payment_type: 'refund', status: 'completed').sum(:amount)
+    order_payments.where(payment_type: "refund", status: "completed").sum(:amount)
   end
-  
+
   def net_amount
     total_paid - total_refunded
   end
-  
+
   # Refund status helper methods
   def refunded?
     status == STATUS_REFUNDED
   end
-  
+
   def partially_refunded?
     status == STATUS_PARTIALLY_REFUNDED
   end
-  
+
   def has_refunds?
     refunded? || partially_refunded? || total_refunded > 0
   end
-  
+
   def update_refund_status
     if total_refunded > 0
       if (total_paid - total_refunded).abs < 0.01
@@ -124,7 +124,7 @@ class Order < ApplicationRecord
       end
     end
   end
-  
+
   # Virtual attribute for VIP code (not stored in database)
   attr_accessor :vip_code
   # Default scope to current restaurant
@@ -132,14 +132,14 @@ class Order < ApplicationRecord
   belongs_to :restaurant
   belongs_to :user, optional: true
   belongs_to :vip_access_code, optional: true
-  
+
   # Add associations for order acknowledgments
   has_many :order_acknowledgments, dependent: :destroy
   has_many :acknowledging_users, through: :order_acknowledgments, source: :user
 
   # AUTO-SET pickup time if not provided
   before_save :set_default_pickup_time
-  
+
   # Store vip_code in the database column if provided
   before_save :store_vip_code
 
@@ -149,35 +149,35 @@ class Order < ApplicationRecord
   # Convert total to float, add created/updated times, plus userId & contact info
   def as_json(options = {})
     super(options).merge(
-      'total' => total.to_f,
-      'createdAt' => created_at.iso8601,
-      'updatedAt' => updated_at.iso8601,
-      'userId' => user_id,
+      "total" => total.to_f,
+      "createdAt" => created_at.iso8601,
+      "updatedAt" => updated_at.iso8601,
+      "userId" => user_id,
 
       # Provide an ISO8601 string for JS
-      'estimatedPickupTime' => estimated_pickup_time&.iso8601,
+      "estimatedPickupTime" => estimated_pickup_time&.iso8601,
 
       # Contact fields
-      'contact_name' => contact_name,
-      'contact_phone' => contact_phone,
-      'contact_email' => contact_email,
-      
+      "contact_name" => contact_name,
+      "contact_phone" => contact_phone,
+      "contact_email" => contact_email,
+
       # Add flag for orders requiring 24-hour advance notice
-      'requires_advance_notice' => requires_advance_notice?,
-      'max_advance_notice_hours' => max_advance_notice_hours,
-      
+      "requires_advance_notice" => requires_advance_notice?,
+      "max_advance_notice_hours" => max_advance_notice_hours,
+
       # Payment fields
-      'payment_method' => payment_method,
-      'transaction_id' => transaction_id,
-      'payment_status' => payment_status,
-      'payment_amount' => payment_amount.to_f,
-      
+      "payment_method" => payment_method,
+      "transaction_id" => transaction_id,
+      "payment_status" => payment_status,
+      "payment_amount" => payment_amount.to_f,
+
       # VIP code (if present)
-      'vip_code' => vip_code,
-      'vip_access_code_id' => vip_access_code_id,
-      
+      "vip_code" => vip_code,
+      "vip_access_code_id" => vip_access_code_id,
+
       # Merchandise items (if present)
-      'merchandise_items' => merchandise_items || []
+      "merchandise_items" => merchandise_items || []
     )
   end
 
@@ -185,13 +185,13 @@ class Order < ApplicationRecord
   def requires_advance_notice?
     max_advance_notice_hours >= 24
   end
-  
+
   # Get the maximum advance notice hours required by any item in this order
   def max_advance_notice_hours
     @max_advance_notice_hours ||= begin
       max_hours = 0
       items.each do |item|
-        menu_item = MenuItem.find_by(id: item['id'])
+        menu_item = MenuItem.find_by(id: item["id"])
         if menu_item && menu_item.advance_notice_hours.to_i > max_hours
           max_hours = menu_item.advance_notice_hours.to_i
         end
@@ -209,7 +209,7 @@ class Order < ApplicationRecord
       # For orders with 24-hour notice items, set pickup time to next day at 10 AM
       tomorrow = Time.current.in_time_zone(restaurant.time_zone).tomorrow
       self.estimated_pickup_time = Time.new(
-        tomorrow.year, tomorrow.month, tomorrow.day, 10, 0, 0, 
+        tomorrow.year, tomorrow.month, tomorrow.day, 10, 0, 0,
         Time.find_zone(restaurant.time_zone)&.formatted_offset || "+10:00"
       )
     else
@@ -227,14 +227,14 @@ class Order < ApplicationRecord
     return if Rails.env.test?
 
     # Get the WhatsApp group ID from the restaurant's admin_settings
-    group_id = restaurant.admin_settings&.dig('whatsapp_group_id')
+    group_id = restaurant.admin_settings&.dig("whatsapp_group_id")
     return unless group_id.present?
 
     # Food items
     food_item_lines = items.map do |item|
       "- #{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
     end.join("\n")
-    
+
     # Merchandise items
     merch_item_lines = ""
     if merchandise_items.present? && merchandise_items.any?
