@@ -237,6 +237,8 @@ Rails.application.routes.draw do
   # PayPal routes
   post '/paypal/create_order', to: 'paypal#create_order'
   post '/paypal/capture_order', to: 'paypal#capture_order'
+  post '/paypal/webhook', to: 'paypal#webhook'
+  post '/paypal/webhook/:restaurant_id', to: 'paypal#webhook'
   
   # Stripe routes
   post '/stripe/create_intent', to: 'stripe#create_intent'

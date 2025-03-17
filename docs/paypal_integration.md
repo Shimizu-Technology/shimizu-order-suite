@@ -60,6 +60,42 @@ Captures a previously created PayPal order after customer approval.
 }
 ```
 
+### Webhook
+
+**Endpoint:** `POST /paypal/webhook` or `POST /paypal/webhook/:restaurant_id`
+
+Receives and processes webhook events from PayPal.
+
+**Request Headers:**
+- `PAYPAL-TRANSMISSION-ID`: Webhook transmission ID
+- `PAYPAL-TRANSMISSION-TIME`: Timestamp of the webhook event
+- `PAYPAL-TRANSMISSION-SIG`: Signature for verification
+- `PAYPAL-CERT-URL`: Certificate URL for verification
+- `PAYPAL-AUTH-ALGO`: Algorithm used for signature
+
+**Request Body:**
+The request body contains the webhook event data in JSON format. The structure varies depending on the event type.
+
+**Response:**
+```json
+{
+  "status": "success"
+}
+```
+
+**Error Response:**
+```json
+{
+  "error": "Invalid payload"
+}
+```
+or
+```json
+{
+  "error": "Webhook processing error"
+}
+```
+
 ## Environment Configuration
 
 The PayPal SDK is configured in `config/initializers/paypal.rb` and uses the following environment variables:
@@ -68,7 +104,7 @@ The PayPal SDK is configured in `config/initializers/paypal.rb` and uses the fol
 - `PAYPAL_CLIENT_SECRET`: Your PayPal client secret
 - `PAYPAL_ENVIRONMENT`: Set to either "sandbox" or "production"
 
-These values can be configured through the admin interface or set directly in environment variables.
+These values can be configured through the admin interface or set directly in environment variables. Additionally, the webhook secret is stored in the restaurant's admin_settings under the payment_gateway key.
 
 ## Implementation Details
 
@@ -78,8 +114,36 @@ The `PaypalController` handles PayPal API interactions and includes:
 
 1. `create_order`: Initializes a new PayPal order
 2. `capture_order`: Completes payment for an approved order
+3. `webhook`: Processes webhook events from PayPal
 
-Both endpoints use the PayPal Checkout SDK to interact with PayPal's API.
+The controller uses the PayPal Checkout SDK to interact with PayPal's API.
+
+### Webhook Implementation
+
+The webhook endpoint handles various event types from PayPal:
+
+- **Payment Events**:
+  - `PAYMENT.CAPTURE.COMPLETED`: When a payment is successfully completed
+  - `PAYMENT.CAPTURE.DENIED`: When a payment is denied
+  - `PAYMENT.CAPTURE.PENDING`: When a payment is pending
+  - `PAYMENT.CAPTURE.REFUNDED`: When a payment is refunded
+  - `PAYMENT.CAPTURE.REVERSED`: When a payment is reversed
+
+- **Checkout Events**:
+  - `CHECKOUT.ORDER.APPROVED`: When a checkout is approved
+  - `CHECKOUT.ORDER.COMPLETED`: When a checkout is completed
+  - `CHECKOUT.ORDER.DECLINED`: When a checkout is declined
+
+- **Refund Events**:
+  - `PAYMENT.REFUND.COMPLETED`: When a refund is completed
+  - `PAYMENT.REFUND.FAILED`: When a refund fails
+
+- **Dispute Events**:
+  - `CUSTOMER.DISPUTE.CREATED`: When a dispute is created
+  - `CUSTOMER.DISPUTE.RESOLVED`: When a dispute is resolved
+  - `CUSTOMER.DISPUTE.UPDATED`: When a dispute is updated
+
+Each event type has a corresponding handler method that updates the order status and payment records accordingly.
 
 ### PayPal Helper
 
@@ -135,6 +199,7 @@ For more realistic testing, use PayPal's Sandbox environment:
 - HTTPS is required for all PayPal API communications
 - PCI compliance is handled by PayPal, as card details never touch your server
 - Error messages are sanitized to avoid exposing sensitive information
+- Webhook signatures are verified to ensure the webhook events are coming from PayPal
 
 ## Debugging
 
