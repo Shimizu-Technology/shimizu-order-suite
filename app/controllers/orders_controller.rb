@@ -519,7 +519,20 @@ class OrdersController < ApplicationController
         :stock_quantity,
         :damaged_quantity,
         :low_stock_threshold,
-        { customizations: {} }
+        { customizations: {
+            # Allow any keys in the customizations hash with array values
+            # This handles the format where customizations is a hash with group names as keys
+            # and arrays of selected options as values
+          } },
+        # Also handle the format where customizations is an array of objects
+        { customizations: [
+            :option_id,
+            :option_name,
+            :option_group_id,
+            :option_group_name,
+            :price
+          ] 
+        }
       ],
       merchandise_items: [
         :id,

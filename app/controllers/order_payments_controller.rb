@@ -289,6 +289,17 @@ class OrderPaymentsController < ApplicationController
   private
 
   def set_order
+    # Handle temporary order IDs gracefully
+    if params[:order_id].to_s.start_with?('temp-')
+      render json: { 
+        payments: [], 
+        total_paid: 0, 
+        total_refunded: 0,
+        net_amount: 0
+      }, status: :ok
+      return
+    end
+
     @order = Order.find(params[:order_id])
 
     # Ensure the user can access this order
