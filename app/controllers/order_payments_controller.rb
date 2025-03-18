@@ -47,7 +47,7 @@ class OrderPaymentsController < ApplicationController
         amount: additional_amount,
         payment_method: restaurant.admin_settings&.dig("payment_gateway", "payment_processor"),
         status: "pending",
-        description: "Additional items: #{params[:items].map { |i| "#{i[:quantity]}x #{i[:name]}" }.join(', ')}"
+        description: "Additional items: #{params[:items].map { |i| "#{i[:quantity]}x #{i[:name]}" }.join(", ")}"
       )
 
       render json: {
@@ -209,7 +209,7 @@ class OrderPaymentsController < ApplicationController
 
       # Force reload the order to recalculate total_paid
       @order.reload
-      Rails.logger.info("After creating payment: total_paid=#{@order.total_paid}, payment.status=#{payment.status}, payment_id=#{payment.payment_id || 'nil'}")
+      Rails.logger.info("After creating payment: total_paid=#{@order.total_paid}, payment.status=#{payment.status}, payment_id=#{payment.payment_id || "nil"}")
     end
 
     # Ensure existing payment has a payment_id
@@ -290,10 +290,10 @@ class OrderPaymentsController < ApplicationController
 
   def set_order
     # Handle temporary order IDs gracefully
-    if params[:order_id].to_s.start_with?('temp-')
-      render json: { 
-        payments: [], 
-        total_paid: 0, 
+    if params[:order_id].to_s.start_with?("temp-")
+      render json: {
+        payments: [],
+        total_paid: 0,
         total_refunded: 0,
         net_amount: 0
       }, status: :ok
@@ -460,13 +460,13 @@ class OrderPaymentsController < ApplicationController
       Rails.logger.info("Attempting to create Stripe refund for payment_intent: #{payment_intent_id} (Stripe test mode: #{stripe_test_mode})")
 
       # Ensure reason is one of the valid values accepted by Stripe
-      valid_reasons = [ "duplicate", "fraudulent", "requested_by_customer" ]
+      valid_reasons = ["duplicate", "fraudulent", "requested_by_customer"]
       reason = params[:reason] || "requested_by_customer"
 
       # Default to 'requested_by_customer' if the provided reason is not valid
       if !valid_reasons.include?(reason)
         reason = "requested_by_customer"
-        Rails.logger.info("Invalid reason '#{params[:reason]}' provided, defaulting to 'requested_by_customer'")
+        Rails.logger.info("Invalid reason \"#{params[:reason]}\" provided, defaulting to \"requested_by_customer\"")
       end
 
       refund = Stripe::Refund.create({
