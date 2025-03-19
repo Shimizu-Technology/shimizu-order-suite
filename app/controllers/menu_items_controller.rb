@@ -84,6 +84,17 @@ class MenuItemsController < ApplicationController
     if params[:menu_item][:category_ids].present?
       @menu_item.category_ids = Array(params[:menu_item][:category_ids])
     end
+    
+    # Handle available_days as an array
+    if params[:menu_item][:available_days].present?
+      Rails.logger.info "Available days param: #{params[:menu_item][:available_days].inspect}"
+      Rails.logger.info "Available days param class: #{params[:menu_item][:available_days].class}"
+      
+      available_days = Array(params[:menu_item][:available_days]).map(&:to_i)
+      Rails.logger.info "Processed available days: #{available_days.inspect}"
+      
+      @menu_item.available_days = available_days
+    end
 
     if @menu_item.save
       Rails.logger.info "Created MenuItem => #{@menu_item.inspect}"
@@ -115,6 +126,17 @@ class MenuItemsController < ApplicationController
     # Assign categories before updating if category_ids param is given
     if params[:menu_item][:category_ids].present?
       @menu_item.category_ids = Array(params[:menu_item][:category_ids])
+    end
+    
+    # Handle available_days as an array
+    if params[:menu_item][:available_days].present?
+      Rails.logger.info "Update - Available days param: #{params[:menu_item][:available_days].inspect}"
+      Rails.logger.info "Update - Available days param class: #{params[:menu_item][:available_days].class}"
+      
+      available_days = Array(params[:menu_item][:available_days]).map(&:to_i)
+      Rails.logger.info "Update - Processed available days: #{available_days.inspect}"
+      
+      @menu_item.available_days = available_days
     end
 
     if @menu_item.update(menu_item_params.except(:image))
@@ -260,7 +282,7 @@ class MenuItemsController < ApplicationController
 
   def menu_item_params
     # category_ids => accept an array; remove single :category
-    params.require(:menu_item).permit(
+    permitted_params = params.require(:menu_item).permit(
       :name,
       :description,
       :price,
@@ -281,8 +303,29 @@ class MenuItemsController < ApplicationController
       :stock_quantity,
       :damaged_quantity,
       :low_stock_threshold,
-      category_ids: []
+      :category_ids,
+      :available_days,
+      category_ids: [],
+      available_days: []
     )
+    
+    # Handle category_ids as a string
+    if params[:menu_item][:category_ids].present? && params[:menu_item][:category_ids].is_a?(String)
+      permitted_params[:category_ids] = params[:menu_item][:category_ids].split(',').map(&:to_i)
+    end
+    
+    # Handle available_days as a string
+    if params[:menu_item][:available_days].present?
+      if params[:menu_item][:available_days].is_a?(String)
+        # Split by comma and convert to integers
+        permitted_params[:available_days] = params[:menu_item][:available_days].split(',').map(&:to_i)
+      elsif !params[:menu_item][:available_days].is_a?(Array)
+        # If it's a single value, convert it to an array
+        permitted_params[:available_days] = [params[:menu_item][:available_days].to_i]
+      end
+    end
+    
+    permitted_params
   end
 
   def is_admin?

@@ -188,16 +188,38 @@ class MenuItem < ApplicationRecord
   }, prefix: true
 
   scope :currently_available, -> {
+    day_of_week = Date.current.wday
+    
     where(available: true)
       .where(<<-SQL.squish, today: Date.current)
-        (seasonal = FALSE)
-        OR (
-          seasonal = TRUE
-          AND (available_from IS NULL OR available_from <= :today)
-          AND (available_until IS NULL OR available_until >= :today)
+        (
+          (seasonal = FALSE)
+          OR (
+            seasonal = TRUE
+            AND (available_from IS NULL OR available_from <= :today)
+            AND (available_until IS NULL OR available_until >= :today)
+          )
         )
       SQL
+      .where("available_days IS NULL OR available_days = '[]' OR available_days::jsonb ? :day", day: day_of_week.to_s)
   }
+  
+  # Check if item is available on the current day based on restaurant's time zone
+  def available_on_current_day?
+    return true if available_days.blank? || available_days.empty?
+    
+    restaurant_time = Time.current.in_time_zone(restaurant.time_zone)
+    current_day = restaurant_time.wday
+    
+    # Convert available_days to an array of integers if it's not already
+    days_array = if available_days.is_a?(Array)
+                   available_days.map(&:to_i)
+                 else
+                   [available_days.to_i]
+                 end
+    
+    days_array.include?(current_day)
+  end
 
   # as_json => only expose category_ids, not full objects
   def as_json(options = {})
@@ -213,6 +235,7 @@ class MenuItem < ApplicationRecord
       "featured"             => featured,
       "stock_status"         => stock_status,
       "status_note"          => status_note,
+      "available_days"       => available_days || [],
       # Use numeric IDs only:
       "category_ids"         => categories.map(&:id)
     )
