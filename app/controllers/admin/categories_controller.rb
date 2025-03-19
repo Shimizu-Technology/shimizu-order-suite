@@ -46,12 +46,12 @@ module Admin
 
     private
 
-    def category_params
-      # Include restaurant_id from the URL parameter
-      permitted_params = params.require(:category).permit(:name, :position)
-      permitted_params[:restaurant_id] = params[:restaurant_id] if params[:restaurant_id].present?
-      permitted_params
-    end
+  def category_params
+    # Include restaurant_id from the URL parameter
+    permitted_params = params.require(:category).permit(:name, :position, :description)
+    permitted_params[:restaurant_id] = params[:restaurant_id] if params[:restaurant_id].present?
+    permitted_params
+  end
 
     def check_admin!
       # if current_user role is admin or super_admin
