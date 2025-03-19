@@ -1,3 +1,4 @@
+# app/models/option.rb
 class Option < ApplicationRecord
   apply_default_scope
 
@@ -9,6 +10,7 @@ class Option < ApplicationRecord
 
   validates :name, presence: true
   validates :additional_price, numericality: { greater_than_or_equal_to: 0.0 }
+  validates :is_preselected, inclusion: { in: [true, false] }
 
   # Override with_restaurant_scope for indirect restaurant association
   def self.with_restaurant_scope

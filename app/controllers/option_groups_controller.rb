@@ -77,7 +77,7 @@ class OptionGroupsController < ApplicationController
 
   def option_group_params
     # Adjust permitted params based on your actual OptionGroup columns
-    params.require(:option_group).permit(:name, :min_select, :max_select, :required)
+    params.require(:option_group).permit(:name, :min_select, :max_select, :free_option_count)
   end
 
   def is_admin?

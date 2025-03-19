@@ -490,9 +490,13 @@ class OrdersController < ApplicationController
     current_user && order.user_id == current_user.id
   end
 
-  # For admins: allow editing everything
+  # For admins: allow editing everything with custom handling for customizations
   def order_params_admin
-    params.require(:order).permit(
+    # First permit the items parameter at the top level to avoid "unpermitted parameter: :items" error
+    params.require(:order).permit![:items] if params[:order][:items].present?
+    
+    # Then get all the standard permitted parameters
+    sanitized = params.require(:order).permit(
       :id,
       :restaurant_id,
       :user_id,
@@ -509,31 +513,7 @@ class OrdersController < ApplicationController
       :payment_status,
       :payment_amount,
       :vip_code,
-      items: [
-        :id,
-        :name,
-        :price,
-        :quantity,
-        :notes,
-        :enable_stock_tracking,
-        :stock_quantity,
-        :damaged_quantity,
-        :low_stock_threshold,
-        { customizations: {
-            # Allow any keys in the customizations hash with array values
-            # This handles the format where customizations is a hash with group names as keys
-            # and arrays of selected options as values
-          } },
-        # Also handle the format where customizations is an array of objects
-        { customizations: [
-            :option_id,
-            :option_name,
-            :option_group_id,
-            :option_group_name,
-            :price
-          ] 
-        }
-      ],
+      :items, # Permit items as a whole first
       merchandise_items: [
         :id,
         :merchandise_variant_id,
@@ -545,6 +525,33 @@ class OrdersController < ApplicationController
         :image_url
       ]
     )
+    
+    # Then handle items with customizations separately
+    if params[:order][:items].present?
+      sanitized[:items] = params[:order][:items].map do |item|
+        item_params = {}
+        
+        # Copy permitted scalar values
+        [:id, :name, :price, :quantity, :notes, :enable_stock_tracking, 
+         :stock_quantity, :damaged_quantity, :low_stock_threshold].each do |key|
+          item_params[key] = item[key] if item.key?(key)
+        end
+        
+        # Copy customizations as-is
+        item_params[:customizations] = item[:customizations] if item[:customizations].present?
+        
+        # Copy array-style customizations if present
+        if item[:customizations].is_a?(Array)
+          item_params[:customizations] = item[:customizations].map do |c|
+            c.permit(:option_id, :option_name, :option_group_id, :option_group_name, :price)
+          end
+        end
+        
+        item_params
+      end
+    end
+    
+    sanitized
   end
 
   # For normal customers: allow only certain fields

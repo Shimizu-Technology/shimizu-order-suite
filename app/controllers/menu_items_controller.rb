@@ -47,7 +47,7 @@ class MenuItemsController < ApplicationController
         option_groups: {
           include: {
             options: {
-              only: [ :id, :name, :available ],
+              only: [ :id, :name, :available, :is_preselected ],
               methods: [ :additional_price_float ]
             }
           }
@@ -64,7 +64,7 @@ class MenuItemsController < ApplicationController
         option_groups: {
           include: {
             options: {
-              only: [ :id, :name, :available ],
+              only: [ :id, :name, :available, :is_preselected ],
               methods: [ :additional_price_float ]
             }
           }

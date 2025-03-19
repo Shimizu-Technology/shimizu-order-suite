@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_15_085000) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_18_232606) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -213,10 +213,10 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_15_085000) do
     t.string "name", null: false
     t.integer "min_select", default: 0
     t.integer "max_select", default: 1
-    t.boolean "required", default: false
     t.bigint "menu_item_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "free_option_count", default: 0, null: false
     t.index ["menu_item_id"], name: "index_option_groups_on_menu_item_id"
   end
 
@@ -227,6 +227,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_15_085000) do
     t.bigint "option_group_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "is_preselected", default: false, null: false
     t.index ["option_group_id"], name: "index_options_on_option_group_id"
   end
 
