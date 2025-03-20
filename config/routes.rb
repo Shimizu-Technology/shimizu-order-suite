@@ -252,4 +252,7 @@ Rails.application.routes.draw do
   # Profile
   get   "/profile", to: "users#show_profile"
   patch "/profile", to: "users#update_profile"
+  
+  # Webhook endpoints
+  resources :webhook_endpoints, only: [:index, :show, :create, :update, :destroy]
 end

@@ -247,6 +247,13 @@ class OrdersController < ApplicationController
       # Log payment information for debugging
       Rails.logger.info("Order saved with payment_id: #{@order.payment_id}, transaction_id: #{@order.transaction_id}, payment_method: #{@order.payment_method}")
 
+      # Trigger webhook for new order
+      WebhookService.trigger(
+        'order.created',
+        @order.as_json(include: [:items, :contact]),
+        @order.restaurant_id
+      )
+
       # Create an OrderPayment record for the initial payment
       if @order.payment_method.present? && @order.payment_amount.present? && @order.payment_amount.to_f > 0
         payment_id = @order.payment_id || @order.transaction_id
@@ -403,6 +410,26 @@ class OrdersController < ApplicationController
       # 2) If items changed, process inventory diffs
       if permitted_params[:items].present?
         process_inventory_changes(original_items, order.items, order)
+      end
+      
+      # Trigger webhook for order update
+      WebhookService.trigger(
+        'order.updated',
+        order.as_json(include: [:items]),
+        order.restaurant_id
+      )
+      
+      # If status changed, trigger a status-specific event
+      if old_status != order.status
+        WebhookService.trigger(
+          'order.status_changed',
+          {
+            id: order.id,
+            status: order.status,
+            previous_status: old_status
+          },
+          order.restaurant_id
+        )
       end
 
       # -- Existing notification logic below --

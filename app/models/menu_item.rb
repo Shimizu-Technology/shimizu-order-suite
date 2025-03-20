@@ -177,7 +177,21 @@ class MenuItem < ApplicationRecord
                   :in_stock
     end
 
-    update_column(:stock_status, stock_status_before_type_cast) unless stock_status == new_status.to_s
+    # If status is changing
+    if stock_status != new_status.to_s
+      old_status = stock_status
+      update_column(:stock_status, stock_status_before_type_cast)
+      
+      # If changing to low_stock or out_of_stock, trigger webhook
+      if new_status == :low_stock || new_status == :out_of_stock
+        # Trigger webhook for inventory status change
+        WebhookService.trigger(
+          'inventory.low_stock',
+          self.as_json,
+          self.restaurant.id
+        )
+      end
+    end
   end
 
   # Stock status enum & optional note
