@@ -91,7 +91,9 @@ The notification system has been expanded to include:
 - Scheduled notifications
 - Batch processing for notifications
 
-For detailed documentation, see [Notification System Documentation](docs/notification_system.md).
+For detailed documentation, see:
+- [Notification System Documentation](docs/notification_system.md)
+- [SMS Notification System Documentation](docs/sms_notification_system.md)
 
 ### Store Credit System
 

@@ -354,7 +354,7 @@ class OrdersController < ApplicationController
       end
 
       # 2) Confirmation text
-      if notification_channels["sms"] != false && @order.contact_phone.present?
+      if notification_channels["sms"] == true && @order.contact_phone.present?
         restaurant_name = @order.restaurant.name
         sms_sender = @order.restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
 
@@ -416,7 +416,7 @@ class OrdersController < ApplicationController
         if notification_channels["email"] != false && order.contact_email.present?
           OrderMailer.order_preparing(order).deliver_later
         end
-        if notification_channels["sms"] != false && order.contact_phone.present?
+        if notification_channels["sms"] == true && order.contact_phone.present?
           if order.requires_advance_notice?
             eta_date = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%A, %B %-d") : "tomorrow"
             eta_time = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "morning"
@@ -439,7 +439,7 @@ class OrdersController < ApplicationController
         if notification_channels["email"] != false && order.contact_email.present?
           OrderMailer.order_eta_updated(order).deliver_later
         end
-        if notification_channels["sms"] != false && order.contact_phone.present?
+        if notification_channels["sms"] == true && order.contact_phone.present?
           if order.requires_advance_notice?
             eta_date = order.estimated_pickup_time.strftime("%A, %B %-d")
             eta_time = order.estimated_pickup_time.strftime("%-I:%M %p")
@@ -461,7 +461,7 @@ class OrdersController < ApplicationController
         if notification_channels["email"] != false && order.contact_email.present?
           OrderMailer.order_ready(order).deliver_later
         end
-        if notification_channels["sms"] != false && order.contact_phone.present?
+        if notification_channels["sms"] == true && order.contact_phone.present?
           msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
                 "is now ready for pickup! Thank you for choosing #{restaurant_name}."
           SendSmsJob.perform_later(to: order.contact_phone, body: msg, from: sms_sender)

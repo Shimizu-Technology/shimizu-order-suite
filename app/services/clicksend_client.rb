@@ -10,6 +10,9 @@ class ClicksendClient
     username = ENV["CLICKSEND_USERNAME"]
     api_key  = ENV["CLICKSEND_API_KEY"]
     approved_sender_id = ENV["CLICKSEND_APPROVED_SENDER_ID"]
+    
+    # Add debug logging for SMS attempt
+    Rails.logger.debug("[ClicksendClient] Attempting to send SMS with params: to=#{to}, from=#{from}, body_length=#{body&.length}")
 
     if username.blank? || api_key.blank?
       Rails.logger.error("[ClicksendClient] Missing ClickSend credentials.")
@@ -73,14 +76,17 @@ class ClicksendClient
     if response.code.to_i == 200
       json = JSON.parse(response.body) rescue {}
       if json["response_code"] == "SUCCESS"
-        Rails.logger.info("[ClicksendClient] Sent SMS to #{to}")
+        message_id = json.dig('data', 'messages', 0, 'message_id') rescue 'unknown'
+        Rails.logger.info("[ClicksendClient] Sent SMS to #{to} - Message ID: #{message_id}")
         true
       else
-        Rails.logger.error("[ClicksendClient] Error response: #{response.body}")
+        error_code = json["response_code"] rescue 'unknown'
+        error_msg = json["response_msg"] rescue 'unknown'
+        Rails.logger.error("[ClicksendClient] API Error: code=#{error_code}, message=#{error_msg}, full response=#{response.body}")
         false
       end
     else
-      Rails.logger.error("[ClicksendClient] HTTP Error code=#{response.code}")
+      Rails.logger.error("[ClicksendClient] HTTP Error: code=#{response.code}, body=#{response.body}")
       false
     end
   end

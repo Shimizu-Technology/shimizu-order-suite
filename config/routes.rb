@@ -130,6 +130,9 @@ Rails.application.routes.draw do
     get "analytics/income_statement",  to: "analytics#income_statement"
     get "analytics/user_signups",      to: "analytics#user_signups"
     get "analytics/user_activity_heatmap", to: "analytics#user_activity_heatmap"
+    
+    # System utilities
+    post "test_sms", to: "system#test_sms"
 
     # Restaurant settings
     get "restaurant/allowed_origins",  to: "restaurant#allowed_origins"
