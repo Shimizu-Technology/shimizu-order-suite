@@ -16,11 +16,12 @@ class MenuItemsController < ApplicationController
     restaurant_id = params[:restaurant_id]
     restaurant = Restaurant.find_by(id: restaurant_id) if restaurant_id.present?
 
-    # If admin AND params[:admin] or params[:show_all] => show all. Otherwise only unexpired.
+    # If admin AND params[:admin] or params[:show_all] => show all. Otherwise only unexpired and visible.
     if is_admin? && (params[:admin].present? || params[:show_all].present?)
       base_scope = MenuItem.all
     else
-      base_scope = MenuItem.currently_available
+      # For non-admin users, only show items that are currently available and not hidden
+      base_scope = MenuItem.currently_available.where(hidden: false)
     end
 
     # Filter by specific menu_id if provided in params
@@ -59,6 +60,12 @@ class MenuItemsController < ApplicationController
   # GET /menu_items/:id
   def show
     item = MenuItem.includes(option_groups: :options).find(params[:id])
+    
+    # For non-admin users, check if the item is hidden
+    if !is_admin? && item.hidden
+      return render json: { error: "Item not found" }, status: :not_found
+    end
+    
     render json: item.as_json(
       include: {
         option_groups: {
@@ -305,6 +312,7 @@ class MenuItemsController < ApplicationController
       :low_stock_threshold,
       :category_ids,
       :available_days,
+      :hidden,
       category_ids: [],
       available_days: []
     )

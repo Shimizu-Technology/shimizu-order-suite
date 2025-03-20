@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_20_090100) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_20_090101) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -120,6 +120,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_20_090100) do
     t.integer "damaged_quantity", default: 0
     t.integer "low_stock_threshold", default: 10
     t.jsonb "available_days", default: []
+    t.boolean "hidden", default: false, null: false
     t.index ["menu_id", "available"], name: "index_menu_items_on_menu_id_and_available"
     t.index ["menu_id", "category"], name: "index_menu_items_on_menu_id_and_category"
     t.index ["menu_id"], name: "index_menu_items_on_menu_id"

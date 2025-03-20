@@ -236,6 +236,7 @@ class MenuItem < ApplicationRecord
       "stock_status"         => stock_status,
       "status_note"          => status_note,
       "available_days"       => available_days || [],
+      "hidden"               => hidden,
       # Use numeric IDs only:
       "category_ids"         => categories.map(&:id)
     )
