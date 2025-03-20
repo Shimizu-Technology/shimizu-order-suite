@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_20_090101) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_20_104500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -160,6 +160,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_20_090101) do
     t.string "additional_images", default: "[]"
     t.integer "low_stock_threshold", default: 5
     t.string "second_image_url"
+    t.boolean "enable_inventory_tracking", default: false
     t.index ["merchandise_collection_id", "available"], name: "idx_on_merchandise_collection_id_available_397f61ae61"
     t.index ["merchandise_collection_id"], name: "index_merchandise_items_on_merchandise_collection_id"
   end
@@ -174,6 +175,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_20_090101) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "low_stock_threshold", default: 5
+    t.integer "damaged_quantity", default: 0
     t.index ["merchandise_item_id", "size", "color"], name: "index_merch_variants_on_item_size_color"
     t.index ["merchandise_item_id"], name: "index_merchandise_variants_on_merchandise_item_id"
     t.index ["stock_quantity"], name: "index_merchandise_variants_on_stock_quantity"
@@ -294,6 +296,13 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_20_090101) do
     t.index ["user_id", "created_at"], name: "index_orders_on_user_id_and_created_at"
     t.index ["user_id"], name: "index_orders_on_user_id"
     t.index ["vip_access_code_id"], name: "index_orders_on_vip_access_code_id"
+  end
+
+  create_table "posts", force: :cascade do |t|
+    t.string "title"
+    t.text "content"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
   end
 
   create_table "promo_codes", force: :cascade do |t|
