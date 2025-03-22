@@ -64,9 +64,15 @@ module Admin
     end
     
     def generate_web_push_keys
-      # Ensure we have a restaurant context
-      unless current_restaurant
-        return render json: { error: "Restaurant context required" }, status: :bad_request
+      # Get restaurant ID from params
+      restaurant_id = params[:restaurant_id]
+      
+      # Find the restaurant
+      restaurant = Restaurant.find_by(id: restaurant_id)
+      
+      # Ensure we have a restaurant
+      unless restaurant
+        return render json: { error: "Restaurant not found" }, status: :not_found
       end
       
       # Generate new VAPID keys
@@ -80,7 +86,7 @@ module Admin
         end
         
         # Generate new VAPID keys
-        vapid_keys = current_restaurant.generate_web_push_vapid_keys!
+        vapid_keys = restaurant.generate_web_push_vapid_keys!
         
         render json: { 
           status: "success", 
