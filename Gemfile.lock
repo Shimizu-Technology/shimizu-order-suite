@@ -135,6 +135,7 @@ GEM
     globalid (1.2.1)
       activesupport (>= 6.1)
     hashdiff (1.1.2)
+    hkdf (0.3.0)
     i18n (1.14.6)
       concurrent-ruby (~> 1.0)
     io-console (0.8.0)
@@ -338,6 +339,9 @@ GEM
       addressable (>= 2.8.0)
       crack (>= 0.3.2)
       hashdiff (>= 0.4.0, < 2.0.0)
+    webpush (1.1.0)
+      hkdf (~> 0.2)
+      jwt (~> 2.0)
     websocket-driver (0.7.7)
       base64
       websocket-extensions (>= 0.1.0)
@@ -383,6 +387,7 @@ DEPENDENCIES
   stripe
   tzinfo-data
   webmock
+  webpush
 
 BUNDLED WITH
    2.5.9

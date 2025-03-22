@@ -29,6 +29,48 @@ class Restaurant < ApplicationRecord
     
     true
   end
+  
+  # Web Push-related methods
+  def web_push_enabled?
+    admin_settings&.dig("notification_channels", "orders", "web_push") == true && 
+      admin_settings&.dig("web_push", "vapid_public_key").present? &&
+      admin_settings&.dig("web_push", "vapid_private_key").present?
+  end
+  
+  def web_push_vapid_keys
+    {
+      public_key: admin_settings&.dig("web_push", "vapid_public_key"),
+      private_key: admin_settings&.dig("web_push", "vapid_private_key")
+    }
+  end
+  
+  def generate_web_push_vapid_keys!
+    vapid_keys = Webpush.generate_key
+    
+    # Update admin_settings
+    new_settings = admin_settings || {}
+    new_settings["web_push"] ||= {}
+    new_settings["web_push"]["vapid_public_key"] = vapid_keys[:public_key]
+    new_settings["web_push"]["vapid_private_key"] = vapid_keys[:private_key]
+    
+    # Save the settings
+    update(admin_settings: new_settings)
+    
+    vapid_keys
+  end
+  
+  def send_web_push_notification(payload, options = {})
+    return false unless web_push_enabled?
+    
+    # Call the job with positional parameters
+    SendWebPushNotificationJob.perform_later(
+      id, # restaurant_id
+      payload,
+      options
+    )
+    
+    true
+  end
   # Existing associations
   has_many :users,            dependent: :destroy
   has_many :reservations,     dependent: :destroy
@@ -38,6 +80,7 @@ class Restaurant < ApplicationRecord
   has_many :special_events,   dependent: :destroy
   has_many :vip_access_codes, dependent: :destroy
   has_many :merchandise_collections, dependent: :destroy
+  has_many :push_subscriptions, dependent: :destroy
 
   # Layout-related associations
   has_many :layouts,          dependent: :destroy

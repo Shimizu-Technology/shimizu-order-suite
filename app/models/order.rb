@@ -147,6 +147,7 @@ class Order < ApplicationRecord
   # After creation, enqueue background jobs for notifications
   after_create :notify_whatsapp
   after_create :notify_pushover
+  after_create :notify_web_push
 
   # Convert total to float, add created/updated times, plus userId & contact info
   def as_json(options = {})
@@ -293,6 +294,46 @@ class Order < ApplicationRecord
       title: message,
       priority: 1, # High priority to bypass quiet hours
       sound: "incoming" # Use the "incoming" sound for new orders
+    )
+  end
+  
+  def notify_web_push
+    return if Rails.env.test?
+    return unless restaurant.web_push_enabled?
+    
+    # Format the order items for the notification
+    food_item_lines = items.map do |item|
+      "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
+    end.join(", ")
+    
+    # Create the notification payload
+    payload = {
+      title: "New Order ##{id}",
+      body: "Total: $#{'%.2f' % total.to_f} - #{food_item_lines}",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/badge-96.png",
+      tag: "new-order-#{id}",
+      data: {
+        url: "/admin/orders/#{id}",
+        orderId: id,
+        timestamp: Time.current.to_i
+      },
+      actions: [
+        {
+          action: "view",
+          title: "View Order"
+        },
+        {
+          action: "acknowledge",
+          title: "Acknowledge"
+        }
+      ]
+    }
+    
+    # Enqueue the Web Push notification job
+    SendWebPushNotificationJob.perform_later(
+      restaurant_id,
+      payload
     )
   end
 end

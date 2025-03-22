@@ -96,6 +96,7 @@ For detailed documentation, see:
 - [Notification System Documentation](docs/notification_system.md)
 - [SMS Notification System Documentation](docs/sms_notification_system.md)
 - [Pushover Integration Documentation](docs/pushover_integration.md)
+- [Web Push Integration Documentation](docs/web_push_integration.md)
 
 ### Store Credit System
 

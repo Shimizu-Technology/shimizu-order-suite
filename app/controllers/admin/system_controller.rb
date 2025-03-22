@@ -63,6 +63,39 @@ module Admin
       end
     end
     
+    def generate_web_push_keys
+      # Ensure we have a restaurant context
+      unless current_restaurant
+        return render json: { error: "Restaurant context required" }, status: :bad_request
+      end
+      
+      # Generate new VAPID keys
+      begin
+        # Make sure the webpush gem is available
+        unless defined?(Webpush)
+          return render json: { 
+            status: "error", 
+            message: "Webpush gem is not available" 
+          }, status: :internal_server_error
+        end
+        
+        # Generate new VAPID keys
+        vapid_keys = current_restaurant.generate_web_push_vapid_keys!
+        
+        render json: { 
+          status: "success", 
+          message: "VAPID keys generated successfully",
+          public_key: vapid_keys[:public_key],
+          private_key: vapid_keys[:private_key]
+        }
+      rescue => e
+        render json: { 
+          status: "error", 
+          message: "Failed to generate VAPID keys: #{e.message}" 
+        }, status: :internal_server_error
+      end
+    end
+    
     private
     
     def authorize_admin

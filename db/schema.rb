@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_22_030000) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_22_042900) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -328,6 +328,19 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_22_030000) do
     t.index ["restaurant_id"], name: "index_promo_codes_on_restaurant_id"
   end
 
+  create_table "push_subscriptions", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.string "endpoint", null: false
+    t.string "p256dh_key", null: false
+    t.string "auth_key", null: false
+    t.string "user_agent"
+    t.boolean "active", default: true
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["restaurant_id", "endpoint"], name: "index_push_subscriptions_on_restaurant_id_and_endpoint", unique: true
+    t.index ["restaurant_id"], name: "index_push_subscriptions_on_restaurant_id"
+  end
+
   create_table "reservations", force: :cascade do |t|
     t.bigint "restaurant_id", null: false
     t.datetime "start_time"
@@ -582,6 +595,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_22_030000) do
   add_foreign_key "orders", "vip_access_codes"
   add_foreign_key "players", "teams"
   add_foreign_key "promo_codes", "restaurants"
+  add_foreign_key "push_subscriptions", "restaurants"
   add_foreign_key "reservations", "restaurants"
   add_foreign_key "restaurants", "layouts", column: "current_layout_id", on_delete: :nullify
   add_foreign_key "restaurants", "menus", column: "current_menu_id"

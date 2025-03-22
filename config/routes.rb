@@ -135,6 +135,7 @@ Rails.application.routes.draw do
     post "test_sms", to: "system#test_sms"
     post "test_pushover", to: "system#test_pushover"
     post "validate_pushover_key", to: "system#validate_pushover_key"
+    post "generate_web_push_keys", to: "system#generate_web_push_keys"
 
     # Restaurant settings
     get "restaurant/allowed_origins",  to: "restaurant#allowed_origins"
@@ -268,4 +269,12 @@ Rails.application.routes.draw do
   # Profile
   get   "/profile", to: "users#show_profile"
   patch "/profile", to: "users#update_profile"
+  
+  # Web Push Notifications
+  resources :push_subscriptions, only: [:index, :create, :destroy] do
+    collection do
+      post :unsubscribe
+      get :vapid_public_key
+    end
+  end
 end
