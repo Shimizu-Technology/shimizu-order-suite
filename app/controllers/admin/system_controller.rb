@@ -1,6 +1,6 @@
 module Admin
   class SystemController < ApplicationController
-    before_action :authorize_admin, except: [:test_pushover, :validate_pushover_key, :test_sms]
+    before_action :authorize_admin, except: [:test_pushover, :validate_pushover_key, :test_sms, :generate_web_push_keys]
     
     def test_sms
       to = params[:phone]
@@ -106,7 +106,7 @@ module Admin
     
     # Mark these endpoints as public (no restaurant context required)
     def public_endpoint?
-      ["test_pushover", "validate_pushover_key", "test_sms"].include?(action_name)
+      ["test_pushover", "validate_pushover_key", "test_sms", "generate_web_push_keys"].include?(action_name)
     end
   end
 end

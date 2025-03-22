@@ -1,145 +1,242 @@
-# Web Push Notifications Integration (Backend)
+# Web Push Notifications Integration Guide (Backend)
 
-This document describes the backend implementation of Web Push notifications in the Hafaloha application.
+This document explains how web push notifications are implemented in the Hafaloha API.
 
 ## Overview
 
-Web Push notifications allow the application to send notifications to users' devices even when they are not actively using the application. This is particularly useful for notifying restaurant staff about new orders or other important events.
+Web push notifications allow the application to send notifications to users even when they are not actively using the application. This is particularly useful for notifying restaurant staff about new orders.
 
-## Components
+The implementation uses the Web Push API, which is supported by most modern browsers. On iOS devices (iPad/iPhone), web push notifications are supported in iOS 16.4+ when the web app is installed as a PWA (Progressive Web App).
 
-### Models
+## Backend Components
 
-#### PushSubscription Model
+The backend implementation consists of the following components:
+
+1. **Push Subscriptions Controller**: Manages push subscription endpoints
+2. **Web Push Notification Job**: Sends push notifications to subscribed devices
+3. **Restaurant Model**: Stores VAPID keys and notification settings
+4. **Push Subscription Model**: Stores subscription details for each device
+5. **Admin System Controller**: Provides endpoints for generating VAPID keys
+
+## Database Schema
+
+### Push Subscriptions Table
 
 ```ruby
-# app/models/push_subscription.rb
-class PushSubscription < ApplicationRecord
-  belongs_to :restaurant
-  
-  scope :active, -> { where(active: true) }
-  
-  def deactivate!
-    update(active: false)
-  end
+create_table :push_subscriptions do |t|
+  t.references :restaurant, index: true, foreign_key: true
+  t.string :endpoint, null: false
+  t.string :p256dh_key, null: false
+  t.string :auth_key, null: false
+  t.string :user_agent
+  t.boolean :active, default: true
+  t.timestamps
 end
 ```
 
-The PushSubscription model stores the subscription information for each device:
-- `endpoint`: The URL to which push messages should be sent
-- `p256dh_key`: The P-256 ECDH public key
-- `auth_key`: The authentication secret
-- `active`: Whether the subscription is active
-- `user_agent`: The user agent of the device
+### Restaurant Model Extensions
 
-### Controllers
-
-#### PushSubscriptionsController
+The Restaurant model has been extended with the following methods:
 
 ```ruby
-# app/controllers/push_subscriptions_controller.rb
-class PushSubscriptionsController < ApplicationController
-  before_action :authenticate_user!, only: [:index, :destroy]
-  before_action :set_restaurant
+# Check if web push is enabled for this restaurant
+def web_push_enabled?
+  admin_settings&.dig("notification_channels", "orders", "web_push") == true && 
+    admin_settings&.dig("web_push", "vapid_public_key").present? &&
+    admin_settings&.dig("web_push", "vapid_private_key").present?
+end
+
+# Get the VAPID keys for this restaurant
+def web_push_vapid_keys
+  {
+    public_key: admin_settings&.dig("web_push", "vapid_public_key"),
+    private_key: admin_settings&.dig("web_push", "vapid_private_key")
+  }
+end
+
+# Generate new VAPID keys for this restaurant
+def generate_web_push_vapid_keys!
+  vapid_keys = Webpush.generate_key
   
-  # GET /api/push_subscriptions
-  def index
-    authorize! :manage, @restaurant
-    subscriptions = @restaurant.push_subscriptions.active
-    render json: { subscriptions: subscriptions.map { |sub| { id: sub.id, endpoint: sub.endpoint, user_agent: sub.user_agent, created_at: sub.created_at } } }
+  # Update admin_settings
+  new_settings = admin_settings || {}
+  new_settings["web_push"] ||= {}
+  new_settings["web_push"]["vapid_public_key"] = vapid_keys[:public_key]
+  new_settings["web_push"]["vapid_private_key"] = vapid_keys[:private_key]
+  
+  # Save the settings
+  update(admin_settings: new_settings)
+  
+  vapid_keys
+end
+
+# Send a web push notification to all subscribed devices
+def send_web_push_notification(payload, options = {})
+  return false unless web_push_enabled?
+  
+  # Call the job with positional parameters
+  SendWebPushNotificationJob.perform_later(
+    id, # restaurant_id
+    payload,
+    options
+  )
+  
+  true
+end
+```
+
+## API Endpoints
+
+### Push Subscriptions Controller
+
+```ruby
+# GET /push_subscriptions/vapid_public_key
+# Get the VAPID public key for the current restaurant
+def vapid_public_key
+  # Extract restaurant_id from params or subdomain
+  restaurant_id = params[:restaurant_id]
+  
+  # Find the restaurant
+  restaurant = if restaurant_id.present?
+                 Restaurant.find_by(id: restaurant_id)
+               else
+                 @restaurant
+               end
+  
+  # Return error if restaurant not found
+  unless restaurant
+    render json: { error: "Restaurant not found" }, status: :not_found
+    return
   end
   
-  # POST /api/push_subscriptions
-  def create
-    subscription_params = params.require(:subscription)
-    subscription = @restaurant.push_subscriptions.find_or_initialize_by(endpoint: subscription_params[:endpoint])
-    subscription.p256dh_key = subscription_params[:keys][:p256dh]
-    subscription.auth_key = subscription_params[:keys][:auth]
-    subscription.user_agent = request.user_agent
-    subscription.active = true
-    
-    if subscription.save
-      render json: { status: 'success', id: subscription.id }
-    else
-      render json: { status: 'error', errors: subscription.errors.full_messages }, status: :unprocessable_entity
-    end
+  # Check if web push is enabled for the restaurant
+  if restaurant.web_push_enabled?
+    render json: { 
+      vapid_public_key: restaurant.web_push_vapid_keys[:public_key],
+      enabled: true
+    }
+  else
+    render json: { enabled: false }
+  end
+end
+
+# POST /push_subscriptions
+# Create a new push subscription
+def create
+  # Extract subscription details from params
+  subscription_params = params.require(:subscription)
+  
+  # Extract restaurant_id from params
+  restaurant_id = params[:restaurant_id]
+  
+  # Find the restaurant
+  restaurant = if restaurant_id.present?
+                 Restaurant.find_by(id: restaurant_id)
+               else
+                 @restaurant
+               end
+  
+  # Return error if restaurant not found
+  unless restaurant
+    render json: { error: "Restaurant not found" }, status: :not_found
+    return
   end
   
-  # DELETE /api/push_subscriptions/:id
-  def destroy
-    authorize! :manage, @restaurant
-    subscription = @restaurant.push_subscriptions.find(params[:id])
+  # Create or update the subscription
+  subscription = restaurant.push_subscriptions.find_or_initialize_by(
+    endpoint: subscription_params[:endpoint]
+  )
+  
+  subscription.p256dh_key = subscription_params[:keys][:p256dh]
+  subscription.auth_key = subscription_params[:keys][:auth]
+  subscription.user_agent = request.user_agent
+  subscription.active = true
+  
+  if subscription.save
+    render json: { status: 'success', id: subscription.id }
+  else
+    render json: { status: 'error', errors: subscription.errors.full_messages }, status: :unprocessable_entity
+  end
+end
+
+# POST /push_subscriptions/unsubscribe
+# Unsubscribe the current device
+def unsubscribe
+  subscription_params = params.require(:subscription)
+  
+  # Extract restaurant_id from params
+  restaurant_id = params[:restaurant_id]
+  
+  # Find the restaurant
+  restaurant = if restaurant_id.present?
+                 Restaurant.find_by(id: restaurant_id)
+               else
+                 @restaurant
+               end
+  
+  # Return error if restaurant not found
+  unless restaurant
+    render json: { error: "Restaurant not found" }, status: :not_found
+    return
+  end
+  
+  subscription = restaurant.push_subscriptions.find_by(
+    endpoint: subscription_params[:endpoint]
+  )
+  
+  if subscription
     subscription.deactivate!
     render json: { status: 'success' }
-  end
-  
-  # POST /api/push_subscriptions/unsubscribe
-  def unsubscribe
-    subscription_params = params.require(:subscription)
-    subscription = @restaurant.push_subscriptions.find_by(endpoint: subscription_params[:endpoint])
-    
-    if subscription
-      subscription.deactivate!
-      render json: { status: 'success' }
-    else
-      render json: { status: 'error', message: 'Subscription not found' }, status: :not_found
-    end
-  end
-  
-  # GET /api/push_subscriptions/vapid_public_key
-  def vapid_public_key
-    if @restaurant.web_push_enabled?
-      render json: { vapid_public_key: @restaurant.web_push_vapid_keys[:public_key], enabled: true }
-    else
-      render json: { enabled: false }
-    end
-  end
-  
-  private
-  
-  def set_restaurant
-    @restaurant = current_restaurant
+  else
+    render json: { status: 'error', message: 'Subscription not found' }, status: :not_found
   end
 end
 ```
 
-### Background Jobs
-
-#### SendWebPushNotificationJob
+## Web Push Notification Job
 
 ```ruby
-# app/jobs/send_web_push_notification_job.rb
 class SendWebPushNotificationJob < ApplicationJob
   queue_as :default
   
+  # Retry options
   retry_on StandardError, wait: :exponentially_longer, attempts: 3
   
   def perform(restaurant_id, payload)
+    # Find the restaurant
     restaurant = Restaurant.find_by(id: restaurant_id)
     return unless restaurant
     
+    # Check if web push is enabled for this restaurant
     return unless restaurant.web_push_enabled?
     
+    # Get the VAPID keys
     vapid_keys = restaurant.web_push_vapid_keys
     return unless vapid_keys && vapid_keys[:public_key].present? && vapid_keys[:private_key].present?
     
+    # Get all active subscriptions for this restaurant
     subscriptions = restaurant.push_subscriptions.active
     
+    # If there are no subscriptions, log and return
     if subscriptions.empty?
       Rails.logger.info("No active web push subscriptions found for restaurant #{restaurant_id}")
       return
     end
     
+    # Convert payload to JSON string
     message = payload.is_a?(String) ? payload : payload.to_json
     
+    # Set up VAPID details
     vapid = {
       subject: "mailto:#{restaurant.contact_email || 'notifications@hafaloha.com'}",
       public_key: vapid_keys[:public_key],
       private_key: vapid_keys[:private_key]
     }
     
+    # Send push notification to each subscription
     subscriptions.find_each do |subscription|
       begin
+        # Send the push notification
         Webpush.payload_send(
           message: message,
           endpoint: subscription.endpoint,
@@ -150,12 +247,15 @@ class SendWebPushNotificationJob < ApplicationJob
         
         Rails.logger.info("Web push notification sent to subscription #{subscription.id} for restaurant #{restaurant_id}")
       rescue Webpush::InvalidSubscription => e
+        # The subscription is no longer valid, mark it as inactive
         Rails.logger.info("Invalid subscription #{subscription.id} for restaurant #{restaurant_id}: #{e.message}")
         subscription.deactivate!
       rescue Webpush::ExpiredSubscription => e
+        # The subscription has expired, mark it as inactive
         Rails.logger.info("Expired subscription #{subscription.id} for restaurant #{restaurant_id}: #{e.message}")
         subscription.deactivate!
       rescue => e
+        # Log other errors but don't mark the subscription as inactive
         Rails.logger.error("Error sending web push notification to subscription #{subscription.id} for restaurant #{restaurant_id}: #{e.message}")
       end
     end
@@ -163,217 +263,82 @@ class SendWebPushNotificationJob < ApplicationJob
 end
 ```
 
-### Restaurant Model Extensions
+## Integration with Order Model
+
+To send notifications when a new order is created, the Order model has been updated:
 
 ```ruby
-# app/models/restaurant.rb (web push related methods)
-class Restaurant < ApplicationRecord
-  has_many :push_subscriptions, dependent: :destroy
-  
-  # Web Push-related methods
-  def web_push_enabled?
-    admin_settings&.dig("notification_channels", "orders", "web_push") == true && 
-      admin_settings&.dig("web_push", "vapid_public_key").present? &&
-      admin_settings&.dig("web_push", "vapid_private_key").present?
-  end
-  
-  def web_push_vapid_keys
-    {
-      public_key: admin_settings&.dig("web_push", "vapid_public_key"),
-      private_key: admin_settings&.dig("web_push", "vapid_private_key")
-    }
-  end
-  
-  def generate_web_push_vapid_keys!
-    vapid_keys = Webpush.generate_key
-    
-    # Update admin_settings
-    new_settings = admin_settings || {}
-    new_settings["web_push"] ||= {}
-    new_settings["web_push"]["vapid_public_key"] = vapid_keys[:public_key]
-    new_settings["web_push"]["vapid_private_key"] = vapid_keys[:private_key]
-    
-    # Save the settings
-    update(admin_settings: new_settings)
-    
-    vapid_keys
-  end
-  
-  def send_web_push_notification(payload, options = {})
-    return false unless web_push_enabled?
-    
-    # Call the job with positional parameters
-    SendWebPushNotificationJob.perform_later(
-      id, # restaurant_id
-      payload,
-      options
-    )
-    
-    true
-  end
-end
-```
-
-### Order Model Integration
-
-```ruby
-# app/models/order.rb (web push notification method)
 class Order < ApplicationRecord
-  after_create :notify_web_push
+  after_create :notify_restaurant
   
   private
   
-  def notify_web_push
-    return if Rails.env.test?
-    return unless restaurant.web_push_enabled?
-    
-    # Format the order items for the notification
-    food_item_lines = items.map do |item|
-      "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
-    end.join(", ")
-    
-    # Create the notification payload
-    payload = {
-      title: "New Order ##{id}",
-      body: "Total: $#{'%.2f' % total.to_f} - #{food_item_lines}",
-      icon: "/icons/icon-192.png",
-      badge: "/icons/badge-96.png",
-      tag: "new-order-#{id}",
-      data: {
-        url: "/admin/orders/#{id}",
-        orderId: id,
-        timestamp: Time.current.to_i
-      },
-      actions: [
-        {
-          action: "view",
-          title: "View Order"
-        },
-        {
-          action: "acknowledge",
-          title: "Acknowledge"
+  def notify_restaurant
+    # Send push notification if enabled
+    if restaurant.web_push_enabled?
+      restaurant.send_web_push_notification({
+        title: "New Order ##{id}",
+        body: "Order total: $#{total}",
+        icon: "/icons/icon-192.png",
+        data: {
+          orderId: id,
+          url: "/admin/orders/#{id}"
         }
-      ]
-    }
-    
-    # Enqueue the Web Push notification job
-    SendWebPushNotificationJob.perform_later(
-      restaurant_id,
-      payload
-    )
-  end
-end
-```
-
-### Admin System Controller
-
-```ruby
-# app/controllers/admin/system_controller.rb (web push related methods)
-module Admin
-  class SystemController < ApplicationController
-    def generate_web_push_keys
-      # Ensure we have a restaurant context
-      unless current_restaurant
-        return render json: { error: "Restaurant context required" }, status: :bad_request
-      end
-      
-      # Generate new VAPID keys
-      begin
-        # Make sure the webpush gem is available
-        unless defined?(Webpush)
-          return render json: { 
-            status: "error", 
-            message: "Webpush gem is not available" 
-          }, status: :internal_server_error
-        end
-        
-        # Generate new VAPID keys
-        vapid_keys = current_restaurant.generate_web_push_vapid_keys!
-        
-        render json: { 
-          status: "success", 
-          message: "VAPID keys generated successfully",
-          public_key: vapid_keys[:public_key],
-          private_key: vapid_keys[:private_key]
-        }
-      rescue => e
-        render json: { 
-          status: "error", 
-          message: "Failed to generate VAPID keys: #{e.message}" 
-        }, status: :internal_server_error
-      end
-    end
-  end
-end
-```
-
-## Database Schema
-
-```ruby
-# db/migrate/YYYYMMDDHHMMSS_create_push_subscriptions.rb
-class CreatePushSubscriptions < ActiveRecord::Migration[7.2]
-  def change
-    create_table :push_subscriptions do |t|
-      t.references :restaurant, null: false, foreign_key: true
-      t.string :endpoint, null: false
-      t.string :p256dh_key, null: false
-      t.string :auth_key, null: false
-      t.boolean :active, default: true
-      t.string :user_agent
-      
-      t.timestamps
+      })
     end
     
-    add_index :push_subscriptions, [:restaurant_id, :endpoint], unique: true
+    # Other notification methods (SMS, email, etc.)
+    # ...
   end
 end
 ```
 
-## Routes
+## Admin System Controller
+
+The Admin::SystemController has been updated to include methods for generating VAPID keys:
 
 ```ruby
-# config/routes.rb (web push related routes)
-Rails.application.routes.draw do
-  # Web Push Notifications
-  resources :push_subscriptions, only: [:index, :create, :destroy] do
-    collection do
-      post :unsubscribe
-      get :vapid_public_key
-    end
-  end
+# POST /admin/generate_web_push_keys
+# Generate new VAPID keys for the current restaurant
+def generate_web_push_keys
+  authorize! :manage, current_restaurant
   
-  namespace :admin do
-    # System utilities
-    post "generate_web_push_keys", to: "system#generate_web_push_keys"
-  end
+  vapid_keys = current_restaurant.generate_web_push_vapid_keys!
+  
+  render json: {
+    status: 'success',
+    vapid_public_key: vapid_keys[:public_key],
+    vapid_private_key: vapid_keys[:private_key]
+  }
 end
 ```
 
-## Testing
+## Security Considerations
 
-You can test the Web Push notifications by:
+1. **VAPID Keys**: The VAPID private key should be kept secure and never exposed to the client.
+2. **HTTPS**: Web Push requires HTTPS in production.
+3. **Authentication**: Admin endpoints (like listing subscriptions) require authentication.
+4. **Data Privacy**: The push payload is encrypted end-to-end, but the subscription endpoints may reveal some metadata.
 
-1. Generating VAPID keys for a restaurant
-2. Creating a subscription
-3. Sending a test notification
+## Troubleshooting
 
-```ruby
-# Generate VAPID keys
-restaurant = Restaurant.find(1)
-vapid_keys = restaurant.generate_web_push_vapid_keys!
+### Common Issues
 
-# Send a test notification
-payload = {
-  title: "Test Notification",
-  body: "This is a test notification",
-  icon: "/icons/icon-192.png"
-}
+1. **Invalid Subscription**: If a subscription becomes invalid (e.g., the user uninstalled the PWA), the push service will return a 404 or 410 error. The job will mark the subscription as inactive.
+2. **Missing VAPID Keys**: If the VAPID keys are missing or invalid, the push notification will fail.
+3. **Push Service Errors**: The push service may return errors if the payload is too large or if there are rate limiting issues.
 
-restaurant.send_web_push_notification(payload)
-```
+### Debugging
 
-## Resources
+To debug push notification issues:
 
-- [Web Push Protocol](https://tools.ietf.org/html/rfc8030)
+1. Check the Rails logs for errors
+2. Verify that the subscription is stored in the database
+3. Check that the VAPID keys are properly configured
+4. Use the Rails console to manually send a test notification
+
+## References
+
+- [Web Push API Documentation](https://developer.mozilla.org/en-US/docs/Web/API/Push_API)
 - [Webpush Gem Documentation](https://github.com/zaru/webpush)
-- [VAPID Protocol](https://tools.ietf.org/html/rfc8292)
+- [VAPID Protocol](https://datatracker.ietf.org/doc/html/rfc8292)
