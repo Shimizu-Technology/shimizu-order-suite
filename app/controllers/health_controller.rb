@@ -1,7 +1,7 @@
 # app/controllers/health_controller.rb
 class HealthController < ApplicationController
-  # Skip authentication for health checks
-  skip_before_action :authenticate_request, only: [:index, :sidekiq_stats]
+  # No authentication required for health checks
+  # (The application doesn't use before_action :authenticate_request)
   
   def index
     render json: { status: 'ok', timestamp: Time.now.iso8601 }
