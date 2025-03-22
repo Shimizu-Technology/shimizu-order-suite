@@ -244,10 +244,46 @@ class OrdersController < ApplicationController
     end
 
     if @order.save
+      # Process staff discount if applicable
+      if @order.is_staff_order && @current_user&.staff?
+        # Calculate discount based on working status
+        discount_calculation = StaffDiscount.calculate_discounted_amount(
+          @order.total.to_f, 
+          @order.staff_is_working
+        )
+        
+        # Adjust the payment amount based on the discount
+        @order.payment_amount = discount_calculation[:discounted_amount]
+        
+        # Create the staff discount record
+        staff_discount = @order.build_staff_discount(
+          user: @current_user,
+          staff_beneficiary_id: @order.staff_beneficiary_id,
+          original_amount: discount_calculation[:original_amount],
+          discount_amount: discount_calculation[:discount_amount],
+          is_working: @order.staff_is_working,
+          payment_method: @order.staff_payment_method || 'immediate',
+          is_paid: @order.staff_payment_method == 'immediate'
+        )
+        
+        # If using house account, update user's balance
+        if @order.staff_payment_method == 'house_account'
+          @current_user.update_house_account_balance!(discount_calculation[:discounted_amount])
+        end
+        
+        # Save the order with updated payment amount
+        @order.save
+        
+        # Set paid_at timestamp if immediate payment
+        if @order.staff_payment_method == 'immediate'
+          staff_discount.update(paid_at: Time.current)
+        end
+      end
+      
       # Log payment information for debugging
       Rails.logger.info("Order saved with payment_id: #{@order.payment_id}, transaction_id: #{@order.transaction_id}, payment_method: #{@order.payment_method}")
 
-      # Create an OrderPayment record for the initial payment
+      # Create an OrderPayment record for the initial payment (non-staff discount orders)
       if @order.payment_method.present? && @order.payment_amount.present? && @order.payment_amount.to_f > 0
         payment_id = @order.payment_id || @order.transaction_id
 
@@ -490,7 +526,7 @@ class OrdersController < ApplicationController
     current_user && order.user_id == current_user.id
   end
 
-  # For admins: allow editing everything with custom handling for customizations
+    # For admins: allow editing everything with custom handling for customizations
   def order_params_admin
     # First permit the items parameter at the top level to avoid "unpermitted parameter: :items" error
     params.require(:order).permit![:items] if params[:order][:items].present?
@@ -513,6 +549,10 @@ class OrdersController < ApplicationController
       :payment_status,
       :payment_amount,
       :vip_code,
+      :is_staff_order,
+      :staff_is_working,
+      :staff_payment_method,
+      :staff_beneficiary_id,
       :items, # Permit items as a whole first
       merchandise_items: [
         :id,
