@@ -27,8 +27,24 @@ class PushSubscriptionsController < ApplicationController
     # Extract subscription details from params
     subscription_params = params.require(:subscription)
     
+    # Extract restaurant_id from params
+    restaurant_id = params[:restaurant_id]
+    
+    # Find the restaurant
+    restaurant = if restaurant_id.present?
+                   Restaurant.find_by(id: restaurant_id)
+                 else
+                   @restaurant
+                 end
+    
+    # Return error if restaurant not found
+    unless restaurant
+      render json: { error: "Restaurant not found" }, status: :not_found
+      return
+    end
+    
     # Create or update the subscription
-    subscription = @restaurant.push_subscriptions.find_or_initialize_by(
+    subscription = restaurant.push_subscriptions.find_or_initialize_by(
       endpoint: subscription_params[:endpoint]
     )
     
@@ -60,7 +76,23 @@ class PushSubscriptionsController < ApplicationController
   def unsubscribe
     subscription_params = params.require(:subscription)
     
-    subscription = @restaurant.push_subscriptions.find_by(
+    # Extract restaurant_id from params
+    restaurant_id = params[:restaurant_id]
+    
+    # Find the restaurant
+    restaurant = if restaurant_id.present?
+                   Restaurant.find_by(id: restaurant_id)
+                 else
+                   @restaurant
+                 end
+    
+    # Return error if restaurant not found
+    unless restaurant
+      render json: { error: "Restaurant not found" }, status: :not_found
+      return
+    end
+    
+    subscription = restaurant.push_subscriptions.find_by(
       endpoint: subscription_params[:endpoint]
     )
     
@@ -75,9 +107,26 @@ class PushSubscriptionsController < ApplicationController
   # GET /api/push_subscriptions/vapid_public_key
   # Get the VAPID public key for the current restaurant
   def vapid_public_key
-    if @restaurant.web_push_enabled?
+    # Extract restaurant_id from params or subdomain
+    restaurant_id = params[:restaurant_id]
+    
+    # Find the restaurant
+    restaurant = if restaurant_id.present?
+                   Restaurant.find_by(id: restaurant_id)
+                 else
+                   @restaurant
+                 end
+    
+    # Return error if restaurant not found
+    unless restaurant
+      render json: { error: "Restaurant not found" }, status: :not_found
+      return
+    end
+    
+    # Check if web push is enabled for the restaurant
+    if restaurant.web_push_enabled?
       render json: { 
-        vapid_public_key: @restaurant.web_push_vapid_keys[:public_key],
+        vapid_public_key: restaurant.web_push_vapid_keys[:public_key],
         enabled: true
       }
     else
@@ -89,5 +138,10 @@ class PushSubscriptionsController < ApplicationController
   
   def set_restaurant
     @restaurant = current_restaurant
+  end
+  
+  # Override public_endpoint? to allow vapid_public_key to be accessed without restaurant context
+  def public_endpoint?
+    action_name == 'vapid_public_key' || action_name == 'create' || action_name == 'unsubscribe'
   end
 end
