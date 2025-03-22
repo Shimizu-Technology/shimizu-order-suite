@@ -67,37 +67,78 @@ module Admin
       # Get restaurant ID from params
       restaurant_id = params[:restaurant_id]
       
+      # Log the request
+      Rails.logger.info("Generating VAPID keys for restaurant_id: #{restaurant_id}")
+      
       # Find the restaurant
-      restaurant = Restaurant.find_by(id: restaurant_id)
-      
-      # Ensure we have a restaurant
-      unless restaurant
-        return render json: { error: "Restaurant not found" }, status: :not_found
-      end
-      
-      # Generate new VAPID keys
       begin
+        restaurant = Restaurant.find_by(id: restaurant_id)
+        
+        # Ensure we have a restaurant
+        unless restaurant
+          Rails.logger.error("Restaurant not found with ID: #{restaurant_id}")
+          return render json: { error: "Restaurant not found" }, status: :not_found
+        end
+        
+        Rails.logger.info("Restaurant found: #{restaurant.name}")
+        
         # Make sure the webpush gem is available
         unless defined?(Webpush)
+          Rails.logger.error("Webpush gem is not available")
           return render json: { 
             status: "error", 
             message: "Webpush gem is not available" 
           }, status: :internal_server_error
         end
         
-        # Generate new VAPID keys
-        vapid_keys = restaurant.generate_web_push_vapid_keys!
+        # Explicitly require the webpush gem
+        begin
+          require 'webpush'
+          Rails.logger.info("Webpush gem successfully required")
+        rescue LoadError => e
+          Rails.logger.error("Failed to require webpush gem: #{e.message}")
+          return render json: { 
+            status: "error", 
+            message: "Failed to require webpush gem: #{e.message}" 
+          }, status: :internal_server_error
+        end
         
-        render json: { 
-          status: "success", 
-          message: "VAPID keys generated successfully",
-          public_key: vapid_keys[:public_key],
-          private_key: vapid_keys[:private_key]
-        }
+        # Generate new VAPID keys
+        begin
+          # Use the Webpush class directly instead of the restaurant method
+          vapid_keys = Webpush.generate_key
+          
+          # Update the restaurant's admin_settings
+          admin_settings = restaurant.admin_settings || {}
+          admin_settings["web_push"] ||= {}
+          admin_settings["web_push"]["vapid_public_key"] = vapid_keys[:public_key]
+          admin_settings["web_push"]["vapid_private_key"] = vapid_keys[:private_key]
+          
+          # Save the settings
+          restaurant.update(admin_settings: admin_settings)
+          
+          Rails.logger.info("VAPID keys generated successfully")
+          
+          render json: { 
+            status: "success", 
+            message: "VAPID keys generated successfully",
+            public_key: vapid_keys[:public_key],
+            private_key: vapid_keys[:private_key]
+          }
+        rescue => e
+          Rails.logger.error("Failed to generate VAPID keys: #{e.message}")
+          Rails.logger.error(e.backtrace.join("\n"))
+          render json: { 
+            status: "error", 
+            message: "Failed to generate VAPID keys: #{e.message}" 
+          }, status: :internal_server_error
+        end
       rescue => e
+        Rails.logger.error("Error in generate_web_push_keys: #{e.message}")
+        Rails.logger.error(e.backtrace.join("\n"))
         render json: { 
           status: "error", 
-          message: "Failed to generate VAPID keys: #{e.message}" 
+          message: "Error in generate_web_push_keys: #{e.message}" 
         }, status: :internal_server_error
       end
     end
