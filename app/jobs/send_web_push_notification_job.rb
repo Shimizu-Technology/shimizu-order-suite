@@ -40,8 +40,17 @@ class SendWebPushNotificationJob < ApplicationJob
     # Send push notification to each subscription
     subscriptions.find_each do |subscription|
       begin
+        # Create subscription object for WebPush
+        subscription_info = {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: subscription.p256dh_key,
+            auth: subscription.auth_key
+          }
+        }
+        
         # Send the push notification
-        Webpush.payload_send(
+        WebPush.payload_send(
           message: message,
           endpoint: subscription.endpoint,
           p256dh: subscription.p256dh_key,
@@ -50,11 +59,11 @@ class SendWebPushNotificationJob < ApplicationJob
         )
         
         Rails.logger.info("Web push notification sent to subscription #{subscription.id} for restaurant #{restaurant_id}")
-      rescue Webpush::InvalidSubscription => e
+      rescue WebPush::InvalidSubscription => e
         # The subscription is no longer valid, mark it as inactive
         Rails.logger.info("Invalid subscription #{subscription.id} for restaurant #{restaurant_id}: #{e.message}")
         subscription.deactivate!
-      rescue Webpush::ExpiredSubscription => e
+      rescue WebPush::ExpiredSubscription => e
         # The subscription has expired, mark it as inactive
         Rails.logger.info("Expired subscription #{subscription.id} for restaurant #{restaurant_id}: #{e.message}")
         subscription.deactivate!

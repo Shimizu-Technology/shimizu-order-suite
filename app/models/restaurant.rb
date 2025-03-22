@@ -45,69 +45,22 @@ class Restaurant < ApplicationRecord
   end
   
   def generate_web_push_vapid_keys!
-    # Workaround for OpenSSL 3.0 issue with webpush gem
-    # Manually generate VAPID keys using OpenSSL
-    Rails.logger.info("Manually generating VAPID keys using OpenSSL for restaurant #{id}")
+    # Generate VAPID keys using the web-push gem
+    Rails.logger.info("Generating VAPID keys for restaurant #{id}")
     
     begin
-      # Generate EC key pair
-      ec_key = OpenSSL::PKey::EC.generate('prime256v1')
-      
-      # Get public key in uncompressed form
-      public_key_point = ec_key.public_key.to_bn.to_s(16).downcase
-      
-      # Ensure it starts with '04' (uncompressed point format)
-      public_key_point = '04' + public_key_point unless public_key_point.start_with?('04')
-      
-      # Ensure it's the right length with leading zeros if needed
-      public_key_point = public_key_point.rjust(130, '0') if public_key_point.length < 130
-      
-      # Remove the '04' prefix and convert to binary
-      public_key_bin = [public_key_point[2..-1]].pack('H*')
-      
-      # Base64 URL encode
-      public_key = Base64.urlsafe_encode64(public_key_bin, padding: false)
-      
-      # Get private key
-      private_key_hex = ec_key.private_key.to_s(16).downcase
-      
-      # Ensure it's the right length with leading zeros if needed
-      private_key_hex = private_key_hex.rjust(64, '0')
-      
-      # Convert to binary
-      private_key_bin = [private_key_hex].pack('H*')
-      
-      # Base64 URL encode
-      private_key = Base64.urlsafe_encode64(private_key_bin, padding: false)
-      
-      # Log the keys for debugging
-      Rails.logger.info("Generated VAPID public key: #{public_key}")
-      Rails.logger.info("Public key length: #{public_key.length}")
+      # WebPush.generate_key returns an object with public_key and private_key methods
+      vapid_key = WebPush.generate_key
       
       # Create the VAPID keys hash
       vapid_keys = {
-        public_key: public_key,
-        private_key: private_key
+        public_key: vapid_key.public_key,
+        private_key: vapid_key.private_key
       }
       
-      # Verify the keys are valid
-      begin
-        # Simple validation - check that the keys are not empty and have the expected format
-        if public_key.blank? || private_key.blank?
-          raise "Generated VAPID keys are empty"
-        end
-        
-        # Check that the public key is a valid base64 URL-encoded string
-        decoded_public = Base64.urlsafe_decode64(public_key)
-        if decoded_public.length != 65 && decoded_public.length != 64
-          raise "Public key has invalid length: #{decoded_public.length} bytes"
-        end
-        
-        Rails.logger.info("VAPID keys validation passed")
-      rescue => validation_error
-        Rails.logger.error("VAPID keys validation failed: #{validation_error.message}")
-        raise validation_error
-      end
+      # Log the keys for debugging
+      Rails.logger.info("Generated VAPID public key: #{vapid_keys[:public_key]}")
+      Rails.logger.info("Public key length: #{vapid_keys[:public_key].length}")
       
       # Update admin_settings
       new_settings = admin_settings || {}

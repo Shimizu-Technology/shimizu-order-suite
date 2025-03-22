@@ -56,7 +56,14 @@ end
 
 # Generate new VAPID keys for this restaurant
 def generate_web_push_vapid_keys!
-  vapid_keys = Webpush.generate_key
+  # Generate VAPID keys using the web-push gem
+  vapid_key = WebPush.generate_key
+  
+  # Create the VAPID keys hash
+  vapid_keys = {
+    public_key: vapid_key.public_key,
+    private_key: vapid_key.private_key
+  }
   
   # Update admin_settings
   new_settings = admin_settings || {}
@@ -236,8 +243,17 @@ class SendWebPushNotificationJob < ApplicationJob
     # Send push notification to each subscription
     subscriptions.find_each do |subscription|
       begin
+        # Create subscription object for WebPush
+        subscription_info = {
+          endpoint: subscription.endpoint,
+          keys: {
+            p256dh: subscription.p256dh_key,
+            auth: subscription.auth_key
+          }
+        }
+        
         # Send the push notification
-        Webpush.payload_send(
+        WebPush.payload_send(
           message: message,
           endpoint: subscription.endpoint,
           p256dh: subscription.p256dh_key,
@@ -246,11 +262,11 @@ class SendWebPushNotificationJob < ApplicationJob
         )
         
         Rails.logger.info("Web push notification sent to subscription #{subscription.id} for restaurant #{restaurant_id}")
-      rescue Webpush::InvalidSubscription => e
+      rescue WebPush::InvalidSubscription => e
         # The subscription is no longer valid, mark it as inactive
         Rails.logger.info("Invalid subscription #{subscription.id} for restaurant #{restaurant_id}: #{e.message}")
         subscription.deactivate!
-      rescue Webpush::ExpiredSubscription => e
+      rescue WebPush::ExpiredSubscription => e
         # The subscription has expired, mark it as inactive
         Rails.logger.info("Expired subscription #{subscription.id} for restaurant #{restaurant_id}: #{e.message}")
         subscription.deactivate!
@@ -340,5 +356,5 @@ To debug push notification issues:
 ## References
 
 - [Web Push API Documentation](https://developer.mozilla.org/en-US/docs/Web/API/Push_API)
-- [Webpush Gem Documentation](https://github.com/zaru/webpush)
+- [Web Push Gem Documentation](https://github.com/pushpad/web-push)
 - [VAPID Protocol](https://datatracker.ietf.org/doc/html/rfc8292)
