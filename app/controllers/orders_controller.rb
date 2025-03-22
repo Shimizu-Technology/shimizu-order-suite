@@ -313,7 +313,6 @@ class OrdersController < ApplicationController
           @order.merchandise_items.each do |item|
             # Find the merchandise variant
             variant = MerchandiseVariant.find_by(id: item[:merchandise_variant_id])
-
             if variant.present?
               # Adjust stock based on quantity ordered
               quantity = item[:quantity].to_i
@@ -323,7 +322,6 @@ class OrdersController < ApplicationController
                 @order, # Reference to the order
                 @current_user # Reference to the user who placed the order
               )
-
               # If stock is now below threshold after this order, send notification
               # But only if we're not testing
               if variant.low_stock? && !Rails.env.test? && !test_mode
@@ -385,12 +383,12 @@ class OrdersController < ApplicationController
       notification_channels = @order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
       restaurant_name = @order.restaurant.name
 
-      # 1) Confirmation email
+      # 1) Confirmation email (to the customer)
       if notification_channels["email"] != false && @order.contact_email.present?
         OrderMailer.order_confirmation(@order).deliver_later
       end
 
-      # 2) Confirmation text
+      # 2) Confirmation text (SMS to the customer)
       if notification_channels["sms"] == true && @order.contact_phone.present?
         sms_sender = @order.restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
 
@@ -410,39 +408,12 @@ class OrdersController < ApplicationController
 
         SendSmsJob.perform_later(to: @order.contact_phone, body: msg, from: sms_sender)
       end
-      
-      # 3) Pushover notification to restaurant staff
-      if @order.restaurant.pushover_enabled?
-        # Create a formatted item list for the notification
-        item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
-        if @order.merchandise_items.present?
-          merch_list = @order.merchandise_items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
-          item_list += ", " + merch_list unless merch_list.blank?
-        end
-        
-        # Create the message
-        message = "New Order ##{@order.id}\n\n"
-        message += "Items: #{item_list}\n"
-        message += "Total: $#{sprintf("%.2f", @order.total.to_f)}\n"
-        message += "Customer: #{@order.contact_name}\n" if @order.contact_name.present?
-        message += "Phone: #{@order.contact_phone}\n" if @order.contact_phone.present?
-        
-        # Add special instructions if present
-        message += "\nSpecial Instructions: #{@order.special_instructions}" if @order.special_instructions.present?
-        
-        # Create a title for the notification
-        title = "New Order from #{@order.contact_name.presence || 'Customer'}"
-        
-        # Send the notification with high priority to bypass quiet hours
-        @order.restaurant.send_pushover_notification(
-          message, 
-          title,
-          { 
-            priority: 1,  # High priority to bypass quiet hours
-            sound: "cashregister",  # Special sound for new orders
-          }
-        )
-      end
+
+      #
+      # NOTE: We have removed the additional "3) Pushover notification to
+      # restaurant staff" block to avoid double notifications. The after_create
+      # callback in Order (notify_pushover) already sends the Pushover alert.
+      #
 
       render json: @order, status: :created
     else
@@ -464,9 +435,9 @@ class OrdersController < ApplicationController
     # If admin => allow full params, else only partial
     permitted_params = if current_user&.role.in?(%w[admin super_admin])
                          order_params_admin
-    else
+                       else
                          order_params_user
-    end
+                       end
 
     if order.update(permitted_params)
       # 2) If items changed, process inventory diffs
@@ -503,7 +474,6 @@ class OrdersController < ApplicationController
         # Send Pushover notification for order status change to preparing
         if order.restaurant.pushover_enabled?
           message = "Order ##{order.id} is now being prepared.\n\n"
-          
           if order.estimated_pickup_time.present?
             if order.requires_advance_notice?
               eta_date = order.estimated_pickup_time.strftime("%A, %B %-d")
@@ -521,6 +491,7 @@ class OrdersController < ApplicationController
             { priority: 0, sound: "pushover" }
           )
         end
+
       # If ETA was updated (and order is in preparing status)
       elsif order.status == "preparing" &&
             old_pickup_time.present? &&
@@ -549,7 +520,6 @@ class OrdersController < ApplicationController
         # Send Pushover notification for ETA update
         if order.restaurant.pushover_enabled?
           message = "Order ##{order.id} pickup time updated.\n\n"
-          
           if order.requires_advance_notice?
             eta_date = order.estimated_pickup_time.strftime("%A, %B %-d")
             eta_time = order.estimated_pickup_time.strftime("%-I:%M %p")
@@ -619,7 +589,7 @@ class OrdersController < ApplicationController
     current_user && order.user_id == current_user.id
   end
 
-    # For admins: allow editing everything with custom handling for customizations
+  # For admins: allow editing everything with custom handling for customizations
   def order_params_admin
     # First permit the items parameter at the top level to avoid "unpermitted parameter: :items" error
     params.require(:order).permit![:items] if params[:order][:items].present?
@@ -813,7 +783,7 @@ class OrdersController < ApplicationController
 
   def process_quantity_change(menu_item, original_qty, new_qty, qty_diff, order)
     current_stock = menu_item.stock_quantity.to_i
-    new_stock = current_stock - qty_diff  # negative diff => we add back, positive => we subtract
+    new_stock = current_stock - qty_diff
 
     menu_item.update_stock_quantity(
       [ new_stock, 0 ].max,

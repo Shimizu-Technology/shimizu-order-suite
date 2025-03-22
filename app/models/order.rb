@@ -128,8 +128,10 @@ class Order < ApplicationRecord
 
   # Virtual attributes (not stored in database)
   attr_accessor :vip_code, :is_staff_order, :staff_is_working, :staff_payment_method, :staff_beneficiary_id
+
   # Default scope to current restaurant
   default_scope { with_restaurant_scope }
+
   belongs_to :restaurant
   belongs_to :user, optional: true
   belongs_to :vip_access_code, optional: true
@@ -271,29 +273,29 @@ class Order < ApplicationRecord
       "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
     end.join(", ")
     
+    if merchandise_items.present? && merchandise_items.any?
+      merch_list = merchandise_items.map do |item|
+        "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
+      end.join(", ")
+      food_item_lines += ", " + merch_list unless merch_list.blank?
+    end
+    
     # Create a concise message for the notification
-    message = "New order ##{id} - $#{'%.2f' % total.to_f}"
+    message = "New Order ##{id}\n\n"
+    message += "Items: #{food_item_lines}\n"
+    message += "Total: $#{'%.2f' % total.to_f}\n"
+    message += "Customer: #{contact_name}\n" if contact_name.present?
+    message += "Phone: #{contact_phone}\n" if contact_phone.present?
+    message += "\nSpecial Instructions: #{special_instructions}" if special_instructions.present?
     
-    # Add more details in the extended message
-    extended_message = <<~MSG
-      New order ##{id} received!
-      
-      Items: #{food_item_lines}
-      
-      Total: $#{'%.2f' % total.to_f}
-      Status: #{status}
-      
-      #{contact_name ? "Customer: #{contact_name}" : ""}
-      #{special_instructions.present? ? "Instructions: #{special_instructions}" : ""}
-    MSG
+    title = "New Order ##{id} - $#{'%.2f' % total.to_f}"
     
-    # Enqueue the Pushover notification job
     SendPushoverNotificationJob.perform_later(
       restaurant_id,
-      extended_message,
-      title: message,
-      priority: 1, # High priority to bypass quiet hours
-      sound: "incoming" # Use the "incoming" sound for new orders
+      message,
+      title: title,
+      priority: 1,      # High priority to bypass quiet hours
+      sound: "cashregister"
     )
   end
   
@@ -330,10 +332,6 @@ class Order < ApplicationRecord
       ]
     }
     
-    # Enqueue the Web Push notification job
-    SendWebPushNotificationJob.perform_later(
-      restaurant_id,
-      payload
-    )
+    SendWebPushNotificationJob.perform_later(restaurant_id, payload)
   end
 end
