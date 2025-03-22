@@ -125,12 +125,47 @@ class PushSubscriptionsController < ApplicationController
     
     # Check if web push is enabled for the restaurant
     if restaurant.web_push_enabled?
+      Rails.logger.info("Web push is enabled for restaurant #{restaurant.id}")
+      Rails.logger.info("VAPID public key: #{restaurant.web_push_vapid_keys[:public_key]}")
+      
       render json: { 
         vapid_public_key: restaurant.web_push_vapid_keys[:public_key],
         enabled: true
       }
     else
-      render json: { enabled: false }
+      Rails.logger.info("Web push is not enabled for restaurant #{restaurant.id}")
+      
+      # Check if notification channels are configured
+      if restaurant.admin_settings&.dig("notification_channels", "orders", "web_push") == true
+        Rails.logger.info("Web push is enabled in notification channels but VAPID keys are missing")
+      else
+        Rails.logger.info("Web push is not enabled in notification channels")
+      end
+      
+      # Check if VAPID keys are present
+      if restaurant.admin_settings&.dig("web_push", "vapid_public_key").present?
+        Rails.logger.info("VAPID public key is present")
+      else
+        Rails.logger.info("VAPID public key is missing")
+      end
+      
+      if restaurant.admin_settings&.dig("web_push", "vapid_private_key").present?
+        Rails.logger.info("VAPID private key is present")
+      else
+        Rails.logger.info("VAPID private key is missing")
+      end
+      
+      # Return the public key even if web push is not enabled
+      # This allows the frontend to subscribe to push notifications
+      # even if the restaurant hasn't enabled them yet
+      if restaurant.admin_settings&.dig("web_push", "vapid_public_key").present?
+        render json: { 
+          vapid_public_key: restaurant.admin_settings.dig("web_push", "vapid_public_key"),
+          enabled: false
+        }
+      else
+        render json: { enabled: false }
+      end
     end
   end
   
