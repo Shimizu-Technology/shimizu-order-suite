@@ -82,72 +82,14 @@ module Admin
         
         Rails.logger.info("Restaurant found: #{restaurant.name}")
         
-        # Make sure the webpush gem is available
-        unless defined?(Webpush)
-          Rails.logger.error("Webpush gem is not available")
-          return render json: { 
-            status: "error", 
-            message: "Webpush gem is not available" 
-          }, status: :internal_server_error
-        end
-        
-        # Explicitly require the webpush gem
+        # Generate new VAPID keys using the Restaurant model's method
         begin
-          require 'webpush'
-          Rails.logger.info("Webpush gem successfully required")
-        rescue LoadError => e
-          Rails.logger.error("Failed to require webpush gem: #{e.message}")
-          return render json: { 
-            status: "error", 
-            message: "Failed to require webpush gem: #{e.message}" 
-          }, status: :internal_server_error
-        end
-        
-        # Generate new VAPID keys
-        begin
-          # Workaround for OpenSSL 3.0 issue with webpush gem
-          # Manually generate VAPID keys using OpenSSL
-          Rails.logger.info("Manually generating VAPID keys using OpenSSL")
-          
-          # Generate EC key pair
-          ec_key = OpenSSL::PKey::EC.generate('prime256v1')
-          
-          # Get public key in uncompressed form
-          public_key_bn = ec_key.public_key.to_bn
-          public_key_hex = public_key_bn.to_s(16).downcase
-          # Ensure it's the right length with leading zeros if needed
-          public_key_hex = public_key_hex.rjust(130, '0')
-          # Convert to binary
-          public_key_bin = [public_key_hex].pack('H*')
-          # Base64 URL encode
-          public_key = Base64.urlsafe_encode64(public_key_bin[1..-1], padding: false)
-          
-          # Get private key
-          private_key_bn = ec_key.private_key
-          private_key_hex = private_key_bn.to_s(16).downcase
-          # Ensure it's the right length with leading zeros if needed
-          private_key_hex = private_key_hex.rjust(64, '0')
-          # Convert to binary
-          private_key_bin = [private_key_hex].pack('H*')
-          # Base64 URL encode
-          private_key = Base64.urlsafe_encode64(private_key_bin, padding: false)
-          
-          # Create the VAPID keys hash
-          vapid_keys = {
-            public_key: public_key,
-            private_key: private_key
-          }
-          
-          # Update the restaurant's admin_settings
-          admin_settings = restaurant.admin_settings || {}
-          admin_settings["web_push"] ||= {}
-          admin_settings["web_push"]["vapid_public_key"] = vapid_keys[:public_key]
-          admin_settings["web_push"]["vapid_private_key"] = vapid_keys[:private_key]
-          
-          # Save the settings
-          restaurant.update(admin_settings: admin_settings)
+          # Call the restaurant model's method to generate VAPID keys
+          vapid_keys = restaurant.generate_web_push_vapid_keys!
           
           Rails.logger.info("VAPID keys generated successfully")
+          Rails.logger.info("Public key: #{vapid_keys[:public_key]}")
+          Rails.logger.info("Public key length: #{vapid_keys[:public_key].length}")
           
           render json: { 
             status: "success", 
