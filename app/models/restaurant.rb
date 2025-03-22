@@ -45,18 +45,57 @@ class Restaurant < ApplicationRecord
   end
   
   def generate_web_push_vapid_keys!
-    vapid_keys = Webpush.generate_key
+    # Workaround for OpenSSL 3.0 issue with webpush gem
+    # Manually generate VAPID keys using OpenSSL
+    Rails.logger.info("Manually generating VAPID keys using OpenSSL for restaurant #{id}")
     
-    # Update admin_settings
-    new_settings = admin_settings || {}
-    new_settings["web_push"] ||= {}
-    new_settings["web_push"]["vapid_public_key"] = vapid_keys[:public_key]
-    new_settings["web_push"]["vapid_private_key"] = vapid_keys[:private_key]
-    
-    # Save the settings
-    update(admin_settings: new_settings)
-    
-    vapid_keys
+    begin
+      # Generate EC key pair
+      ec_key = OpenSSL::PKey::EC.generate('prime256v1')
+      
+      # Get public key in uncompressed form
+      public_key_bn = ec_key.public_key.to_bn
+      public_key_hex = public_key_bn.to_s(16).downcase
+      # Ensure it's the right length with leading zeros if needed
+      public_key_hex = public_key_hex.rjust(130, '0')
+      # Convert to binary
+      public_key_bin = [public_key_hex].pack('H*')
+      # Base64 URL encode
+      public_key = Base64.urlsafe_encode64(public_key_bin[1..-1], padding: false)
+      
+      # Get private key
+      private_key_bn = ec_key.private_key
+      private_key_hex = private_key_bn.to_s(16).downcase
+      # Ensure it's the right length with leading zeros if needed
+      private_key_hex = private_key_hex.rjust(64, '0')
+      # Convert to binary
+      private_key_bin = [private_key_hex].pack('H*')
+      # Base64 URL encode
+      private_key = Base64.urlsafe_encode64(private_key_bin, padding: false)
+      
+      # Create the VAPID keys hash
+      vapid_keys = {
+        public_key: public_key,
+        private_key: private_key
+      }
+      
+      # Update admin_settings
+      new_settings = admin_settings || {}
+      new_settings["web_push"] ||= {}
+      new_settings["web_push"]["vapid_public_key"] = vapid_keys[:public_key]
+      new_settings["web_push"]["vapid_private_key"] = vapid_keys[:private_key]
+      
+      # Save the settings
+      update(admin_settings: new_settings)
+      
+      Rails.logger.info("VAPID keys generated successfully for restaurant #{id}")
+      
+      vapid_keys
+    rescue => e
+      Rails.logger.error("Failed to generate VAPID keys for restaurant #{id}: #{e.message}")
+      Rails.logger.error(e.backtrace.join("\n"))
+      raise e
+    end
   end
   
   def send_web_push_notification(payload, options = {})
