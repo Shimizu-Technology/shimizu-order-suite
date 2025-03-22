@@ -105,8 +105,38 @@ module Admin
         
         # Generate new VAPID keys
         begin
-          # Use the Webpush class directly instead of the restaurant method
-          vapid_keys = Webpush.generate_key
+          # Workaround for OpenSSL 3.0 issue with webpush gem
+          # Manually generate VAPID keys using OpenSSL
+          Rails.logger.info("Manually generating VAPID keys using OpenSSL")
+          
+          # Generate EC key pair
+          ec_key = OpenSSL::PKey::EC.generate('prime256v1')
+          
+          # Get public key in uncompressed form
+          public_key_bn = ec_key.public_key.to_bn
+          public_key_hex = public_key_bn.to_s(16).downcase
+          # Ensure it's the right length with leading zeros if needed
+          public_key_hex = public_key_hex.rjust(130, '0')
+          # Convert to binary
+          public_key_bin = [public_key_hex].pack('H*')
+          # Base64 URL encode
+          public_key = Base64.urlsafe_encode64(public_key_bin[1..-1], padding: false)
+          
+          # Get private key
+          private_key_bn = ec_key.private_key
+          private_key_hex = private_key_bn.to_s(16).downcase
+          # Ensure it's the right length with leading zeros if needed
+          private_key_hex = private_key_hex.rjust(64, '0')
+          # Convert to binary
+          private_key_bin = [private_key_hex].pack('H*')
+          # Base64 URL encode
+          private_key = Base64.urlsafe_encode64(private_key_bin, padding: false)
+          
+          # Create the VAPID keys hash
+          vapid_keys = {
+            public_key: public_key,
+            private_key: private_key
+          }
           
           # Update the restaurant's admin_settings
           admin_settings = restaurant.admin_settings || {}
