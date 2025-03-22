@@ -137,7 +137,14 @@ class PushSubscriptionsController < ApplicationController
   private
   
   def set_restaurant
-    @restaurant = current_restaurant
+    # For public endpoints, we don't need to set the restaurant
+    # It will be extracted from params in the action methods
+    if public_endpoint?
+      @restaurant = nil
+    else
+      # For authenticated endpoints, get the restaurant from the current user
+      @restaurant = current_user&.restaurant
+    end
   end
   
   # Override public_endpoint? to allow vapid_public_key to be accessed without restaurant context
