@@ -144,8 +144,9 @@ class Order < ApplicationRecord
   # Store vip_code in the database column if provided
   before_save :store_vip_code
 
-  # After creation, enqueue a background job for WhatsApp notifications
+  # After creation, enqueue background jobs for notifications
   after_create :notify_whatsapp
+  after_create :notify_pushover
 
   # Convert total to float, add created/updated times, plus userId & contact info
   def as_json(options = {})
@@ -259,5 +260,39 @@ class Order < ApplicationRecord
 
     # Instead of calling Wassenger inline, enqueue an async job:
     SendWhatsappJob.perform_later(group_id, message_text)
+  end
+  
+  def notify_pushover
+    return if Rails.env.test?
+    
+    # Format the order items for the notification
+    food_item_lines = items.map do |item|
+      "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
+    end.join(", ")
+    
+    # Create a concise message for the notification
+    message = "New order ##{id} - $#{'%.2f' % total.to_f}"
+    
+    # Add more details in the extended message
+    extended_message = <<~MSG
+      New order ##{id} received!
+      
+      Items: #{food_item_lines}
+      
+      Total: $#{'%.2f' % total.to_f}
+      Status: #{status}
+      
+      #{contact_name ? "Customer: #{contact_name}" : ""}
+      #{special_instructions.present? ? "Instructions: #{special_instructions}" : ""}
+    MSG
+    
+    # Enqueue the Pushover notification job
+    SendPushoverNotificationJob.perform_later(
+      restaurant_id,
+      extended_message,
+      title: message,
+      priority: 1, # High priority to bypass quiet hours
+      sound: "incoming" # Use the "incoming" sound for new orders
+    )
   end
 end

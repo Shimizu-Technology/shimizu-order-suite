@@ -86,14 +86,16 @@ For detailed documentation, see:
 The notification system has been expanded to include:
 
 - Customizable notification templates
-- Multiple delivery channels (email, SMS, WhatsApp)
+- Multiple delivery channels (email, SMS, WhatsApp, Pushover)
 - Notification history tracking
 - Scheduled notifications
 - Batch processing for notifications
+- Real-time push notifications via Pushover
 
 For detailed documentation, see:
 - [Notification System Documentation](docs/notification_system.md)
 - [SMS Notification System Documentation](docs/sms_notification_system.md)
+- [Pushover Integration Documentation](docs/pushover_integration.md)
 
 ### Store Credit System
 

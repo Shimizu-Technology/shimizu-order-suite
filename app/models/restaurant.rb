@@ -2,6 +2,33 @@
 class Restaurant < ApplicationRecord
   # Ensure allowed_origins is always an array
   attribute :allowed_origins, :string, array: true, default: []
+  
+  # Pushover-related methods
+  def pushover_enabled?
+    admin_settings&.dig("notification_channels", "orders", "pushover") == true && 
+      (admin_settings&.dig("pushover", "user_key").present? || admin_settings&.dig("pushover", "group_key").present?)
+  end
+
+  def pushover_recipient_key
+    admin_settings&.dig("pushover", "group_key").presence || admin_settings&.dig("pushover", "user_key")
+  end
+
+  def send_pushover_notification(message, title = nil, options = {})
+    return false unless pushover_enabled?
+    
+    # Call the job with positional parameters
+    SendPushoverNotificationJob.perform_later(
+      id, # restaurant_id
+      message,
+      title: title || name,
+      priority: options[:priority] || 0,
+      sound: options[:sound],
+      url: options[:url],
+      url_title: options[:url_title]
+    )
+    
+    true
+  end
   # Existing associations
   has_many :users,            dependent: :destroy
   has_many :reservations,     dependent: :destroy

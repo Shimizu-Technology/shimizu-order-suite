@@ -383,6 +383,7 @@ class OrdersController < ApplicationController
       end
 
       notification_channels = @order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
+      restaurant_name = @order.restaurant.name
 
       # 1) Confirmation email
       if notification_channels["email"] != false && @order.contact_email.present?
@@ -391,7 +392,6 @@ class OrdersController < ApplicationController
 
       # 2) Confirmation text
       if notification_channels["sms"] == true && @order.contact_phone.present?
-        restaurant_name = @order.restaurant.name
         sms_sender = @order.restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
 
         item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
@@ -409,6 +409,39 @@ class OrdersController < ApplicationController
         TXT
 
         SendSmsJob.perform_later(to: @order.contact_phone, body: msg, from: sms_sender)
+      end
+      
+      # 3) Pushover notification to restaurant staff
+      if @order.restaurant.pushover_enabled?
+        # Create a formatted item list for the notification
+        item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
+        if @order.merchandise_items.present?
+          merch_list = @order.merchandise_items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
+          item_list += ", " + merch_list unless merch_list.blank?
+        end
+        
+        # Create the message
+        message = "New Order ##{@order.id}\n\n"
+        message += "Items: #{item_list}\n"
+        message += "Total: $#{sprintf("%.2f", @order.total.to_f)}\n"
+        message += "Customer: #{@order.contact_name}\n" if @order.contact_name.present?
+        message += "Phone: #{@order.contact_phone}\n" if @order.contact_phone.present?
+        
+        # Add special instructions if present
+        message += "\nSpecial Instructions: #{@order.special_instructions}" if @order.special_instructions.present?
+        
+        # Create a title for the notification
+        title = "New Order from #{@order.contact_name.presence || 'Customer'}"
+        
+        # Send the notification with high priority to bypass quiet hours
+        @order.restaurant.send_pushover_notification(
+          message, 
+          title,
+          { 
+            priority: 1,  # High priority to bypass quiet hours
+            sound: "cashregister",  # Special sound for new orders
+          }
+        )
       end
 
       render json: @order, status: :created
@@ -466,6 +499,28 @@ class OrdersController < ApplicationController
           end
           SendSmsJob.perform_later(to: order.contact_phone, body: txt_body, from: sms_sender)
         end
+        
+        # Send Pushover notification for order status change to preparing
+        if order.restaurant.pushover_enabled?
+          message = "Order ##{order.id} is now being prepared.\n\n"
+          
+          if order.estimated_pickup_time.present?
+            if order.requires_advance_notice?
+              eta_date = order.estimated_pickup_time.strftime("%A, %B %-d")
+              eta_time = order.estimated_pickup_time.strftime("%-I:%M %p")
+              message += "Pickup time: #{eta_time} on #{eta_date}"
+            else
+              eta_str = order.estimated_pickup_time.strftime("%-I:%M %p")
+              message += "ETA: #{eta_str} TODAY"
+            end
+          end
+          
+          order.restaurant.send_pushover_notification(
+            message,
+            "Order Status Update",
+            { priority: 0, sound: "pushover" }
+          )
+        end
       # If ETA was updated (and order is in preparing status)
       elsif order.status == "preparing" &&
             old_pickup_time.present? &&
@@ -490,6 +545,28 @@ class OrdersController < ApplicationController
           end
           SendSmsJob.perform_later(to: order.contact_phone, body: txt_body, from: sms_sender)
         end
+        
+        # Send Pushover notification for ETA update
+        if order.restaurant.pushover_enabled?
+          message = "Order ##{order.id} pickup time updated.\n\n"
+          
+          if order.requires_advance_notice?
+            eta_date = order.estimated_pickup_time.strftime("%A, %B %-d")
+            eta_time = order.estimated_pickup_time.strftime("%-I:%M %p")
+            message += "New pickup time: #{eta_time} on #{eta_date}"
+          else
+            eta_str = order.estimated_pickup_time.strftime("%-I:%M %p")
+            message += "New ETA: #{eta_str} TODAY"
+          end
+          
+          message += "\nCustomer: #{order.contact_name}" if order.contact_name.present?
+          
+          order.restaurant.send_pushover_notification(
+            message,
+            "Order ETA Updated",
+            { priority: 0, sound: "pushover" }
+          )
+        end
       end
 
       # If status changed to 'ready'
@@ -501,6 +578,22 @@ class OrdersController < ApplicationController
           msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
                 "is now ready for pickup! Thank you for choosing #{restaurant_name}."
           SendSmsJob.perform_later(to: order.contact_phone, body: msg, from: sms_sender)
+        end
+        
+        # Send Pushover notification for order ready status
+        if order.restaurant.pushover_enabled?
+          message = "Order ##{order.id} is now ready for pickup!\n\n"
+          message += "Customer: #{order.contact_name}\n" if order.contact_name.present?
+          message += "Phone: #{order.contact_phone}" if order.contact_phone.present?
+          
+          order.restaurant.send_pushover_notification(
+            message,
+            "Order Ready for Pickup",
+            { 
+              priority: 1,  # High priority to bypass quiet hours
+              sound: "siren"  # Attention-grabbing sound for ready orders
+            }
+          )
         end
       end
 

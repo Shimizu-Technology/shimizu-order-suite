@@ -133,6 +133,8 @@ Rails.application.routes.draw do
     
     # System utilities
     post "test_sms", to: "system#test_sms"
+    post "test_pushover", to: "system#test_pushover"
+    post "validate_pushover_key", to: "system#validate_pushover_key"
 
     # Restaurant settings
     get "restaurant/allowed_origins",  to: "restaurant#allowed_origins"

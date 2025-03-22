@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_20_215327) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_22_030000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -298,6 +298,15 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_20_215327) do
     t.index ["vip_access_code_id"], name: "index_orders_on_vip_access_code_id"
   end
 
+  create_table "players", force: :cascade do |t|
+    t.string "name"
+    t.text "about"
+    t.bigint "team_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["team_id"], name: "index_players_on_team_id"
+  end
+
   create_table "posts", force: :cascade do |t|
     t.string "title"
     t.text "content"
@@ -472,6 +481,13 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_20_215327) do
     t.index ["status"], name: "index_store_credits_on_status"
   end
 
+  create_table "teams", force: :cascade do |t|
+    t.string "name"
+    t.text "about"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
   create_table "users", force: :cascade do |t|
     t.string "email", null: false
     t.string "password_digest", null: false
@@ -564,6 +580,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_20_215327) do
   add_foreign_key "orders", "restaurants"
   add_foreign_key "orders", "users"
   add_foreign_key "orders", "vip_access_codes"
+  add_foreign_key "players", "teams"
   add_foreign_key "promo_codes", "restaurants"
   add_foreign_key "reservations", "restaurants"
   add_foreign_key "restaurants", "layouts", column: "current_layout_id", on_delete: :nullify
