@@ -1,7 +1,18 @@
 # config/sidekiq.yml
-:concurrency: 5
+:concurrency: 8
+:timeout: 30
+
+# Set appropriate job retention periods
+:dead_max_jobs: 10000
+:dead_timeout_in_seconds: 86400  # 24 hours
+
+# Specify retry schedules
+:retry_intervals: [15, 30, 60, 120, 300, 600]
+
+# Queue configuration with priorities
 :queues:
-  - default
-  - mailers
-  - sms
-  - notifications
+  - [critical, 5]  # Highest priority queue for time-sensitive jobs
+  - [default, 3]
+  - [mailers, 3]   # Keep email delivery prioritized
+  - [sms, 2]       # SMS notifications are important
+  - [notifications, 1]  # Web push notifications can be handled last

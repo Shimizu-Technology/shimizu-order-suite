@@ -2,8 +2,8 @@
 class SendPushoverNotificationJob < ApplicationJob
   queue_as :notifications
 
-  # Retry failed jobs with exponential backoff
-  retry_on StandardError, wait: :exponentially_longer, attempts: 5
+  # More important than web push, but can expire after 6 hours
+  sidekiq_options retry: 5, expires_in: 6.hours
 
   # Send a notification to Pushover
   # @param restaurant_id [Integer] The ID of the restaurant to send the notification to

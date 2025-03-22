@@ -1,10 +1,10 @@
 # app/jobs/send_web_push_notification_job.rb
 
 class SendWebPushNotificationJob < ApplicationJob
-  queue_as :default
+  queue_as :notifications
   
-  # Retry options
-  retry_on StandardError, wait: :exponentially_longer, attempts: 3
+  # Less critical, can be dropped after 3 hours if not processed
+  sidekiq_options retry: 5, expires_in: 3.hours
   
   def perform(restaurant_id, payload)
     # Find the restaurant

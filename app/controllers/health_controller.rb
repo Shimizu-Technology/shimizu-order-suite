@@ -1,27 +1,34 @@
+# app/controllers/health_controller.rb
 class HealthController < ApplicationController
-  def check
-    inconsistencies = []
-
-    # Check orders table
-    expected_order_columns = [ "id", "restaurant_id", "user_id", "items", "status", "total",
-                       "promo_code", "special_instructions", "estimated_pickup_time",
-                       "created_at", "updated_at", "contact_name", "contact_phone",
-                       "contact_email", "payment_method", "transaction_id",
-                       "payment_status", "payment_amount", "vip_code", "vip_access_code_id" ]
-
-    actual_columns = Order.column_names
-    missing_from_order = expected_order_columns - actual_columns
-
-    if missing_from_order.any?
-      inconsistencies << "Orders table missing: #{missing_from_order.join(', ')}"
-    end
-
-    # Add checks for other critical tables as needed
-
-    if inconsistencies.any?
-      render json: { status: "error", schema_issues: inconsistencies }, status: :service_unavailable
-    else
-      render json: { status: "ok", message: "Schema integrity verified" }
+  # Skip authentication for health checks
+  skip_before_action :authenticate_request, only: [:index, :sidekiq_stats]
+  
+  def index
+    render json: { status: 'ok', timestamp: Time.now.iso8601 }
+  end
+  
+  def sidekiq_stats
+    stats = {
+      processed: Sidekiq::Stats.new.processed,
+      failed: Sidekiq::Stats.new.failed,
+      queues: Sidekiq::Stats.new.queues,
+      scheduled_size: Sidekiq::Stats.new.scheduled_size,
+      retry_size: Sidekiq::Stats.new.retry_size,
+      workers: Sidekiq::Workers.new.size,
+      process_count: Sidekiq::ProcessSet.new.size,
+      redis_memory_usage: redis_memory_usage
+    }
+    
+    render json: stats
+  end
+  
+  private
+  
+  def redis_memory_usage
+    begin
+      Sidekiq.redis { |conn| conn.info('memory')['used_memory_human'] }
+    rescue => e
+      "Error fetching Redis memory: #{e.message}"
     end
   end
 end

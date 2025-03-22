@@ -1,8 +1,9 @@
 # config/routes.rb
 
 Rails.application.routes.draw do
-  # Health check endpoint
-  get "/health/check", to: "health#check"
+  # Health check endpoints
+  get "/health/check", to: "health#index"
+  get "/health/sidekiq", to: "health#sidekiq_stats"
   # Authentication
   post "/signup", to: "users#create"
   post "/login",  to: "sessions#create"
