@@ -206,6 +206,8 @@ GEM
       paypalhttp (~> 1.0.1)
     paypalhttp (1.0.1)
     pg (1.5.9)
+    posthog-ruby (2.7.2)
+      concurrent-ruby (~> 1)
     psych (5.2.2)
       date
       stringio
@@ -375,6 +377,7 @@ DEPENDENCIES
   kaminari
   paypal-checkout-sdk
   pg (~> 1.1)
+  posthog-ruby
   puma (>= 5.0)
   rack-cors
   rails (~> 7.2.2, >= 7.2.2.1)

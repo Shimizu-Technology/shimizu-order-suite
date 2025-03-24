@@ -278,4 +278,12 @@ Rails.application.routes.draw do
       get :vapid_public_key
     end
   end
+  
+  # Example routes for analytics demonstration (not for production use)
+  namespace :examples do
+    get 'analytics', to: 'analytics_example#index'
+    get 'analytics/track_event', to: 'analytics_example#track_event'
+    get 'analytics/identify_user', to: 'analytics_example#identify_user'
+    get 'analytics/group_identify', to: 'analytics_example#group_identify'
+  end
 end

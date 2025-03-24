@@ -2,6 +2,9 @@
 
 class ApplicationController < ActionController::API
   include RestaurantScope
+  
+  # Add around_action to track controller actions
+  around_action :track_request, unless: :skip_tracking?
   def authorize_request
     header = request.headers["Authorization"]
     token = header.split(" ").last if header
@@ -44,5 +47,37 @@ class ApplicationController < ActionController::API
 
   def is_admin?
     current_user && current_user.role.in?(%w[admin super_admin])
+  end
+  
+  private
+  
+  def analytics
+    @analytics ||= AnalyticsService.new(current_user, @current_restaurant)
+  end
+  
+  def track_request
+    start_time = Time.current
+    yield
+    duration = (Time.current - start_time) * 1000
+    
+    # Skip tracking for specific actions/controllers
+    return if skip_tracking?
+    
+    # Track controller action as an event
+    analytics.track("controller.#{controller_name}.#{action_name}", {
+      status: response.status,
+      duration_ms: duration.to_i,
+      params: filtered_params # Define this to exclude sensitive params
+    })
+  end
+  
+  def filtered_params
+    # Return a filtered version of params that excludes sensitive information
+    params.to_unsafe_h.except('password', 'token', 'auth_token', 'credit_card')
+  end
+  
+  def skip_tracking?
+    controller_name == 'health' || # Skip health checks
+    (controller_name == 'sessions' && action_name == 'create') # Skip login attempts
   end
 end
