@@ -167,6 +167,7 @@ Rails.application.routes.draw do
         post :additional, to: "order_payments#create_additional"
         post "additional/capture", to: "order_payments#capture_additional"
         post :refund, to: "order_payments#create_refund"
+        post :payment_link, to: "order_payments#create_payment_link"
       end
     end
 

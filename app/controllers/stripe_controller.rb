@@ -307,14 +307,53 @@ class StripeController < ApplicationController
         # Handle checkout completion
         # If you use Stripe Checkout, this confirms when a checkout process is complete
         payment_intent_id = session.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
+        order_id = session.metadata&.order_id
+        restaurant_id = session.metadata&.restaurant_id
+        
+        # Find the order either by metadata or by payment_intent_id
+        order = order_id.present? ? Order.find_by(id: order_id) :
+                Order.find_by(payment_id: payment_intent_id) ||
                 Order.find_by(transaction_id: payment_intent_id)
+                
         if order
+          # Find the restaurant
+          restaurant = restaurant_id.present? ? Restaurant.find_by(id: restaurant_id) : order.restaurant
+          
+          # Update the order payment status
           order.update(
             payment_status: "paid",
             payment_method: "stripe",
             payment_id: payment_intent_id # Ensure payment_id is set
           )
+          
+          # Find and update any pending payment_link payments
+          pending_payment = order.order_payments.find_by(payment_method: "payment_link", status: "pending")
+          if pending_payment
+            pending_payment.update(
+              status: "paid",
+              transaction_id: payment_intent_id,
+              payment_id: payment_intent_id
+            )
+            
+            # Send confirmation notification if restaurant has this setting enabled
+            if restaurant&.admin_settings&.dig("notifications", "payment_confirmation")
+              # Send email confirmation if we have customer email
+              if pending_payment.payment_details&.dig("email").present?
+                OrderMailer.payment_confirmation(
+                  pending_payment.payment_details["email"],
+                  order,
+                  restaurant&.name,
+                  restaurant&.logo_url
+                ).deliver_later
+              end
+              
+              # Send SMS confirmation if we have customer phone
+              if pending_payment.payment_details&.dig("phone").present?
+                message = "Your payment for order ##{order.id} from #{restaurant&.name} has been received. Thank you!"
+                SendSmsJob.perform_later(pending_payment.payment_details["phone"], message, restaurant&.id)
+              end
+            end
+          end
         end
 
       when "charge.succeeded"
@@ -549,14 +588,53 @@ class StripeController < ApplicationController
         # Handle checkout completion
         # If you use Stripe Checkout, this confirms when a checkout process is complete
         payment_intent_id = session.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
+        order_id = session.metadata&.order_id
+        restaurant_id = session.metadata&.restaurant_id
+        
+        # Find the order either by metadata or by payment_intent_id
+        order = order_id.present? ? Order.find_by(id: order_id) :
+                Order.find_by(payment_id: payment_intent_id) ||
                 Order.find_by(transaction_id: payment_intent_id)
+                
         if order
+          # Find the restaurant
+          restaurant = restaurant_id.present? ? Restaurant.find_by(id: restaurant_id) : order.restaurant
+          
+          # Update the order payment status
           order.update(
             payment_status: "paid",
             payment_method: "stripe",
             payment_id: payment_intent_id # Ensure payment_id is set
           )
+          
+          # Find and update any pending payment_link payments
+          pending_payment = order.order_payments.find_by(payment_method: "payment_link", status: "pending")
+          if pending_payment
+            pending_payment.update(
+              status: "paid",
+              transaction_id: payment_intent_id,
+              payment_id: payment_intent_id
+            )
+            
+            # Send confirmation notification if restaurant has this setting enabled
+            if restaurant&.admin_settings&.dig("notifications", "payment_confirmation")
+              # Send email confirmation if we have customer email
+              if pending_payment.payment_details&.dig("email").present?
+                OrderMailer.payment_confirmation(
+                  pending_payment.payment_details["email"],
+                  order,
+                  restaurant&.name,
+                  restaurant&.logo_url
+                ).deliver_later
+              end
+              
+              # Send SMS confirmation if we have customer phone
+              if pending_payment.payment_details&.dig("phone").present?
+                message = "Your payment for order ##{order.id} from #{restaurant&.name} has been received. Thank you!"
+                SendSmsJob.perform_later(pending_payment.payment_details["phone"], message, restaurant&.id)
+              end
+            end
+          end
         end
 
       when "charge.succeeded"

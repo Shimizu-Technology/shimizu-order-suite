@@ -160,6 +160,74 @@ class OrderPaymentsController < ApplicationController
     }
   end
 
+  # POST /orders/:order_id/payments/payment_link
+  def create_payment_link
+    # Get customer contact info
+    email = params[:email]
+    phone = params[:phone]
+    
+    # Validate that at least one contact method is provided
+    if email.blank? && phone.blank?
+      return render json: { error: "Email or phone number is required" }, status: :unprocessable_entity
+    end
+    
+    # Get items and calculate amount
+    items = params[:items] || []
+    amount = items.sum { |item| item[:price].to_f * item[:quantity].to_i }
+    
+    if amount <= 0
+      return render json: { error: "Invalid payment amount" }, status: :unprocessable_entity
+    end
+    
+    # Get restaurant settings
+    restaurant = @order.restaurant
+    payment_gateway = restaurant.admin_settings&.dig("payment_gateway") || {}
+    
+    # Check if test mode is enabled
+    test_mode = payment_gateway["test_mode"] == true
+    
+    # Generate payment link based on payment processor
+    if payment_gateway["payment_processor"] == "stripe"
+      result = create_stripe_payment_link(amount, items, email, phone, test_mode, restaurant)
+    else
+      result = create_paypal_payment_link(amount, items, email, phone, test_mode, restaurant)
+    end
+    
+    if result[:success]
+      # Create a pending payment record
+      @payment = @order.order_payments.create(
+        payment_type: "additional",
+        amount: amount,
+        payment_method: "payment_link",
+        status: "pending",
+        description: "Payment link: #{items.map { |i| "#{i[:quantity]}x #{i[:name]}" }.join(", ")}",
+        payment_details: {
+          payment_link_url: result[:url],
+          email: email,
+          phone: phone,
+          items: items,
+          test_mode: test_mode
+        }
+      )
+      
+      # Send notification based on provided contact method
+      if email.present?
+        send_payment_link_email(result[:url], email, @order, restaurant)
+      end
+      
+      if phone.present?
+        send_payment_link_sms(result[:url], phone, @order, restaurant)
+      end
+      
+      render json: {
+        payment: @payment,
+        payment_link_url: result[:url]
+      }
+    else
+      render json: { error: result[:error] }, status: :unprocessable_entity
+    end
+  end
+
   # POST /orders/:order_id/payments/refund
   def create_refund
     refund_amount = params[:amount].to_f
@@ -607,5 +675,185 @@ class OrderPaymentsController < ApplicationController
         error: e.message
       }
     end
+  end
+  
+  # Create a Stripe payment link
+  def create_stripe_payment_link(amount, items, email, phone, test_mode, restaurant)
+    begin
+      # Get appropriate Stripe API key based on test mode
+      secret_key = test_mode ?
+                  restaurant.admin_settings&.dig("payment_gateway", "test_secret_key") :
+                  restaurant.admin_settings&.dig("payment_gateway", "secret_key")
+      
+      # If no key is available but we're in test mode, create a mock payment link
+      if secret_key.blank? && test_mode
+        mock_url = "https://example.com/test-payment/#{SecureRandom.hex(8)}"
+        return {
+          success: true,
+          url: mock_url,
+          test_mode: true
+        }
+      end
+      
+      # Set Stripe API key
+      Stripe.api_key = secret_key
+      
+      # Get restaurant-specific success and cancel URLs
+      success_url = restaurant.admin_settings&.dig("payment_gateway", "success_url") ||
+                    "#{ENV['FRONTEND_URL'] || 'https://app.hafaloha.com'}/payment-success?session_id={CHECKOUT_SESSION_ID}"
+      cancel_url = restaurant.admin_settings&.dig("payment_gateway", "cancel_url") ||
+                  "#{ENV['FRONTEND_URL'] || 'https://app.hafaloha.com'}/payment-cancel"
+      
+      # Create a Stripe Checkout Session with a payment link
+      session = Stripe::Checkout::Session.create({
+        payment_method_types: ['card'],
+        line_items: items.map { |item|
+          {
+            price_data: {
+              currency: restaurant.admin_settings&.dig("payment_gateway", "currency") || 'usd',
+              product_data: {
+                name: item[:name],
+                description: item[:description],
+                images: item[:image].present? ? [item[:image]] : []
+              },
+              unit_amount: (item[:price].to_f * 100).to_i, # Convert to cents
+            },
+            quantity: item[:quantity].to_i,
+          }
+        },
+        mode: 'payment',
+        success_url: success_url,
+        cancel_url: cancel_url,
+        customer_email: email.presence,
+        metadata: {
+          order_id: @order.id,
+          restaurant_id: restaurant.id,
+          payment_type: "additional",
+          test_mode: test_mode
+        }
+      })
+      
+      {
+        success: true,
+        url: session.url,
+        test_mode: test_mode
+      }
+    rescue => e
+      Rails.logger.error("Stripe payment link error: #{e.message}")
+      
+      # If in test mode and there's an error, create a mock payment link
+      if test_mode
+        mock_url = "https://example.com/test-payment/#{SecureRandom.hex(8)}"
+        return {
+          success: true,
+          url: mock_url,
+          test_mode: true
+        }
+      end
+      
+      {
+        success: false,
+        error: e.message
+      }
+    end
+  end
+  
+  # Create a PayPal payment link
+  def create_paypal_payment_link(amount, items, email, phone, test_mode, restaurant)
+    begin
+      # Get appropriate PayPal credentials based on test mode
+      client_id = test_mode ?
+                 restaurant.admin_settings&.dig("payment_gateway", "test_client_id") :
+                 restaurant.admin_settings&.dig("payment_gateway", "client_id")
+      client_secret = test_mode ?
+                     restaurant.admin_settings&.dig("payment_gateway", "test_client_secret") :
+                     restaurant.admin_settings&.dig("payment_gateway", "client_secret")
+      
+      # If no credentials are available but we're in test mode, create a mock payment link
+      if (client_id.blank? || client_secret.blank?) && test_mode
+        mock_url = "https://example.com/test-paypal-payment/#{SecureRandom.hex(8)}"
+        return {
+          success: true,
+          url: mock_url,
+          test_mode: true
+        }
+      end
+      
+      # For now, return a mock URL in test mode
+      # In a real implementation, you would use PayPal's Create Order API
+      if test_mode
+        mock_url = "https://example.com/test-paypal-payment/#{SecureRandom.hex(8)}"
+        return {
+          success: true,
+          url: mock_url,
+          test_mode: true
+        }
+      end
+      
+      # This would be replaced with actual PayPal API integration
+      # For now, return an error for production mode
+      {
+        success: false,
+        error: "PayPal payment links are not yet supported in production mode"
+      }
+    rescue => e
+      Rails.logger.error("PayPal payment link error: #{e.message}")
+      
+      # If in test mode and there's an error, create a mock payment link
+      if test_mode
+        mock_url = "https://example.com/test-paypal-payment/#{SecureRandom.hex(8)}"
+        return {
+          success: true,
+          url: mock_url,
+          test_mode: true
+        }
+      end
+      
+      {
+        success: false,
+        error: e.message
+      }
+    end
+  end
+  
+  # Send payment link via email
+  def send_payment_link_email(url, email, order, restaurant)
+    # Use restaurant-specific email template if available
+    template = restaurant.admin_settings&.dig("email_templates", "payment_link") || "default_payment_link"
+    
+    # Use restaurant branding
+    restaurant_name = restaurant.name
+    restaurant_logo = restaurant.logo_url
+    
+    # Send email with payment link
+    OrderMailer.payment_link(
+      email,
+      url,
+      order,
+      restaurant_name,
+      restaurant_logo,
+      template
+    ).deliver_later
+  rescue => e
+    Rails.logger.error("Failed to send payment link email: #{e.message}")
+  end
+  
+  # Send payment link via SMS
+  def send_payment_link_sms(url, phone, order, restaurant)
+    # Use restaurant-specific SMS template if available
+    sms_template = restaurant.admin_settings&.dig("sms_templates", "payment_link") ||
+                  "Your payment link for order #%{order_id} from %{restaurant}: %{url}"
+    
+    # Format the message with order and restaurant details
+    message = sms_template % {
+      order_id: order.id,
+      restaurant: restaurant.name,
+      url: url
+    }
+    
+    # Send SMS with payment link
+    SendSmsJob.perform_later(phone, message, restaurant.id)
+  rescue => e
+    Rails.logger.error("Failed to send payment link SMS: #{e.message}")
   end
 end

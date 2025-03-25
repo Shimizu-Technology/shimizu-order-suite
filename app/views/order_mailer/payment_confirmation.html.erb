@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .header {
+      background-color: <%= @header_color || '#c1902f' %>;
+      padding: 20px;
+      text-align: center;
+    }
+    .header img {
+      max-width: 200px;
+      height: auto;
+    }
+    .content {
+      padding: 20px;
+      background-color: #fff;
+    }
+    .footer {
+      padding: 20px;
+      text-align: center;
+      font-size: 12px;
+      color: #777;
+    }
+    .success-icon {
+      text-align: center;
+      margin: 20px 0;
+    }
+    .success-icon svg {
+      width: 64px;
+      height: 64px;
+      fill: #4CAF50;
+    }
+    .order-details {
+      margin: 20px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 15px;
+    }
+    .order-item {
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .order-total {
+      font-weight: bold;
+      margin-top: 15px;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <% if @restaurant_logo.present? %>
+        <img src="<%= @restaurant_logo %>" alt="<%= @restaurant_name %> Logo">
+      <% else %>
+        <h1 style="color: #fff;"><%= @restaurant_name %></h1>
+      <% end %>
+    </div>
+    
+    <div class="content">
+      <div class="success-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        </svg>
+      </div>
+      
+      <h2>Payment Received</h2>
+      
+      <p>Thank you! We've received your payment for Order #<%= @order.id %> from <%= @restaurant_name %>.</p>
+      
+      <div class="order-details">
+        <h3>Order Summary</h3>
+        
+        <% if @order.items.present? %>
+          <% @order.items.each do |item| %>
+            <div class="order-item">
+              <div><strong><%= item['quantity'] %>x <%= item['name'] %></strong></div>
+              <% if item['customizations'].present? %>
+                <div style="font-size: 14px; color: #666;">
+                  <%= item['customizations'].map { |k, v| "#{k}: #{v}" }.join(', ') %>
+                </div>
+              <% end %>
+              <div style="text-align: right;">$<%= sprintf('%.2f', item['price'].to_f * item['quantity'].to_i) %></div>
+            </div>
+          <% end %>
+        <% end %>
+        
+        <div class="order-total">
+          Total Paid: $<%= sprintf('%.2f', @order.total) %>
+        </div>
+      </div>
+      
+      <% if @order.pickup_time.present? || @order.estimated_pickup_time.present? %>
+        <div style="margin: 20px 0; padding: 15px; background-color: #f5f5f5; border-radius: 4px;">
+          <h3>Pickup Information</h3>
+          <p>Your order will be ready for pickup at: <strong><%= @order.pickup_time || @order.estimated_pickup_time %></strong></p>
+        </div>
+      <% end %>
+      
+      <p>If you have any questions about your order, please contact us at <%= @restaurant&.contact_email || 'our restaurant' %>.</p>
+      
+      <p>Thank you for your business!</p>
+    </div>
+    
+    <div class="footer">
+      <p>&copy; <%= Date.today.year %> <%= @restaurant_name %>. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
