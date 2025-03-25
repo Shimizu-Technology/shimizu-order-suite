@@ -5,8 +5,8 @@ module Examples
     # in the Hafaloha application. This controller is for demonstration purposes only
     # and is not meant to be used in production.
     
-    # Skip authentication for this example
-    skip_before_action :authorize_request, only: [:index, :track_event, :identify_user, :group_identify]
+    # This controller is for demonstration purposes only
+    # No authentication is required for these example endpoints
     
     # GET /examples/analytics
     def index
