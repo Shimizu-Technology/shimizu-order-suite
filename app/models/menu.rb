@@ -4,6 +4,8 @@ class Menu < ApplicationRecord
   default_scope { with_restaurant_scope }
   belongs_to :restaurant
   has_many :menu_items, dependent: :destroy
+  # Add categories association
+  has_many :categories, dependent: :destroy
 
   validates :name, presence: true
 

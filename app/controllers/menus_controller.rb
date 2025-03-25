@@ -109,6 +109,21 @@ class MenusController < ApplicationController
     if new_menu.save
       # Use a transaction to ensure all operations succeed or fail together
       ActiveRecord::Base.transaction do
+        # Clone categories first
+        category_mapping = {} # To map original category IDs to new category IDs
+        
+        original_menu.categories.each do |original_category|
+          new_category = Category.create!(
+            menu_id: new_menu.id,
+            name: original_category.name,
+            position: original_category.position,
+            description: original_category.description
+          )
+          
+          # Store the mapping from original to new category
+          category_mapping[original_category.id] = new_category.id
+        end
+
         # Clone all menu items
         original_menu.menu_items.each do |original_item|
           # Duplicate the menu item but don't save it yet
@@ -118,11 +133,14 @@ class MenusController < ApplicationController
           # Save without validation first to bypass the category validation temporarily
           new_item.save(validate: false)
 
-          # Clone the category associations - must be done before validating the item
+          # Clone the category associations using the new categories
           original_item.menu_item_categories.each do |mic|
+            # Use the new category ID from our mapping
+            new_category_id = category_mapping[mic.category_id]
+            
             MenuItemCategory.create!(
               menu_item_id: new_item.id,
-              category_id: mic.category_id
+              category_id: new_category_id
             )
           end
 

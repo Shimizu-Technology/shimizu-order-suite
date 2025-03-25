@@ -74,6 +74,9 @@ Rails.application.routes.draw do
       post :set_active
       post :clone
     end
+    
+    # Nest categories under menus
+    resources :categories, only: [ :index, :create, :update, :destroy ]
   end
   resources :menu_items, only: [ :index, :show, :create, :update, :destroy ]
   resources :notifications, only: [ :index, :show, :create, :update, :destroy ] do
@@ -99,7 +102,7 @@ Rails.application.routes.draw do
   get "/availability", to: "availability#index"
 
   # -------------------------
-  # PUBLIC categories endpoint
+  # PUBLIC categories endpoint (for backward compatibility)
   # -------------------------
   resources :categories, only: [ :index ]
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_22_042900) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_25_062706) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -47,9 +47,10 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_22_042900) do
     t.integer "position", default: 0
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.bigint "restaurant_id", null: false
     t.text "description"
-    t.index ["restaurant_id"], name: "index_categories_on_restaurant_id"
+    t.bigint "menu_id", null: false
+    t.index ["menu_id", "name"], name: "index_categories_on_menu_id_and_name", unique: true
+    t.index ["menu_id"], name: "index_categories_on_menu_id"
   end
 
   create_table "inventory_statuses", force: :cascade do |t|
@@ -178,7 +179,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_22_042900) do
     t.integer "damaged_quantity", default: 0
     t.index ["merchandise_item_id", "size", "color"], name: "index_merch_variants_on_item_size_color"
     t.index ["merchandise_item_id"], name: "index_merchandise_variants_on_merchandise_item_id"
-    t.index ["stock_quantity"], name: "index_merchandise_variants_on_stock_quantity"
   end
 
   create_table "notifications", force: :cascade do |t|
@@ -284,8 +284,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_22_042900) do
     t.string "transaction_id"
     t.string "payment_status", default: "pending"
     t.decimal "payment_amount", precision: 10, scale: 2
-    t.string "vip_code"
     t.bigint "vip_access_code_id"
+    t.string "vip_code"
     t.jsonb "merchandise_items", default: []
     t.decimal "refund_amount", precision: 10, scale: 2
     t.string "dispute_reason"
@@ -296,22 +296,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_22_042900) do
     t.index ["user_id", "created_at"], name: "index_orders_on_user_id_and_created_at"
     t.index ["user_id"], name: "index_orders_on_user_id"
     t.index ["vip_access_code_id"], name: "index_orders_on_vip_access_code_id"
-  end
-
-  create_table "players", force: :cascade do |t|
-    t.string "name"
-    t.text "about"
-    t.bigint "team_id", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["team_id"], name: "index_players_on_team_id"
-  end
-
-  create_table "posts", force: :cascade do |t|
-    t.string "title"
-    t.text "content"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
   end
 
   create_table "promo_codes", force: :cascade do |t|
@@ -494,13 +478,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_22_042900) do
     t.index ["status"], name: "index_store_credits_on_status"
   end
 
-  create_table "teams", force: :cascade do |t|
-    t.string "name"
-    t.text "about"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-  end
-
   create_table "users", force: :cascade do |t|
     t.string "email", null: false
     t.string "password_digest", null: false
@@ -569,7 +546,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_22_042900) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
-  add_foreign_key "categories", "restaurants"
+  add_foreign_key "categories", "menus"
   add_foreign_key "inventory_statuses", "menu_items"
   add_foreign_key "layouts", "restaurants"
   add_foreign_key "menu_item_categories", "categories"
@@ -593,7 +570,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_22_042900) do
   add_foreign_key "orders", "restaurants"
   add_foreign_key "orders", "users"
   add_foreign_key "orders", "vip_access_codes"
-  add_foreign_key "players", "teams"
   add_foreign_key "promo_codes", "restaurants"
   add_foreign_key "push_subscriptions", "restaurants"
   add_foreign_key "reservations", "restaurants"

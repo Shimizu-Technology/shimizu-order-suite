@@ -12,8 +12,12 @@ module Admin
 
     # GET /admin/categories
     def index
-      # Could also sort by :position, :name, etc.
-      categories = Category.order(:name)
+      # Filter by menu_id if provided
+      categories = if params[:menu_id].present?
+                    Menu.find(params[:menu_id]).categories.order(:position, :name)
+                  else
+                    Category.order(:position, :name)
+                  end
       render json: categories
     end
 
@@ -47,9 +51,16 @@ module Admin
     private
 
   def category_params
-    # Include restaurant_id from the URL parameter
-    permitted_params = params.require(:category).permit(:name, :position, :description)
-    permitted_params[:restaurant_id] = params[:restaurant_id] if params[:restaurant_id].present?
+    # Include menu_id and restaurant_id from the URL parameters
+    permitted_params = params.require(:category).permit(:name, :position, :description, :menu_id)
+    
+    # For backward compatibility during transition
+    if params[:restaurant_id].present? && !permitted_params[:menu_id].present?
+      # If restaurant_id is provided but menu_id is not, use the restaurant's current menu
+      restaurant = Restaurant.find(params[:restaurant_id])
+      permitted_params[:menu_id] = restaurant.current_menu_id if restaurant.current_menu_id
+    end
+    
     permitted_params
   end
 
