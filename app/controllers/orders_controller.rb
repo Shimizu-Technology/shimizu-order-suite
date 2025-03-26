@@ -597,6 +597,7 @@ class OrdersController < ApplicationController
       :payment_status,
       :payment_amount,
       :vip_code,
+      :payment_details,
       :items, # Permit items as a whole first
       merchandise_items: [
         :id,

@@ -30,7 +30,30 @@ class OrderPaymentsController < ApplicationController
       return render json: { error: "No additional payment needed" }, status: :unprocessable_entity
     end
 
-    # Create a payment intent for the additional amount
+    # Get payment method from params
+    payment_method = params[:payment_method] || "credit_card"
+    
+    # Handle manual payment methods (clover, revel, other)
+    if ["clover", "revel", "other"].include?(payment_method.downcase)
+      # Create a completed payment record for manual payment
+      @payment = @order.order_payments.create(
+        payment_type: "additional",
+        amount: additional_amount,
+        payment_method: payment_method,
+        status: "paid", # Mark as paid immediately
+        description: "Manual payment (#{payment_method}): #{params[:items].map { |i| "#{i[:quantity]}x #{i[:name]}" }.join(", ")}",
+        transaction_id: params[:payment_details]&.dig(:transaction_id) || "#{payment_method}_#{SecureRandom.hex(8)}",
+        payment_details: params[:payment_details]
+      )
+      
+      # Update the order with new items
+      @order.update(items: params[:items]) if params[:items].present?
+      
+      render json: { payment: @payment }
+      return
+    end
+
+    # For standard payment processors (Stripe/PayPal), create a payment intent
     restaurant = @order.restaurant
     result = nil
 

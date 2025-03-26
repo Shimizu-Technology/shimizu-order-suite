@@ -175,6 +175,7 @@ class Order < ApplicationRecord
       "transaction_id" => transaction_id,
       "payment_status" => payment_status,
       "payment_amount" => payment_amount.to_f,
+      "payment_details" => payment_details,
 
       # VIP code (if present)
       "vip_code" => vip_code,
