@@ -135,6 +135,11 @@ Rails.application.routes.draw do
     get "analytics/user_signups",      to: "analytics#user_signups"
     get "analytics/user_activity_heatmap", to: "analytics#user_activity_heatmap"
     
+    # VIP Reports
+    get "reports/menu_items",         to: "reports#menu_items"
+    get "reports/payment_methods",     to: "reports#payment_methods"
+    get "reports/vip_customers",      to: "reports#vip_customers"
+    
     # System utilities
     post "test_sms", to: "system#test_sms"
     post "test_pushover", to: "system#test_pushover"
