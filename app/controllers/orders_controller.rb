@@ -60,7 +60,9 @@ class OrdersController < ApplicationController
     end
 
     last_id = params[:id].to_i
-    new_orders = Order.where("id > ?", last_id).order(:id)
+    new_orders = Order.where("id > ?", last_id)
+                      .where(staff_created: [false, nil]) # Exclude staff-created orders
+                      .order(:id)
     render json: new_orders, status: :ok
   end
 
@@ -77,8 +79,10 @@ class OrdersController < ApplicationController
     # Find orders that:
     # 1. Are newer than the time threshold
     # 2. Haven't been acknowledged by the current user
+    # 3. Were not created by staff
     unacknowledged_orders = Order.where("created_at > ?", time_threshold)
                                  .where.not(id: current_user.acknowledged_orders.pluck(:id))
+                                 .where(staff_created: [false, nil]) # Exclude staff-created orders
                                  .order(created_at: :desc)
 
     render json: unacknowledged_orders, status: :ok
@@ -208,6 +212,7 @@ class OrdersController < ApplicationController
 
     @order = Order.new(new_params)
     @order.status = "pending"
+    @order.staff_created = params[:order][:staff_modal] == true
 
     # Single-query for MenuItems => avoids N+1
     if @order.items.present?

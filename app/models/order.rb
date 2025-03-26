@@ -229,6 +229,7 @@ class Order < ApplicationRecord
 
   def notify_whatsapp
     return if Rails.env.test?
+    return if staff_created # Skip notifications for staff-created orders
 
     # Get the WhatsApp group ID from the restaurant's admin_settings
     group_id = restaurant.admin_settings&.dig("whatsapp_group_id")
@@ -263,10 +264,11 @@ class Order < ApplicationRecord
     # Instead of calling Wassenger inline, enqueue an async job:
     SendWhatsappJob.perform_later(group_id, message_text)
   end
-  
   def notify_pushover
     return if Rails.env.test?
+    return if staff_created # Skip notifications for staff-created orders
     
+    # Format the order items for the notification
     # Format the order items for the notification
     food_item_lines = items.map do |item|
       "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
@@ -300,6 +302,7 @@ class Order < ApplicationRecord
   
   def notify_web_push
     return if Rails.env.test?
+    return if staff_created # Skip notifications for staff-created orders
     return unless restaurant.web_push_enabled?
     
     # Format the order items for the notification
