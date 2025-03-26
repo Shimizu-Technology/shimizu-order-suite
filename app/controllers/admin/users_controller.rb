@@ -75,6 +75,12 @@ module Admin
     # PATCH /admin/users/:id
     def update
       user = User.find(params[:id])
+      
+      # If staff is trying to change a user's role, prevent it
+      if !current_user.admin? && params[:role].present? && params[:role] != user.role
+        return render json: { error: "Only admin users can change user roles" }, status: :forbidden
+      end
+      
       if user.update(user_params)
         render json: user
       else
@@ -84,6 +90,11 @@ module Admin
 
     # DELETE /admin/users/:id
     def destroy
+      # Only admin users can delete users
+      unless current_user.admin?
+        return render json: { error: "Only admin users can delete users" }, status: :forbidden
+      end
+
       user = User.find(params[:id])
 
       # Prevent deleting self
@@ -115,6 +126,11 @@ module Admin
 
   # POST /admin/users/:id/resend_invite
   def resend_invite
+    # Only admin users can resend invites
+    unless current_user.admin?
+      return render json: { error: "Only admin users can resend invitations" }, status: :forbidden
+    end
+    
     user = User.find(params[:id])
     # Re-generate reset token & re-send the same "reset password" email
     raw_token = user.generate_reset_password_token!
@@ -125,6 +141,11 @@ module Admin
 
   # POST /admin/users/:id/admin_reset_password
   def admin_reset_password
+    # Only admin users can reset passwords
+    unless current_user.admin?
+      return render json: { error: "Only admin users can reset passwords" }, status: :forbidden
+    end
+    
     user = User.find(params[:id])
 
     # Get the password from params
@@ -150,7 +171,7 @@ module Admin
   private
 
     def require_admin!
-      unless current_user && current_user.role.in?(%w[admin super_admin])
+      unless current_user && current_user.role.in?(%w[admin super_admin staff])
         render json: { error: "Forbidden" }, status: :forbidden
       end
     end
@@ -161,14 +182,17 @@ module Admin
       permitted = params.permit(:email, :first_name, :last_name, :phone, :restaurant_id)
 
       # For role, ensure we're not creating a user with higher privileges than the current user
-      if params[:role].present?
-        # Only allow "customer" or "admin" roles (no super_admin)
-        if params[:role].in?(%w[customer admin])
+      if params[:role].present? && current_user.admin?
+        # Only allow "customer", "staff", or "admin" roles (no super_admin)
+        if params[:role].in?(%w[customer staff admin])
           permitted[:role] = params[:role]
         else
           # Default to customer if an invalid role is provided
           permitted[:role] = "customer"
         end
+      elsif params[:role].present? && current_user.staff?
+        # Staff users can only create customer users
+        permitted[:role] = "customer"
       end
 
       permitted

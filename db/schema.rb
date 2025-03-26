@@ -290,6 +290,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_26_121500) do
     t.decimal "refund_amount", precision: 10, scale: 2
     t.string "dispute_reason"
     t.string "payment_id"
+    t.bigint "created_by_id"
+    t.index ["created_by_id"], name: "index_orders_on_created_by_id"
     t.index ["payment_id"], name: "index_orders_on_payment_id"
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
@@ -542,6 +544,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_26_121500) do
   add_foreign_key "order_payments", "orders"
   add_foreign_key "orders", "restaurants"
   add_foreign_key "orders", "users"
+  add_foreign_key "orders", "users", column: "created_by_id"
   add_foreign_key "orders", "vip_access_codes"
   add_foreign_key "promo_codes", "restaurants"
   add_foreign_key "push_subscriptions", "restaurants"

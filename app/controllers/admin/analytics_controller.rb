@@ -252,7 +252,7 @@ module Admin
     private
 
     def require_admin!
-      unless current_user && current_user.role.in?(%w[admin super_admin])
+      unless current_user && current_user.role.in?(%w[admin super_admin staff])
         render json: { error: "Forbidden" }, status: :forbidden
       end
     end

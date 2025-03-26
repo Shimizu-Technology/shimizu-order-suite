@@ -1,7 +1,11 @@
 # app/controllers/orders_controller.rb
 
 class OrdersController < ApplicationController
+  include Pundit::Authorization
+  
   before_action :authorize_request, except: [ :create, :show ]
+  after_action :verify_authorized, except: [:create, :show, :index, :new_since, :unacknowledged]
+  after_action :verify_policy_scoped, only: [:index, :new_since, :unacknowledged]
 
   # Mark create, show, new_since, index, update, and destroy as public endpoints
   # that don't require restaurant context
@@ -14,17 +18,16 @@ class OrdersController < ApplicationController
 
   # GET /orders
   def index
-    if current_user&.role.in?(%w[admin super_admin])
-      @orders = Order.all
-    elsif current_user
-      @orders = current_user.orders
-    else
-      return render json: { error: "Unauthorized" }, status: :unauthorized
+    @orders = policy_scope(Order)
+    
+    # Add staff filter for admins
+    if current_user&.admin? && params[:staff_id].present?
+      @orders = @orders.where(created_by_id: params[:staff_id])
     end
 
     # Add pagination
     page = (params[:page] || 1).to_i
-    per_page = (params[:per_page] || 5).to_i
+    per_page = (params[:per_page] || 50).to_i
 
     # Get total count before pagination
     total_count = @orders.count
@@ -45,30 +48,24 @@ class OrdersController < ApplicationController
   # GET /orders/:id
   def show
     order = Order.find(params[:id])
-    if current_user&.role.in?(%w[admin super_admin]) ||
-       (current_user && current_user.id == order.user_id)
-      render json: order
-    else
-      render json: { error: "Forbidden" }, status: :forbidden
-    end
+    authorize order
+    render json: order
   end
 
   # GET /orders/new_since/:id
   def new_since
-    unless current_user&.role.in?(%w[admin super_admin])
-      return render json: { error: "Forbidden" }, status: :forbidden
-    end
-
+    # Use policy_scope to get orders based on user role
+    @orders = policy_scope(Order)
+    
     last_id = params[:id].to_i
-    new_orders = Order.where("id > ?", last_id).order(:id)
+    new_orders = @orders.where("id > ?", last_id).order(:id)
     render json: new_orders, status: :ok
   end
 
   # GET /orders/unacknowledged
   def unacknowledged
-    unless current_user&.role.in?(%w[admin super_admin])
-      return render json: { error: "Forbidden" }, status: :forbidden
-    end
+    # Use policy_scope to get orders based on user role
+    @orders = policy_scope(Order)
 
     # Get time threshold (default to 24 hours ago)
     hours = params[:hours].present? ? params[:hours].to_i : 24
@@ -77,7 +74,7 @@ class OrdersController < ApplicationController
     # Find orders that:
     # 1. Are newer than the time threshold
     # 2. Haven't been acknowledged by the current user
-    unacknowledged_orders = Order.where("created_at > ?", time_threshold)
+    unacknowledged_orders = @orders.where("created_at > ?", time_threshold)
                                  .where.not(id: current_user.acknowledged_orders.pluck(:id))
                                  .order(created_at: :desc)
 
@@ -87,6 +84,7 @@ class OrdersController < ApplicationController
   # POST /orders/:id/acknowledge
   def acknowledge
     order = Order.find(params[:id])
+    authorize order, :show?
 
     # Create acknowledgment record
     acknowledgment = OrderAcknowledgment.find_or_initialize_by(
@@ -129,13 +127,13 @@ class OrdersController < ApplicationController
     if restaurant.vip_only_checkout?
       # Skip VIP validation for admin/staff users
       # This allows staff to create orders through StaffOrderModal even when VIP mode is enabled
-      is_admin_user = @current_user && @current_user.role.in?(%w[admin super_admin])
+      is_admin_or_staff = @current_user && (@current_user.admin? || @current_user.staff?)
       
       # Log the VIP mode bypass for debugging
-      Rails.logger.info("VIP Mode Check - User: #{@current_user&.id}, Is Admin: #{is_admin_user}, Restaurant: #{restaurant.id}")
+      Rails.logger.info("VIP Mode Check - User: #{@current_user&.id}, Is Admin/Staff: #{is_admin_or_staff}, Restaurant: #{restaurant.id}")
       
-      # Only enforce VIP code for non-admin users
-      if !is_admin_user
+      # Only enforce VIP code for non-admin/staff users
+      if !is_admin_or_staff
         vip_code = params[:order][:vip_code]
 
         if vip_code.blank?
@@ -196,6 +194,9 @@ class OrdersController < ApplicationController
     new_params = order_params_admin # Since create does not forcibly restrict user fields
     new_params[:restaurant_id] ||= params[:restaurant_id] || 1
     new_params[:user_id] = @current_user&.id
+    
+    # Set the created_by_id to the current user's ID
+    new_params[:created_by_id] = @current_user&.id
 
     # Set VIP access code if found
     if defined?(vip_access_code) && vip_access_code
@@ -404,16 +405,16 @@ class OrdersController < ApplicationController
   # PATCH/PUT /orders/:id
   def update
     order = Order.find(params[:id])
-    return render json: { error: "Forbidden" }, status: :forbidden unless can_edit?(order)
-
+    authorize order
+    
     old_status = order.status
     old_pickup_time = order.estimated_pickup_time
 
     # 1) Store original items for inventory comparison
     original_items = order.items.deep_dup
 
-    # If admin => allow full params, else only partial
-    permitted_params = if current_user&.role.in?(%w[admin super_admin])
+    # If admin or staff => allow full params, else only partial
+    permitted_params = if current_user&.admin? || (current_user&.staff? && order.created_by_id == current_user.id)
                          order_params_admin
                        else
                          order_params_user
@@ -556,8 +557,8 @@ class OrdersController < ApplicationController
   # DELETE /orders/:id
   def destroy
     order = Order.find(params[:id])
-    return render json: { error: "Forbidden" }, status: :forbidden unless can_edit?(order)
-
+    authorize order
+    
     order.destroy
     head :no_content
   end
@@ -565,7 +566,8 @@ class OrdersController < ApplicationController
   private
 
   def can_edit?(order)
-    return true if current_user&.role.in?(%w[admin super_admin])
+    return true if current_user&.admin?
+    return true if current_user&.staff? && order.created_by_id == current_user.id
     current_user && order.user_id == current_user.id
   end
 
@@ -579,6 +581,7 @@ class OrdersController < ApplicationController
       :id,
       :restaurant_id,
       :user_id,
+      :created_by_id,
       :status,
       :total,
       :promo_code,

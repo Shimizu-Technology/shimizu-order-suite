@@ -9,6 +9,12 @@ class User < ApplicationRecord
   # Add associations for order acknowledgments
   has_many :order_acknowledgments, dependent: :destroy
   has_many :acknowledged_orders, through: :order_acknowledgments, source: :order
+  
+  # Orders created by this user (as staff or admin)
+  has_many :created_orders, class_name: 'Order', foreign_key: 'created_by_id'
+  
+  # Regular orders
+  has_many :orders
 
   has_secure_password
 
@@ -22,6 +28,9 @@ class User < ApplicationRecord
 
   validates :first_name, presence: true
   validates :last_name,  presence: true
+  
+  # Role validation
+  validates :role, inclusion: { in: %w[admin staff customer] }, allow_nil: true
 
   before_save :downcase_email
 
@@ -39,9 +48,17 @@ class User < ApplicationRecord
   def admin?
     role == "admin"
   end
+  
+  def staff?
+    role == "staff"
+  end
+  
+  def customer?
+    role.nil? || role == "customer"
+  end
 
   # -----------------------------------------------------------
-  # PASSWORD RESET LOGIC (unchanged from your existing code)
+  # PASSWORD RESET LOGIC
   # -----------------------------------------------------------
 
   def generate_reset_password_token!

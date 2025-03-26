@@ -134,6 +134,7 @@ class Order < ApplicationRecord
   belongs_to :restaurant
   belongs_to :user, optional: true
   belongs_to :vip_access_code, optional: true
+  belongs_to :created_by, class_name: 'User', optional: true
 
   # Add associations for order acknowledgments
   has_many :order_acknowledgments, dependent: :destroy
@@ -149,6 +150,14 @@ class Order < ApplicationRecord
   after_create :notify_whatsapp
   after_create :notify_pushover
   after_create :notify_web_push
+
+  # Scopes
+  scope :pending, -> { where(status: 'pending') }
+  scope :preparing, -> { where(status: 'preparing') }
+  scope :ready, -> { where(status: 'ready') }
+  scope :completed, -> { where(status: 'completed') }
+  scope :cancelled, -> { where(status: 'cancelled') }
+  scope :active, -> { where(status: ['pending', 'preparing', 'ready']) }
 
   # Convert total to float, add created/updated times, plus userId & contact info
   def as_json(options = {})
@@ -202,6 +211,14 @@ class Order < ApplicationRecord
       end
       max_hours
     end
+  end
+
+  def acknowledge_by(user)
+    order_acknowledgments.find_or_create_by(user: user)
+  end
+
+  def acknowledged_by?(user)
+    order_acknowledgments.exists?(user_id: user.id)
   end
 
   private

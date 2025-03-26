@@ -28,6 +28,8 @@ gem "stripe"
 gem "web-push", "~> 3.0.1"
 # Analytics
 gem "posthog-ruby"
+# Authorization
+gem "pundit"
 # Use the Puma web server [https://github.com/puma/puma]
 gem "puma", ">= 5.0"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
