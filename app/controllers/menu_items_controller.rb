@@ -284,6 +284,66 @@ class MenuItemsController < ApplicationController
 
     render json: audits
   end
+  
+  # POST /menu_items/:id/copy
+  def copy
+    Rails.logger.info "=== MenuItemsController#copy ==="
+    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
+    
+    source_item = MenuItem.find(params[:id])
+    target_menu_id = params[:target_menu_id]
+    category_ids = params[:category_ids] || []
+    
+    unless target_menu_id.present?
+      return render json: { error: "Target menu ID is required" }, status: :unprocessable_entity
+    end
+    
+    # Create a new item with the same attributes but new menu_id
+    new_item = source_item.dup
+    new_item.menu_id = target_menu_id
+    
+    # Assign categories
+    new_item.category_ids = category_ids if category_ids.present?
+    
+    # Reset inventory audit history while keeping current inventory values
+    if new_item.enable_stock_tracking
+      new_item.stock_quantity = source_item.stock_quantity
+      new_item.damaged_quantity = source_item.damaged_quantity
+      new_item.low_stock_threshold = source_item.low_stock_threshold
+      # Don't copy inventory_audits - they should start fresh
+    end
+    
+    # Keep the same image URL
+    new_item.image_url = source_item.image_url
+    
+    # Save the new item
+    if new_item.save
+      Rails.logger.info "Created copied MenuItem => #{new_item.inspect}"
+      
+      # Copy all option groups and their options
+      if source_item.option_groups.present?
+        source_item.option_groups.each do |source_group|
+          # Create a new option group for the new item
+          new_group = source_group.dup
+          new_group.menu_item_id = new_item.id
+          
+          if new_group.save
+            # Copy all options within the group
+            source_group.options.each do |source_option|
+              new_option = source_option.dup
+              new_option.option_group_id = new_group.id
+              new_option.save
+            end
+          end
+        end
+      end
+      
+      render json: new_item, status: :created
+    else
+      Rails.logger.info "Failed to copy menu item => #{new_item.errors.full_messages.inspect}"
+      render json: { errors: new_item.errors.full_messages }, status: :unprocessable_entity
+    end
+  end
 
   private
 

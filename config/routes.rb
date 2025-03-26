@@ -231,6 +231,7 @@ Rails.application.routes.draw do
       post :mark_as_damaged
       post :update_stock
       get :stock_audits
+      post :copy
     end
 
     # For listing or creating option groups under a given menu item:
