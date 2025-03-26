@@ -102,6 +102,12 @@ class OrdersController < ApplicationController
   end
 
   # POST /orders
+  #
+  # Creates a new order with the following behavior:
+  # - Validates payment information
+  # - Checks VIP mode restrictions (bypassed for admin/staff users)
+  # - Processes inventory adjustments
+  # - Sends notifications to customers
   def create
     # Optional decode of JWT for user lookup, treat as guest if invalid
     if request.headers["Authorization"].present?
@@ -121,34 +127,44 @@ class OrdersController < ApplicationController
 
     # Check for VIP-only restrictions
     if restaurant.vip_only_checkout?
-      vip_code = params[:order][:vip_code]
+      # Skip VIP validation for admin/staff users
+      # This allows staff to create orders through StaffOrderModal even when VIP mode is enabled
+      is_admin_user = @current_user && @current_user.role.in?(%w[admin super_admin])
+      
+      # Log the VIP mode bypass for debugging
+      Rails.logger.info("VIP Mode Check - User: #{@current_user&.id}, Is Admin: #{is_admin_user}, Restaurant: #{restaurant.id}")
+      
+      # Only enforce VIP code for non-admin users
+      if !is_admin_user
+        vip_code = params[:order][:vip_code]
 
-      if vip_code.blank?
-        return render json: {
-          error: "This restaurant is currently only accepting orders from VIP guests. Please enter a VIP code.",
-          vip_required: true
-        }, status: :unprocessable_entity
-      end
-
-      # Find the VIP access code to associate with the order
-      vip_access_code = VipAccessCode.find_by(restaurant_id: restaurant.id, code: vip_code)
-
-      # Check if the code exists and is available
-      if vip_access_code && vip_access_code.available?
-        # Mark that the code was used (after validation but before saving the order)
-        vip_access_code.use!
-      else
-        # Provide a more specific error message if the code exists but has reached its usage limit
-        if vip_access_code && vip_access_code.max_uses && vip_access_code.current_uses >= vip_access_code.max_uses
+        if vip_code.blank?
           return render json: {
-            error: "This VIP code has reached its maximum usage limit.",
+            error: "This restaurant is currently only accepting orders from VIP guests. Please enter a VIP code.",
             vip_required: true
           }, status: :unprocessable_entity
+        end
+
+        # Find the VIP access code to associate with the order
+        vip_access_code = VipAccessCode.find_by(restaurant_id: restaurant.id, code: vip_code)
+
+        # Check if the code exists and is available
+        if vip_access_code && vip_access_code.available?
+          # Mark that the code was used (after validation but before saving the order)
+          vip_access_code.use!
         else
-          return render json: {
-            error: "Invalid VIP code. Please check your code and try again.",
-            vip_required: true
-          }, status: :unprocessable_entity
+          # Provide a more specific error message if the code exists but has reached its usage limit
+          if vip_access_code && vip_access_code.max_uses && vip_access_code.current_uses >= vip_access_code.max_uses
+            return render json: {
+              error: "This VIP code has reached its maximum usage limit.",
+              vip_required: true
+            }, status: :unprocessable_entity
+          else
+            return render json: {
+              error: "Invalid VIP code. Please check your code and try again.",
+              vip_required: true
+            }, status: :unprocessable_entity
+          end
         end
       end
     end
