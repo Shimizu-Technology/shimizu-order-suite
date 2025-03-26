@@ -9,7 +9,6 @@ class User < ApplicationRecord
   # Add associations for order acknowledgments
   has_many :order_acknowledgments, dependent: :destroy
   has_many :acknowledged_orders, through: :order_acknowledgments, source: :order
-  has_many :staff_discounts
 
   has_secure_password
 
@@ -39,25 +38,6 @@ class User < ApplicationRecord
 
   def admin?
     role == "admin"
-  end
-  
-  def staff?
-    role == "admin" || role == "staff"
-  end
-  
-  def update_house_account_balance!(amount)
-    update!(house_account_balance: house_account_balance + amount)
-  end
-  
-  def pay_house_account!(amount = nil)
-    amount ||= house_account_balance
-    amount = [amount, house_account_balance].min
-    
-    if amount > 0
-      update!(house_account_balance: house_account_balance - amount)
-    end
-    
-    return amount
   end
 
   # -----------------------------------------------------------

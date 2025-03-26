@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_25_062706) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_26_121500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -437,32 +437,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_25_062706) do
     t.index ["restaurant_id"], name: "index_special_events_on_restaurant_id"
   end
 
-  create_table "staff_beneficiaries", force: :cascade do |t|
-    t.string "name", null: false
-    t.bigint "restaurant_id", null: false
-    t.boolean "active", default: true
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["restaurant_id", "name"], name: "index_staff_beneficiaries_on_restaurant_id_and_name", unique: true
-  end
-
-  create_table "staff_discounts", force: :cascade do |t|
-    t.bigint "order_id", null: false
-    t.bigint "user_id", null: false
-    t.bigint "staff_beneficiary_id"
-    t.decimal "discount_amount", precision: 10, scale: 2, null: false
-    t.decimal "original_amount", precision: 10, scale: 2, null: false
-    t.boolean "is_working", null: false
-    t.string "payment_method", null: false
-    t.boolean "is_paid", default: false
-    t.datetime "paid_at"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["order_id"], name: "index_staff_discounts_on_order_id"
-    t.index ["staff_beneficiary_id"], name: "index_staff_discounts_on_staff_beneficiary_id"
-    t.index ["user_id"], name: "index_staff_discounts_on_user_id"
-  end
-
   create_table "store_credits", force: :cascade do |t|
     t.bigint "order_id"
     t.string "customer_email", null: false
@@ -493,7 +467,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_25_062706) do
     t.boolean "phone_verified", default: false
     t.string "verification_code"
     t.datetime "verification_code_sent_at"
-    t.decimal "house_account_balance", precision: 10, scale: 2, default: "0.0"
     t.index "lower((email)::text)", name: "index_users_on_lower_email", unique: true
     t.index ["phone"], name: "index_users_on_phone_not_null", where: "(phone IS NOT NULL)"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
@@ -583,10 +556,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_25_062706) do
   add_foreign_key "seat_sections", "layouts"
   add_foreign_key "seats", "seat_sections"
   add_foreign_key "special_events", "restaurants"
-  add_foreign_key "staff_beneficiaries", "restaurants"
-  add_foreign_key "staff_discounts", "orders"
-  add_foreign_key "staff_discounts", "staff_beneficiaries"
-  add_foreign_key "staff_discounts", "users"
   add_foreign_key "users", "restaurants"
   add_foreign_key "vip_access_codes", "restaurants"
   add_foreign_key "vip_access_codes", "special_events"

@@ -22,7 +22,6 @@ class Order < ApplicationRecord
   ]
 
   has_many :order_payments, dependent: :destroy
-  has_one :staff_discount
 
   # Payment helper methods
   def initial_payment
@@ -126,8 +125,8 @@ class Order < ApplicationRecord
     end
   end
 
-  # Virtual attributes (not stored in database)
-  attr_accessor :vip_code, :is_staff_order, :staff_is_working, :staff_payment_method, :staff_beneficiary_id
+  # Virtual attribute for VIP code (not stored in database)
+  attr_accessor :vip_code
 
   # Default scope to current restaurant
   default_scope { with_restaurant_scope }
