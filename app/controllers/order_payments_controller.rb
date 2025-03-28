@@ -250,14 +250,52 @@ class OrderPaymentsController < ApplicationController
       render json: { error: result[:error] }, status: :unprocessable_entity
     end
   end
+# POST /orders/:order_id/payments/cash
+def process_cash_payment
+  # Extract parameters
+  cash_received = params[:cash_received].to_f
+  order_total = params[:order_total].to_f
+  
+  # Validate input
+  if cash_received < order_total
+    return render json: { error: 'Cash received must be at least equal to the order total' }, status: :unprocessable_entity
+  end
+  
+  # Calculate change
+  change_due = cash_received - order_total
+  
+  # Create payment record
+  @payment = @order.order_payments.create!(
+    payment_type: "additional",
+    amount: order_total,
+    payment_method: 'cash',
+    cash_received: cash_received,
+    change_due: change_due,
+    status: "paid",
+    transaction_id: "cash_#{Time.now.to_i}",
+    description: "Cash payment with change: $#{change_due.round(2)}"
+  )
+  
+  # Update order status if needed
+  @order.update!(payment_status: 'paid') if @order.payment_status != 'paid'
+  
+  # Return success response with change information
+  render json: {
+    success: true,
+    payment: @payment,
+    transaction_id: @payment.transaction_id,
+    change_due: change_due
+  }
+end
 
-  # POST /orders/:order_id/payments/refund
-  def create_refund
-    refund_amount = params[:amount].to_f
-    Rails.logger.info("Refund amount: #{refund_amount}")
+# POST /orders/:order_id/payments/refund
+def create_refund
+  refund_amount = params[:amount].to_f
+  Rails.logger.info("Refund amount: #{refund_amount}")
 
-    # Validate the refund amount
-    max_refundable = @order.total_paid - @order.total_refunded
+  # Validate the refund amount
+  max_refundable = @order.total_paid - @order.total_refunded
+  Rails.logger.info("Max refundable: #{max_refundable}, total_paid: #{@order.total_paid}, total_refunded: #{@order.total_refunded}")
     Rails.logger.info("Max refundable: #{max_refundable}, total_paid: #{@order.total_paid}, total_refunded: #{@order.total_refunded}")
 
     # Get restaurant settings
@@ -285,18 +323,33 @@ class OrderPaymentsController < ApplicationController
       # This ensures the payment_intent_id format is recognized by the create_stripe_refund method
       fake_payment_id = test_mode ? "pi_test_#{SecureRandom.hex(16)}" : "test_payment_#{SecureRandom.hex(8)}"
 
-      # Determine the payment method based on restaurant settings
-      payment_method = restaurant.admin_settings&.dig("payment_gateway", "payment_processor") || "stripe"
+      # Use the original payment method from the order if available, otherwise fallback to payment processor
+      payment_method = @order.payment_method.presence ||
+                       restaurant.admin_settings&.dig("payment_gateway", "payment_processor") ||
+                       "stripe"
+      
+      Rails.logger.info("Creating initial payment record for order #{@order.id} with payment_method: #{payment_method}")
 
-      payment = @order.order_payments.create(
+      # Prepare payment attributes
+      payment_amount = @order.total || refund_amount # Use the original order total, fallback to refund amount
+      payment_attributes = {
         payment_type: "initial",
-        amount: refund_amount * 2, # Make sure it's more than the refund amount
+        amount: payment_amount,
         payment_method: payment_method,
         status: "paid",
         transaction_id: fake_payment_id,
         payment_id: fake_payment_id, # Ensure payment_id is set to the same value
         description: "Test payment"
-      )
+      }
+      
+      # For cash payments, we need to set cash_received and change_due to satisfy validations
+      if payment_method == 'cash'
+        Rails.logger.info("Setting cash_received for cash payment")
+        payment_attributes[:cash_received] = payment_amount # For initial payments, cash_received should equal the amount
+        payment_attributes[:change_due] = 0 # No change for this test payment
+      end
+
+      payment = @order.order_payments.create(payment_attributes)
 
       # Force reload the order to recalculate total_paid
       @order.reload
@@ -349,26 +402,95 @@ class OrderPaymentsController < ApplicationController
       # Store refunded items if provided
       refunded_items = params[:refunded_items]
 
-      # Create a refund record
-      @refund = @order.order_payments.create(
+      # Create a refund record - use the same payment method as the original payment
+      Rails.logger.info("Creating refund with payment method: #{original_payment.payment_method} (from original payment)")
+      
+      # Prepare refund attributes
+      refund_attributes = {
         payment_type: "refund",
         amount: refund_amount,
-        payment_method: restaurant.admin_settings&.dig("payment_gateway", "payment_processor"),
+        payment_method: original_payment.payment_method, # Use the original payment method
         status: "completed",
         transaction_id: result[:transaction_id],
         payment_id: result[:refund_id],
         payment_details: result[:details].merge(refunded_items: refunded_items),
         description: params[:description] || params[:reason] || "Refund",
         refunded_items: refunded_items # Store refunded items directly on the record
-      )
+      }
+      
+      # For cash payments, we need to set cash_received and change_due to satisfy validations
+      if original_payment.payment_method == 'cash'
+        Rails.logger.info("Setting cash_received for cash refund")
+        refund_attributes[:cash_received] = refund_amount # For refunds, cash_received should equal the amount
+        refund_attributes[:change_due] = 0 # No change for refunds
+      end
+      
+      @refund = @order.order_payments.create(refund_attributes)
 
-      # Update the order status based on refund amount
-      if (@order.total_paid - @order.total_refunded).abs < 0.01
-        # Full refund
-        @order.update(payment_status: Order::STATUS_REFUNDED, status: Order::STATUS_REFUNDED)
+      # Check if all items in the order have been refunded
+      all_items_refunded = false
+      
+      # If refunded_items is provided, check if all items in the order are refunded
+      if refunded_items.present?
+        # Get all items from the order
+        order_items = @order.items || []
+        
+        # Create a hash to track quantities by item ID
+        order_item_quantities = {}
+        order_items.each do |item|
+          item_id = item["id"].to_s
+          order_item_quantities[item_id] ||= 0
+          order_item_quantities[item_id] += item["quantity"].to_i
+        end
+        
+        # Create a hash to track refunded quantities by item ID (including previous refunds)
+        refunded_item_quantities = {}
+        @order.refunds.each do |refund|
+          refund_items = refund.refunded_items || []
+          refund_items.each do |item|
+            item_id = item["id"].to_s
+            refunded_item_quantities[item_id] ||= 0
+            refunded_item_quantities[item_id] += item["quantity"].to_i
+          end
+        end
+        
+        # Add current refund items to the refunded quantities
+        refunded_items.each do |item|
+          item_id = item["id"].to_s
+          refunded_item_quantities[item_id] ||= 0
+          refunded_item_quantities[item_id] += item["quantity"].to_i
+        end
+        
+        # Check if all items have been refunded by comparing quantities for each item
+        all_items_refunded = true
+        order_item_quantities.each do |item_id, quantity|
+          refunded_quantity = refunded_item_quantities[item_id] || 0
+          if refunded_quantity < quantity
+            all_items_refunded = false
+            break
+          end
+        end
+        
+        Rails.logger.info("Order items: #{order_item_quantities.inspect}")
+        Rails.logger.info("Refunded items: #{refunded_item_quantities.inspect}")
+        Rails.logger.info("All items refunded: #{all_items_refunded}")
+      end
+      
+      # Update payment status based on refund amount
+      if (@order.total_paid - @order.total_refunded - refund_amount).abs < 0.01
+        # Full payment refund
+        @order.update(payment_status: Order::STATUS_REFUNDED)
       else
-        # Partial refund
-        @order.update(payment_status: Order::STATUS_PARTIALLY_REFUNDED, status: Order::STATUS_PARTIALLY_REFUNDED)
+        # Partial payment refund
+        @order.update(payment_status: Order::STATUS_PARTIALLY_REFUNDED)
+      end
+      
+      # Update order status based on whether all items were refunded
+      if all_items_refunded
+        @order.update(status: Order::STATUS_REFUNDED)
+      elsif @order.status != Order::STATUS_REFUNDED
+        # Only update to partially refunded if not already refunded
+        @order.update(status: Order::STATUS_PARTIALLY_REFUNDED)
       end
 
       render json: { refund: @refund }

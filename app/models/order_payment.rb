@@ -3,6 +3,12 @@ class OrderPayment < ApplicationRecord
 
   validates :payment_type, inclusion: { in: [ "initial", "additional", "refund" ] }
   validates :amount, presence: true, numericality: { greater_than: 0 }
+  
+  # Validations for cash payments
+  validates :cash_received, presence: true, numericality: { greater_than_or_equal_to: :amount }, if: -> { payment_method == 'cash' }
+  
+  # Before save callback to ensure change_due is calculated
+  before_save :ensure_change_calculated, if: -> { payment_method == 'cash' && cash_received.present? }
 
   # For refunds, amount should not exceed the order total
   validate :refund_amount_valid, if: -> { payment_type == "refund" }
@@ -19,7 +25,18 @@ class OrderPayment < ApplicationRecord
     []
   end
 
+  # Helper method to calculate change
+  def calculate_change
+    return 0 unless payment_method == 'cash' && cash_received.present?
+    [cash_received - amount, 0].max
+  end
+
   private
+
+  # Ensure change_due is calculated before saving
+  def ensure_change_calculated
+    self.change_due = calculate_change
+  end
 
   def refund_amount_valid
     total_paid = order.order_payments

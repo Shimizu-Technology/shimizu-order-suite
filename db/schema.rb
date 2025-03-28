@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_27_024200) do
+ActiveRecord::Schema[7.2].define(version: 2025_03_28_033500) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -261,6 +261,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_27_024200) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.jsonb "refunded_items"
+    t.decimal "cash_received", precision: 10, scale: 2
+    t.decimal "change_due", precision: 10, scale: 2
     t.index ["order_id"], name: "index_order_payments_on_order_id"
     t.index ["payment_id"], name: "index_order_payments_on_payment_id"
     t.index ["transaction_id"], name: "index_order_payments_on_transaction_id"
