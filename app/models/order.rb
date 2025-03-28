@@ -145,10 +145,11 @@ class Order < ApplicationRecord
   # Store vip_code in the database column if provided
   before_save :store_vip_code
 
-  # After creation, enqueue background jobs for notifications
+  # After creation, enqueue background jobs for notifications and process inventory
   after_create :notify_whatsapp
   after_create :notify_pushover
   after_create :notify_web_push
+  after_create :process_inventory
 
   # Convert total to float, add created/updated times, plus userId & contact info
   def as_json(options = {})
@@ -336,5 +337,60 @@ class Order < ApplicationRecord
     }
     
     SendWebPushNotificationJob.perform_later(restaurant_id, payload)
+  end
+  
+  # Process inventory for a new order
+  def process_inventory!
+    items.each do |order_item|
+      # Get the quantity ordered
+      quantity = order_item["quantity"].to_i
+      
+      # Process option-level inventory
+      if order_item["selected_options"].present?
+        order_item["selected_options"].each do |option_id|
+          option = Option.find_by(id: option_id)
+          if option&.enable_stock_tracking
+            option.reduce_stock!(quantity)
+          end
+        end
+      end
+    end
+  end
+
+  # Called after order creation
+  def process_inventory
+    process_inventory! if status == STATUS_PENDING || status == STATUS_PREPARING
+  end
+
+  # Return inventory when an order is refunded or canceled
+  def return_inventory!
+    items.each do |order_item|
+      # Get the quantity ordered
+      quantity = order_item["quantity"].to_i
+      
+      # Process option-level inventory
+      if order_item["selected_options"].present?
+        order_item["selected_options"].each do |option_id|
+          option = Option.find_by(id: option_id)
+          if option&.enable_stock_tracking
+            option.increase_stock!(quantity)
+          end
+        end
+      end
+    end
+  end
+
+  # Cancel or refund an order
+  def cancel_or_refund(reason = nil)
+    transaction do
+      # Update order status
+      update!(
+        status: STATUS_CANCELLED,
+        dispute_reason: reason
+      )
+      
+      # Return inventory
+      return_inventory!
+    end
   end
 end

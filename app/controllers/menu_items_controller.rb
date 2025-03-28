@@ -66,14 +66,26 @@ class MenuItemsController < ApplicationController
       return render json: { error: "Item not found" }, status: :not_found
     end
     
+    # Determine if we should include inventory fields for options
+    include_option_inventory = params[:include_options].present? && params[:include_options] == 'true'
+    
+    # Build options attributes based on whether to include inventory
+    options_attributes = {
+      only: [ :id, :name, :available, :is_preselected ],
+      methods: [ :additional_price_float ]
+    }
+    
+    # Add inventory fields if requested
+    if include_option_inventory
+      options_attributes[:only] += [ :enable_stock_tracking, :stock_quantity, :damaged_quantity, :low_stock_threshold, :stock_status ]
+      options_attributes[:methods] += [ :available_quantity ]
+    end
+    
     render json: item.as_json(
       include: {
         option_groups: {
           include: {
-            options: {
-              only: [ :id, :name, :available, :is_preselected ],
-              methods: [ :additional_price_float ]
-            }
+            options: options_attributes
           }
         }
       }
