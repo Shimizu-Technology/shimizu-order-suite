@@ -209,6 +209,11 @@ class OrdersController < ApplicationController
     # Set payment fields
     new_params[:payment_status] = "completed"
     new_params[:payment_amount] = new_params[:total]
+    
+    # Set payment details if provided
+    if params[:order][:payment_details].present?
+      new_params[:payment_details] = params[:order][:payment_details]
+    end
 
     @order = Order.new(new_params)
     @order.status = "pending"
@@ -287,7 +292,8 @@ class OrdersController < ApplicationController
           status: "paid",
           transaction_id: @order.transaction_id || payment_id,
           payment_id: payment_id,
-          description: "Initial payment"
+          description: "Initial payment",
+          payment_details: @order.payment_details || params[:order][:payment_details]
         )
         Rails.logger.info("Created initial OrderPayment record: #{payment.inspect}")
       end
