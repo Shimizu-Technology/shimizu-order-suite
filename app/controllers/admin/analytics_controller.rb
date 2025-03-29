@@ -75,16 +75,29 @@ module Admin
       }
     end
 
-    # GET /admin/analytics/revenue_trend?interval=day|week|month&start=...&end=...
+    # GET /admin/analytics/revenue_trend?interval=30min|hour|day|week|month&start=...&end=...
     def revenue_trend
       interval   = params[:interval].presence || "day"
-      start_date = params[:start].present? ? Date.parse(params[:start]) : 30.days.ago
-      end_date   = params[:end].present?   ? Date.parse(params[:end])   : Date.today
+      # Parse as DateTime instead of Date to support time-based intervals
+      start_date = params[:start].present? ? DateTime.parse(params[:start]) : 30.days.ago
+      end_date   = params[:end].present?   ? DateTime.parse(params[:end])   : DateTime.now
       end_date = end_date.end_of_day
 
       orders = Order.where.not(status: "cancelled").where(created_at: start_date..end_date)
 
       results = case interval
+      when "30min"
+        # Group by 30-minute intervals
+        orders.select("date_trunc('hour', created_at) +
+                      (date_part('minute', created_at)::integer / 30) * interval '30 minutes' as time_interval,
+                      SUM(total) as revenue")
+              .group("time_interval")
+              .order("time_interval")
+      when "hour"
+        # Group by hour
+        orders.select("date_trunc('hour', created_at) as time_interval, SUM(total) as revenue")
+              .group("time_interval")
+              .order("time_interval")
       when "week"
         orders.group("extract(year from created_at), extract(week from created_at)")
               .select("extract(year from created_at) as yr, extract(week from created_at) as wk, SUM(total) as revenue")
@@ -100,7 +113,10 @@ module Admin
       end
 
       data = results.map do |row|
-        if interval == "day"
+        if interval == "30min" || interval == "hour"
+          time_str = row.time_interval.strftime("%Y-%m-%d %H:%M")
+          { label: time_str, revenue: row.revenue.to_f.round(2) }
+        elsif interval == "day"
           { label: row.date, revenue: row.revenue.to_f.round(2) }
         elsif interval == "week"
           { label: "Year #{row.yr.to_i} - Week #{row.wk.to_i}", revenue: row.revenue.to_f.round(2) }
