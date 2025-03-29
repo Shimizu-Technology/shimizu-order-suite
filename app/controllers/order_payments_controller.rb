@@ -33,21 +33,22 @@ class OrderPaymentsController < ApplicationController
     # Get payment method from params
     payment_method = params[:payment_method] || "credit_card"
     
-    # Handle manual payment methods (clover, revel, other)
-    if ["clover", "revel", "other"].include?(payment_method.downcase)
-      # Create a completed payment record for manual payment
+    # Handle manual payment methods (cash, stripe_reader, clover, revel, other)
+    if ["cash", "stripe_reader", "clover", "revel", "other"].include?(payment_method.downcase)
+      # Use payment details from params if provided
+      payment_details = params[:payment_details] || {}
+      
       @payment = @order.order_payments.create(
         payment_type: "additional",
         amount: additional_amount,
-        payment_method: payment_method,
-        status: "paid", # Mark as paid immediately
-        description: "Manual payment (#{payment_method}): #{params[:items].map { |i| "#{i[:quantity]}x #{i[:name]}" }.join(", ")}",
-        transaction_id: params[:payment_details]&.dig(:transaction_id) || "#{payment_method}_#{SecureRandom.hex(8)}",
-        payment_details: params[:payment_details]
+        payment_method: payment_method, # Use the payment method as provided
+        status: payment_details["status"] || "paid",
+        description: "Additional items: #{params[:items].map { |i| "#{i[:quantity]}x #{i[:name]}" }.join(", ")}",
+        transaction_id: payment_details["transaction_id"],
+        payment_details: payment_details,
+        cash_received: payment_details["cash_received"],
+        change_due: payment_details["change_due"]
       )
-      
-      # Update the order with new items
-      @order.update(items: params[:items]) if params[:items].present?
       
       render json: { payment: @payment }
       return
@@ -68,7 +69,7 @@ class OrderPaymentsController < ApplicationController
       @payment = @order.order_payments.create(
         payment_type: "additional",
         amount: additional_amount,
-        payment_method: restaurant.admin_settings&.dig("payment_gateway", "payment_processor"),
+        payment_method: payment_method, # Use the payment method as provided
         status: "pending",
         description: "Additional items: #{params[:items].map { |i| "#{i[:quantity]}x #{i[:name]}" }.join(", ")}"
       )
@@ -109,7 +110,11 @@ class OrderPaymentsController < ApplicationController
         status: "paid",
         transaction_id: result[:transaction_id],
         payment_id: result[:payment_id],
-        payment_details: result[:details]
+        payment_method: @payment.payment_method, # Preserve the original payment method
+        payment_details: result[:details].merge(
+          payment_method: @payment.payment_method,
+          original_payment_details: @payment.payment_details || {}
+        )
       )
 
       # Update the order with new items
