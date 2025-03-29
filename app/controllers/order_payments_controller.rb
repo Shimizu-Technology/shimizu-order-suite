@@ -21,6 +21,17 @@ class OrderPaymentsController < ApplicationController
     }
   end
 
+  # POST /orders/:order_id/payments
+  def create
+    @payment = @order.order_payments.new(payment_params)
+    
+    if @payment.save
+      render json: { payment: @payment }, status: :created
+    else
+      render json: { error: @payment.errors.full_messages.join(', ') }, status: :unprocessable_entity
+    end
+  end
+
   # POST /orders/:order_id/payments/additional
   def create_additional
     # Calculate the price of added items
@@ -525,6 +536,14 @@ def create_refund
            (current_user && @order.user_id == current_user.id)
       render json: { error: "Forbidden" }, status: :forbidden
     end
+  end
+
+  def payment_params
+    params.permit(
+      :payment_type, :amount, :payment_method, :transaction_id, 
+      :payment_id, :status, :description, :cash_received, :change_due,
+      payment_details: {}
+    )
   end
 
   def calculate_additional_amount

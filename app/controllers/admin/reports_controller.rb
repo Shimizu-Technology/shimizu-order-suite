@@ -144,7 +144,10 @@ module Admin
       end_date = params[:end_date]
       restaurant_id = params[:restaurant_id]
       
-      # Get all payments in date range (excluding refunds)
+      # Initialize payment data hash
+      payment_data = {}
+      
+      # 1. Get payments from OrderPayment table (excluding refunds)
       payments = OrderPayment.joins(:order)
                             .where(created_at: start_date..end_date)
                             .where.not(payment_type: 'refund')
@@ -152,9 +155,7 @@ module Admin
       # Filter by restaurant if provided
       payments = payments.where(orders: { restaurant_id: restaurant_id }) if restaurant_id.present?
       
-      # Group by payment method
-      payment_data = {}
-      
+      # Process OrderPayment records
       payments.each do |payment|
         method = payment.payment_method || 'unknown'
         
@@ -166,6 +167,57 @@ module Admin
         
         payment_data[method][:count] += 1
         payment_data[method][:amount] += payment.amount.to_f  # Convert to float
+      end
+      
+      # 2. Get manual payments directly from Order table
+      # Find orders with manual payments that don't have corresponding OrderPayment records
+      # Note: We exclude stripe_reader since it's already creating OrderPayment records
+      manual_payment_orders = Order.where(created_at: start_date..end_date)
+                                 .where(payment_method: ['cash', 'other', 'clover', 'revel'])
+                                 .where(payment_status: 'completed')
+                                 .where.not(status: ['canceled', 'refunded'])
+      
+      # Filter by restaurant if provided
+      manual_payment_orders = manual_payment_orders.where(restaurant_id: restaurant_id) if restaurant_id.present?
+      
+      # Process manual payment orders
+      manual_payment_orders.each do |order|
+        # Skip if this order already has an OrderPayment record (to avoid double-counting)
+        next if OrderPayment.exists?(order_id: order.id, payment_method: order.payment_method)
+        
+        method = order.payment_method
+        
+        payment_data[method] ||= {
+          payment_method: method,
+          count: 0,
+          amount: 0.0
+        }
+        
+        payment_data[method][:count] += 1
+        payment_data[method][:amount] += order.payment_amount.to_f
+      end
+      
+      # 3. Handle manual refunds from Order table
+      manual_refunds = Order.where(updated_at: start_date..end_date)
+                           .where(payment_method: ['cash', 'other', 'clover', 'revel'])
+                           .where.not(refund_amount: [nil, 0])
+                           .where(status: 'refunded')
+      
+      # Filter by restaurant if provided
+      manual_refunds = manual_refunds.where(restaurant_id: restaurant_id) if restaurant_id.present?
+      
+      # Process manual refunds
+      manual_refunds.each do |order|
+        # Skip if this refund already has an OrderPayment record
+        next if OrderPayment.exists?(order_id: order.id, payment_type: 'refund')
+        
+        method = order.payment_method
+        
+        # Only adjust the amount if we have this payment method in our data
+        if payment_data[method]
+          # Subtract the refund amount from the total
+          payment_data[method][:amount] -= order.refund_amount.to_f
+        end
       end
       
       # Calculate totals
