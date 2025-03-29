@@ -281,15 +281,27 @@ def process_cash_payment
   change_due = cash_received - order_total
   
   # Create payment record
+  transaction_id = "cash_#{Time.now.to_i}"
+  
   @payment = @order.order_payments.create!(
-    payment_type: "additional",
+    payment_type: "initial",  # Changed from "additional" to "initial" for consistency with other payment methods
     amount: order_total,
     payment_method: 'cash',
     cash_received: cash_received,
     change_due: change_due,
     status: "paid",
-    transaction_id: "cash_#{Time.now.to_i}",
-    description: "Cash payment with change: $#{change_due.round(2)}"
+    transaction_id: transaction_id,
+    description: "Initial cash payment with change: $#{change_due.round(2)}",
+    # Add payment details to ensure they're displayed in the UI
+    payment_details: {
+      payment_method: 'cash',
+      transaction_id: transaction_id,
+      payment_date: Time.now.strftime('%Y-%m-%d'),
+      notes: "Cash payment - Received: $#{cash_received.to_f.round(2)}, Change: $#{change_due.to_f.round(2)}",
+      cash_received: cash_received,
+      change_due: change_due,
+      status: 'succeeded'
+    }
   )
   
   # Update order status if needed
