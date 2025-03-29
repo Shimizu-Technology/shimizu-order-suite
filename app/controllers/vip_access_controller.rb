@@ -192,12 +192,14 @@ class VipAccessController < ApplicationController
     # Extract parameters
     email_list = params[:email_list]
     batch_size = params[:batch_size] || 100
+    one_code_per_batch = params[:one_code_per_batch].nil? ? true : params[:one_code_per_batch]
 
     # Permit and symbolize keys for code options
     code_options = {}
     code_options[:name] = params[:name] if params[:name].present?
     code_options[:prefix] = params[:prefix] if params[:prefix].present?
     code_options[:max_uses] = params[:max_uses].to_i if params[:max_uses].present?
+    code_options[:one_code_per_batch] = one_code_per_batch
 
     unless email_list.present?
       return render json: { error: "Email list is required" }, status: :bad_request
@@ -214,7 +216,8 @@ class VipAccessController < ApplicationController
     render json: {
       message: "VIP code email batches queued for sending",
       total_recipients: email_list.length,
-      batch_count: (email_list.length.to_f / batch_size).ceil
+      batch_count: (email_list.length.to_f / batch_size).ceil,
+      one_code_per_batch: one_code_per_batch
     }
   end
 

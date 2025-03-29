@@ -9,6 +9,9 @@ class SendVipCodesBatchJob < ApplicationJob
     # Check if we should use existing codes or generate new ones
     use_existing_codes = options[:use_existing_codes] || false
     existing_codes = options[:code_ids] || []
+    
+    # Check if we should create one code per batch (default to true for new codes)
+    one_code_per_batch = options.fetch(:one_code_per_batch, true)
 
     # If using existing codes, fetch them from the database
     vip_codes = if use_existing_codes && existing_codes.present?
@@ -16,15 +19,30 @@ class SendVipCodesBatchJob < ApplicationJob
     else
       []
     end
+    
+    # For new codes with one_code_per_batch, create a single code for all emails
+    shared_vip_code = nil
+    if !use_existing_codes && one_code_per_batch
+      shared_vip_code = create_vip_code(options, restaurant)
+      
+      # If max_uses is set, ensure it's sufficient for all recipients
+      if shared_vip_code.max_uses.present? && shared_vip_code.max_uses < email_list.length
+        # Update max_uses to accommodate all recipients
+        shared_vip_code.update(max_uses: email_list.length)
+      end
+    end
 
     # Process each email in the batch
     email_list.each_with_index do |email, index|
-      # Either use an existing code or generate a new one
+      # Determine which VIP code to use for this email
       vip_code = if use_existing_codes && index < vip_codes.length
         # Use an existing code from the fetched list
         vip_codes[index]
+      elsif shared_vip_code
+        # Use the shared code for all recipients
+        shared_vip_code
       else
-        # Generate a new VIP code
+        # Generate a new unique VIP code for each recipient
         create_vip_code(options, restaurant)
       end
 
