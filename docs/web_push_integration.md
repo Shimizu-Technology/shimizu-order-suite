@@ -336,6 +336,23 @@ end
 3. **Authentication**: Admin endpoints (like listing subscriptions) require authentication.
 4. **Data Privacy**: The push payload is encrypted end-to-end, but the subscription endpoints may reveal some metadata.
 
+## Environment-Specific Behavior
+
+Web push notifications are disabled in development environment to prevent local development actions from affecting production users. This is implemented in the `notify_web_push` method of the Order model:
+
+```ruby
+def notify_web_push
+  return if Rails.env.test?
+  return if Rails.env.development? # Skip notifications in development environment
+  return if staff_created # Skip notifications for staff-created orders
+  return unless restaurant.web_push_enabled?
+  
+  # ... rest of the method ...
+end
+```
+
+This ensures that when you create orders locally during development, no push notifications will be sent to any subscribed devices, including those in production.
+
 ## Troubleshooting
 
 ### Common Issues
@@ -343,6 +360,7 @@ end
 1. **Invalid Subscription**: If a subscription becomes invalid (e.g., the user uninstalled the PWA), the push service will return a 404 or 410 error. The job will mark the subscription as inactive.
 2. **Missing VAPID Keys**: If the VAPID keys are missing or invalid, the push notification will fail.
 3. **Push Service Errors**: The push service may return errors if the payload is too large or if there are rate limiting issues.
+4. **Development Environment**: Notifications are not sent in development environment by design.
 
 ### Debugging
 

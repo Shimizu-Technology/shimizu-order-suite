@@ -303,6 +303,7 @@ class Order < ApplicationRecord
   
   def notify_web_push
     return if Rails.env.test?
+    return if Rails.env.development? # Skip notifications in development environment
     return if staff_created # Skip notifications for staff-created orders
     return unless restaurant.web_push_enabled?
     
