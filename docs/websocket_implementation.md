@@ -24,6 +24,7 @@ The implementation follows a pub/sub (publish/subscribe) pattern:
 - **Connection Authentication**: JWT-based authentication for WebSocket connections
 - **Channels**: Separate channels for different notification types
 - **Broadcasting Service**: Centralized service for broadcasting messages
+- **Broadcastable Concern**: A reusable concern that models can include to gain broadcasting capabilities
 
 ### Frontend Components
 
@@ -37,6 +38,14 @@ The implementation follows a pub/sub (publish/subscribe) pattern:
 ### Backend (Rails)
 
 The backend uses Action Cable, which is Rails' built-in WebSocket framework. Action Cable integrates WebSockets with the rest of your Rails application, allowing for real-time features.
+
+#### Inventory Management Integration
+
+The WebSocket system is integrated with the inventory management system to provide real-time updates on stock levels. Key features include:
+
+- **Damaged Item Tracking**: When items are marked as damaged, the system broadcasts updates to all connected clients without affecting stock quantities
+- **Available Quantity Calculation**: Available inventory is calculated as `stock_quantity - damaged_quantity`
+- **Low Stock Alerts**: Real-time alerts are sent when inventory falls below the defined threshold
 
 #### Connection Authentication
 
@@ -95,10 +104,13 @@ end
 
 #### Channels
 
-Two separate channels are implemented for different notification types:
+Multiple channels are implemented for different notification types:
 
 1. **OrderChannel**: For order-related events
 2. **InventoryChannel**: For inventory-related events
+3. **MenuChannel**: For menu and menu item updates
+4. **NotificationChannel**: For system notifications
+5. **CategoryChannel**: For category updates
 
 Each channel streams from a restaurant-specific channel to ensure multi-tenancy.
 
@@ -191,17 +203,27 @@ class WebsocketBroadcastService
   
   # Broadcast a low stock notification to the appropriate restaurant channel
   def self.broadcast_low_stock(item)
-    return unless item.restaurant_id.present?
+    # Get restaurant_id based on the item type
+    restaurant_id = if item.respond_to?(:restaurant_id) && item.restaurant_id.present?
+      item.restaurant_id
+    elsif item.respond_to?(:restaurant) && item.restaurant.present?
+      item.restaurant.id
+    elsif item.respond_to?(:menu) && item.menu.present? && item.menu.respond_to?(:restaurant_id)
+      item.menu.restaurant_id
+    else
+      Rails.logger.error("[WebsocketBroadcastService] Cannot determine restaurant_id for #{item.class.name} ##{item.id}")
+      return
+    end
     
     ActionCable.server.broadcast(
-      "inventory_channel_#{item.restaurant_id}",
+      "inventory_channel_#{restaurant_id}",
       {
         type: 'low_stock',
-        item: item.as_json
+        item: item.as_json(methods: [:available_quantity])
       }
     )
     
-    Rails.logger.info("Broadcasted low stock alert for item #{item.id} to inventory_channel_#{item.restaurant_id}")
+    Rails.logger.info("Broadcasted low stock alert for item #{item.id} to inventory_channel_#{restaurant_id}")
   end
 end
 ```
@@ -464,6 +486,43 @@ WebSockets maintain persistent connections, so plan your infrastructure accordin
 2. **Reconnection Loop**: The current implementation attempts to reconnect when connections are closed, but this can lead to a reconnection loop if the underlying issue isn't resolved.
 
 3. **Notification Store Error**: There's an error in the notification store: "API returned non-array notifications: object" which might be related to the WebSocket implementation.
+
+### Recent Updates and Fixes
+
+#### Inventory Management System
+
+1. **Damaged Item Handling**: Updated the `mark_as_damaged` method in the MenuItem model to only increase the damaged quantity without reducing the stock quantity. This ensures accurate tracking of both total and damaged inventory.
+
+```ruby
+def mark_as_damaged(quantity = 1)
+  return false unless enable_stock_tracking
+  
+  # Only update damaged_quantity, don't reduce stock_quantity
+  update(damaged_quantity: damaged_quantity + quantity)
+  
+  # Broadcast low stock if available quantity is below threshold
+  broadcast_low_stock if available_quantity <= low_stock_threshold
+  
+  true
+end
+```
+
+2. **Available Quantity Calculation**: Modified the `available_quantity` method to calculate available inventory as `stock_quantity - damaged_quantity`.
+
+```ruby
+def available_quantity
+  return nil unless enable_stock_tracking
+  stock_quantity - damaged_quantity
+end
+```
+
+3. **WebSocket Broadcasting**: Fixed the `WebsocketBroadcastService.broadcast_low_stock` method to correctly retrieve the restaurant ID from the MenuItem model using a more robust approach that works with different model structures.
+
+4. **Order Refund Processing**: Fixed the `update` method in the OrdersController to ensure the order variable is defined before use, preventing errors during order updates.
+
+#### Menu Item Availability
+
+Fixed an issue with the menu item's available days not being cleared when all days are deselected in the UI. The controller now properly handles the case when no days are selected by setting `available_days` to an empty array, making the item available every day.
 
 ### Troubleshooting and Resolved Issues
 

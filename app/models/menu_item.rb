@@ -1,7 +1,12 @@
 # app/models/menu_item.rb
 
 class MenuItem < ApplicationRecord
+  include Broadcastable
   apply_default_scope
+  
+  # Define which attributes should trigger broadcasts
+  broadcasts_on :name, :price, :description, :stock_quantity, :damaged_quantity, 
+               :low_stock_threshold, :enable_stock_tracking, :hidden, :featured
 
   belongs_to :menu
   has_many :option_groups, dependent: :destroy
@@ -58,7 +63,7 @@ class MenuItem < ApplicationRecord
     low_stock_threshold || 10  # Default to 10 if not set
   end
 
-  # Mark a quantity as damaged and decrease stock quantity
+  # Mark a quantity as damaged without affecting stock quantity
   def mark_as_damaged(quantity, reason, user)
     return false unless enable_stock_tracking
 
@@ -69,22 +74,6 @@ class MenuItem < ApplicationRecord
       # Update the damaged quantity
       previous_damaged = self.damaged_quantity || 0
       self.update!(damaged_quantity: previous_damaged + quantity.to_i)
-
-      # Also decrease the stock quantity
-      previous_stock = self.stock_quantity || 0
-      new_stock = [ previous_stock - quantity.to_i, 0 ].max
-
-      # Create stock adjustment record
-      stock_audit = MenuItemStockAudit.create_stock_record(
-        self,
-        new_stock,
-        "damaged",
-        "Damaged: #{reason}",
-        user
-      )
-
-      # Update stock
-      self.update!(stock_quantity: new_stock)
 
       # Re-evaluate stock status based on available quantity
       update_stock_status!

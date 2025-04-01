@@ -1,6 +1,10 @@
 # app/models/order.rb
 
 class Order < ApplicationRecord
+  include Broadcastable
+  
+  # Define which attributes should trigger broadcasts
+  broadcasts_on :status, :total, :items, :eta, :pickup_time
   # Order status constants
   STATUS_PENDING = "pending"
   STATUS_PREPARING = "preparing"

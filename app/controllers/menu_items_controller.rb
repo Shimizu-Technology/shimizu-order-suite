@@ -129,6 +129,9 @@ class MenuItemsController < ApplicationController
 
     @menu_item = MenuItem.find(params[:id])
     Rails.logger.info "Updating MenuItem => #{@menu_item.id}"
+    
+    # Log the full params for debugging
+    Rails.logger.info "FULL PARAMS: #{params.to_json}"
 
     # Assign categories before updating if category_ids param is given
     if params[:menu_item][:category_ids].present?
@@ -136,18 +139,42 @@ class MenuItemsController < ApplicationController
     end
     
     # Handle available_days as an array
-    if params[:menu_item][:available_days].present?
+    Rails.logger.info "Has available_days key? #{params[:menu_item].has_key?(:available_days)}"
+    Rails.logger.info "Menu item params keys: #{params[:menu_item].keys}"
+    
+    # Check if we're in the menu item edit form context
+    is_menu_edit = params[:menu_item].keys.include?("name") && 
+                  params[:menu_item].keys.include?("description") && 
+                  params[:menu_item].keys.include?("price")
+    
+    if params[:menu_item].has_key?("available_days") || params[:menu_item].has_key?(:available_days)
       Rails.logger.info "Update - Available days param: #{params[:menu_item][:available_days].inspect}"
       Rails.logger.info "Update - Available days param class: #{params[:menu_item][:available_days].class}"
       
-      available_days = Array(params[:menu_item][:available_days]).map(&:to_i)
-      Rails.logger.info "Update - Processed available days: #{available_days.inspect}"
-      
-      @menu_item.available_days = available_days
+      if params[:menu_item][:available_days].blank? || params[:menu_item][:available_days] == []
+        # Clear available days if empty array or blank is provided
+        Rails.logger.info "Update - Clearing available days"
+        @menu_item.available_days = []
+      else
+        available_days = Array(params[:menu_item][:available_days]).map(&:to_i)
+        Rails.logger.info "Update - Processed available days: #{available_days.inspect}"
+        @menu_item.available_days = available_days
+      end
+    elsif is_menu_edit
+      # If we're in the menu edit form and available_days is not present,
+      # it means all days were deselected
+      Rails.logger.info "Menu edit form detected but available_days key is not present - clearing available days"
+      @menu_item.available_days = []
+    else
+      Rails.logger.info "available_days key is not present in params"
     end
 
+    # Log menu_item_params for debugging
+    Rails.logger.info "MENU ITEM PARAMS: #{menu_item_params.inspect}"
+    
     if @menu_item.update(menu_item_params.except(:image))
       Rails.logger.info "Update success => #{@menu_item.inspect}"
+      Rails.logger.info "AFTER UPDATE - available_days: #{@menu_item.available_days.inspect}"
 
       # Handle image if present
       file = menu_item_params[:image]
@@ -383,8 +410,11 @@ class MenuItemsController < ApplicationController
     end
     
     # Handle available_days as a string
-    if params[:menu_item][:available_days].present?
-      if params[:menu_item][:available_days].is_a?(String)
+    if params[:menu_item].has_key?(:available_days)
+      if params[:menu_item][:available_days].blank?
+        # If available_days is explicitly set to blank or empty array, clear it
+        permitted_params[:available_days] = []
+      elsif params[:menu_item][:available_days].is_a?(String)
         # Split by comma and convert to integers
         permitted_params[:available_days] = params[:menu_item][:available_days].split(',').map(&:to_i)
       elsif !params[:menu_item][:available_days].is_a?(Array)

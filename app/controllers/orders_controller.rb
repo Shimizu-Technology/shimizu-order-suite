@@ -433,9 +433,10 @@ class OrdersController < ApplicationController
 
   # PATCH/PUT /orders/:id
   def update
+    # Find the order first
+    order = Order.find(params[:id])
     # Store the original order status for comparison
     original_status = order&.status
-    order = Order.find(params[:id])
     return render json: { error: "Forbidden" }, status: :forbidden unless can_edit?(order)
 
     old_status = order.status

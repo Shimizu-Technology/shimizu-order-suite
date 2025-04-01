@@ -1,6 +1,10 @@
 # app/models/category.rb
 class Category < ApplicationRecord
+  include Broadcastable
   apply_default_scope
+  
+  # Define which attributes should trigger broadcasts
+  broadcasts_on :name, :position
 
   # Change association from restaurant to menu
   belongs_to :menu

@@ -1,5 +1,9 @@
 # app/models/menu.rb
 class Menu < ApplicationRecord
+  include Broadcastable
+  
+  # Define which attributes should trigger broadcasts
+  broadcasts_on :name, :active
   # Default scope to current restaurant
   default_scope { with_restaurant_scope }
   belongs_to :restaurant
