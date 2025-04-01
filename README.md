@@ -315,7 +315,8 @@ origins lambda { |source, env|
 - **OrderAcknowledgment**: Tracks which orders have been acknowledged by which admin users
   - Belongs to order
   - Belongs to user
-  - Ensures order notifications persist across page refreshes
+  - Ensures order notifications persist across page refreshes and device changes
+  - Works with the global_last_acknowledged_at timestamp on orders for consistent notification handling
 
 - **VipAccessCode**: VIP access control
   - Belongs to restaurant
@@ -611,8 +612,9 @@ The API is organized into several main groups:
 - `GET /orders/:id` - Get order details
 - `PATCH /orders/:id` - Update order status
 - `DELETE /orders/:id` - Cancel order
-- `GET /orders/unacknowledged` - Get orders not yet acknowledged by current user
-- `POST /orders/:id/acknowledge` - Mark an order as acknowledged by current user
+- `GET /orders/unacknowledged` - Get orders not yet acknowledged by current user (with special handling for first-time users)
+- `POST /orders/:id/acknowledge` - Mark an order as acknowledged by current user and update global acknowledgment timestamp
+- For details on the order notification consistency system, see [Order Notification Consistency Documentation](docs/order_notification_consistency.md)
 
 ### Payments
 - `POST /payments/process` - Process a payment

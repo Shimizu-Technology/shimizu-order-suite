@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_03_29_234600) do
+ActiveRecord::Schema[7.2].define(version: 2025_04_01_000001) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -294,6 +294,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_03_29_234600) do
     t.string "payment_id"
     t.boolean "staff_created", default: false
     t.jsonb "payment_details"
+    t.datetime "global_last_acknowledged_at"
+    t.index ["global_last_acknowledged_at"], name: "index_orders_on_global_last_acknowledged_at"
     t.index ["payment_id"], name: "index_orders_on_payment_id"
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"

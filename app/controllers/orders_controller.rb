@@ -76,14 +76,24 @@ class OrdersController < ApplicationController
     hours = params[:hours].present? ? params[:hours].to_i : 24
     time_threshold = Time.current - hours.hours
 
-    # Find orders that:
-    # 1. Are newer than the time threshold
-    # 2. Haven't been acknowledged by the current user
-    # 3. Were not created by staff
-    unacknowledged_orders = Order.where("created_at > ?", time_threshold)
-                                 .where.not(id: current_user.acknowledged_orders.pluck(:id))
-                                 .where(staff_created: [false, nil]) # Exclude staff-created orders
-                                 .order(created_at: :desc)
+    # Check if this user has any previous acknowledgments
+    has_previous_acknowledgments = OrderAcknowledgment.exists?(user_id: current_user.id)
+
+    # Build the query based on whether this is a first-time user
+    if has_previous_acknowledgments
+      # Regular case: Return orders not acknowledged by this specific user
+      unacknowledged_orders = Order.where("created_at > ?", time_threshold)
+                                   .where.not(id: current_user.acknowledged_orders.pluck(:id))
+                                   .where(staff_created: [false, nil]) # Exclude staff-created orders
+                                   .order(created_at: :desc)
+    else
+      # First-time user case: Only return orders that haven't been acknowledged by anyone
+      # OR orders that came in after the last global acknowledgment
+      unacknowledged_orders = Order.where("created_at > ?", time_threshold)
+                                   .where(staff_created: [false, nil]) # Exclude staff-created orders
+                                   .where("global_last_acknowledged_at IS NULL OR created_at > global_last_acknowledged_at")
+                                   .order(created_at: :desc)
+    end
 
     render json: unacknowledged_orders, status: :ok
   end
@@ -99,6 +109,9 @@ class OrdersController < ApplicationController
     )
 
     if acknowledgment.new_record? && acknowledgment.save
+      # Update the global_last_acknowledged_at timestamp
+      order.update(global_last_acknowledged_at: Time.current)
+      
       render json: { message: "Order #{order.id} acknowledged" }, status: :ok
     else
       render json: { error: "Failed to acknowledge order" }, status: :unprocessable_entity

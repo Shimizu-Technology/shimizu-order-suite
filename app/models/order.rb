@@ -182,7 +182,10 @@ class Order < ApplicationRecord
       "vip_access_code_id" => vip_access_code_id,
 
       # Merchandise items (if present)
-      "merchandise_items" => merchandise_items || []
+      "merchandise_items" => merchandise_items || [],
+      
+      # Acknowledgment timestamp
+      "global_last_acknowledged_at" => global_last_acknowledged_at&.iso8601
     )
   end
 
