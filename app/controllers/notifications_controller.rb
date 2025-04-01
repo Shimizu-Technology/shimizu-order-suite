@@ -22,7 +22,21 @@ class NotificationsController < ApplicationController
 
     @notifications = query.all
 
-    render json: @notifications
+    # Ensure we're returning an array
+    notifications_array = @notifications.to_a
+
+    # Add debug logging
+    Rails.logger.debug("Notifications response - " + {
+      count: @notifications.length,
+      type: params[:type],
+      hours: hours,
+      is_array: notifications_array.is_a?(Array),
+      first_notification: notifications_array.first&.as_json,
+      response_type: 'array'
+    }.to_json)
+
+    # Explicitly render as array
+    render json: { notifications: notifications_array }
   end
 
   # POST /notifications/:id/acknowledge

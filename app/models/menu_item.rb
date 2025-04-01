@@ -168,6 +168,7 @@ class MenuItem < ApplicationRecord
     return unless enable_stock_tracking
 
     available = available_quantity
+    old_status = stock_status
 
     new_status = if available <= 0
                   :out_of_stock
@@ -177,7 +178,16 @@ class MenuItem < ApplicationRecord
                   :in_stock
     end
 
-    update_column(:stock_status, stock_status_before_type_cast) unless stock_status == new_status.to_s
+    # Only update if status has changed
+    if stock_status != new_status.to_s
+      update_column(:stock_status, stock_status_before_type_cast)
+      
+      # Broadcast low stock notification if status changed to low_stock
+      if new_status == :low_stock && old_status != 'low_stock'
+        # Use the WebsocketBroadcastService to broadcast the low stock notification
+        WebsocketBroadcastService.broadcast_low_stock(self)
+      end
+    end
   end
 
   # Stock status enum & optional note

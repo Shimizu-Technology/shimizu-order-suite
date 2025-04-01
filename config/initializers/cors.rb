@@ -14,7 +14,9 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
     resource "*",
       headers: :any,
       expose: %w[Authorization],
-      methods: %i[get post put patch delete options head]
+      methods: %i[get post put patch delete options head],
+      credentials: true,
+      allow_headers: %w[Authorization Accept Content-Type Origin]
   end
 
   # For backward compatibility, keep the original origins
@@ -24,6 +26,8 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
     resource "*",
       headers: :any,
       expose: %w[Authorization],
-      methods: %i[get post put patch delete options head]
+      methods: %i[get post put patch delete options head],
+      credentials: true,
+      allow_headers: %w[Authorization Accept Content-Type Origin]
   end
 end

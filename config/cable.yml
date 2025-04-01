@@ -1,5 +1,7 @@
 development:
-  adapter: async
+  adapter: redis
+  url: redis://localhost:6379/1
+  channel_prefix: hafaloha_api_development
 
 test:
   adapter: test
@@ -7,4 +9,4 @@ test:
 production:
   adapter: redis
   url: <%= ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" } %>
-  channel_prefix: rotary_reservations_api_production
+  channel_prefix: hafaloha_api_production

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .card {
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .log-container {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket Test</h1>
+        
+        <div class="card">
+            <h2>Connection</h2>
+            <div class="form-group">
+                <label for="token">JWT Token:</label>
+                <input type="text" id="token" placeholder="Paste your JWT token here">
+            </div>
+            <div class="form-group">
+                <label for="restaurant-id">Restaurant ID:</label>
+                <input type="text" id="restaurant-id" value="1">
+            </div>
+            <button id="connect-btn">Connect</button>
+            <button id="disconnect-btn" disabled>Disconnect</button>
+            <div id="status" class="status disconnected">Disconnected</div>
+        </div>
+        
+        <div class="card">
+            <h2>Messages</h2>
+            <div class="log-container" id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const connectBtn = document.getElementById('connect-btn');
+            const disconnectBtn = document.getElementById('disconnect-btn');
+            const tokenInput = document.getElementById('token');
+            const restaurantIdInput = document.getElementById('restaurant-id');
+            const statusDiv = document.getElementById('status');
+            const logDiv = document.getElementById('log');
+            
+            let socket = null;
+            let orderSubscription = null;
+            let inventorySubscription = null;
+            
+            // Function to add a log entry
+            function addLogEntry(message, data = null) {
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                
+                const timestamp = document.createElement('span');
+                timestamp.className = 'timestamp';
+                timestamp.textContent = new Date().toLocaleTimeString() + ' - ';
+                
+                const content = document.createElement('span');
+                content.textContent = message;
+                
+                entry.appendChild(timestamp);
+                entry.appendChild(content);
+                
+                if (data) {
+                    const pre = document.createElement('pre');
+                    pre.textContent = JSON.stringify(data, null, 2);
+                    entry.appendChild(pre);
+                }
+                
+                logDiv.appendChild(entry);
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+            
+            // Connect to WebSocket
+            connectBtn.addEventListener('click', function() {
+                const token = tokenInput.value.trim();
+                const restaurantId = restaurantIdInput.value.trim();
+                
+                if (!token) {
+                    alert('Please enter a JWT token');
+                    return;
+                }
+                
+                if (!restaurantId) {
+                    alert('Please enter a restaurant ID');
+                    return;
+                }
+                
+                // Determine WebSocket URL
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const host = window.location.host;
+                const wsUrl = `${protocol}//${host}/cable?token=${token}`;
+                
+                addLogEntry(`Connecting to ${wsUrl}`);
+                
+                try {
+                    socket = new WebSocket(wsUrl);
+                    
+                    socket.onopen = function() {
+                        addLogEntry('WebSocket connection established');
+                        statusDiv.textContent = 'Connected';
+                        statusDiv.className = 'status connected';
+                        
+                        connectBtn.disabled = true;
+                        disconnectBtn.disabled = false;
+                        
+                        // Subscribe to order channel
+                        orderSubscription = {
+                            command: 'subscribe',
+                            identifier: JSON.stringify({
+                                channel: 'OrderChannel',
+                                restaurant_id: restaurantId
+                            })
+                        };
+                        
+                        socket.send(JSON.stringify(orderSubscription));
+                        addLogEntry('Subscribed to OrderChannel');
+                        
+                        // Subscribe to inventory channel
+                        inventorySubscription = {
+                            command: 'subscribe',
+                            identifier: JSON.stringify({
+                                channel: 'InventoryChannel',
+                                restaurant_id: restaurantId
+                            })
+                        };
+                        
+                        socket.send(JSON.stringify(inventorySubscription));
+                        addLogEntry('Subscribed to InventoryChannel');
+                    };
+                    
+                    socket.onmessage = function(event) {
+                        const data = JSON.parse(event.data);
+                        
+                        if (data.type === 'ping') {
+                            return; // Ignore ping messages
+                        }
+                        
+                        if (data.type === 'welcome') {
+                            addLogEntry('Received welcome message');
+                            return;
+                        }
+                        
+                        if (data.type === 'confirm_subscription') {
+                            addLogEntry('Subscription confirmed', data);
+                            return;
+                        }
+                        
+                        if (data.message) {
+                            if (data.message.type === 'new_order') {
+                                addLogEntry('Received new order', data.message.order);
+                            } else if (data.message.type === 'order_updated') {
+                                addLogEntry('Received order update', data.message.order);
+                            } else if (data.message.type === 'low_stock') {
+                                addLogEntry('Received low stock alert', data.message.item);
+                            } else {
+                                addLogEntry('Received unknown message type', data);
+                            }
+                        } else {
+                            addLogEntry('Received message', data);
+                        }
+                    };
+                    
+                    socket.onclose = function(event) {
+                        addLogEntry(`WebSocket connection closed: ${event.code} ${event.reason}`);
+                        statusDiv.textContent = 'Disconnected';
+                        statusDiv.className = 'status disconnected';
+                        
+                        connectBtn.disabled = false;
+                        disconnectBtn.disabled = true;
+                    };
+                    
+                    socket.onerror = function(error) {
+                        addLogEntry('WebSocket error', error);
+                    };
+                } catch (error) {
+                    addLogEntry('Failed to create WebSocket connection', error);
+                }
+            });
+            
+            // Disconnect from WebSocket
+            disconnectBtn.addEventListener('click', function() {
+                if (socket) {
+                    socket.close();
+                    socket = null;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,6 +1,8 @@
 # config/routes.rb
 
 Rails.application.routes.draw do
+  # Mount Action Cable server
+  mount ActionCable.server => '/cable'
   # Health check endpoints
   get "/health/check", to: "health#index"
   get "/health/sidekiq", to: "health#sidekiq_stats"

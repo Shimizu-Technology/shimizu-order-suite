@@ -23,8 +23,9 @@ The backend is built with **Ruby on Rails** in API-only mode, with a multi-tenan
 
 - **Rails API** (API-only mode)  
 - **PostgreSQL** for the primary database
-- **Redis** for Sidekiq job queue  
+- **Redis** for Sidekiq job queue and Action Cable  
 - **Sidekiq** for background job processing
+- **Action Cable** for WebSocket communication
 - **JWT Authentication** with restaurant context
 - **Multi-tenant** data isolation through default scopes
 - **CORS configuration** for restaurant-specific frontend origins
@@ -45,6 +46,19 @@ The backend is built with **Ruby on Rails** in API-only mode, with a multi-tenan
 3. **Database Queries** are automatically filtered by restaurant
 4. **Background Jobs** process notifications asynchronously
 5. **CORS Configuration** allows specific frontend origins per restaurant
+
+---
+
+## **Real-time Features**
+
+Hafaloha uses WebSockets via Action Cable to provide real-time updates to clients:
+
+- **Order Notifications**: Instant notifications when new orders are placed
+- **Inventory Alerts**: Real-time alerts when inventory items reach low stock thresholds
+- **Multi-tenant Channels**: WebSocket channels are scoped to specific restaurants
+- **JWT Authentication**: WebSocket connections are authenticated using the same JWT tokens as the REST API
+
+For detailed documentation on the WebSocket implementation, see [WebSocket Implementation Documentation](docs/websocket_implementation.md).
 
 ---
 

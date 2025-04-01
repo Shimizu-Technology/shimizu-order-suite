@@ -112,6 +112,9 @@ class OrdersController < ApplicationController
       # Update the global_last_acknowledged_at timestamp
       order.update(global_last_acknowledged_at: Time.current)
       
+      # Broadcast the order update via WebSockets
+      WebsocketBroadcastService.broadcast_order_update(order)
+      
       render json: { message: "Order #{order.id} acknowledged" }, status: :ok
     else
       render json: { error: "Failed to acknowledge order" }, status: :unprocessable_entity
@@ -283,6 +286,9 @@ class OrdersController < ApplicationController
     end
 
     if @order.save
+      # Broadcast the new order via WebSockets
+      WebsocketBroadcastService.broadcast_new_order(@order)
+      
       # Log payment information for debugging
       Rails.logger.info("Order saved with payment_id: #{@order.payment_id}, transaction_id: #{@order.transaction_id}, payment_method: #{@order.payment_method}")
 
@@ -427,6 +433,8 @@ class OrdersController < ApplicationController
 
   # PATCH/PUT /orders/:id
   def update
+    # Store the original order status for comparison
+    original_status = order&.status
     order = Order.find(params[:id])
     return render json: { error: "Forbidden" }, status: :forbidden unless can_edit?(order)
 
@@ -444,6 +452,9 @@ class OrdersController < ApplicationController
                        end
 
     if order.update(permitted_params)
+      # Broadcast the order update via WebSockets
+      WebsocketBroadcastService.broadcast_order_update(order)
+      
       # 2) If items changed, process inventory diffs
       if permitted_params[:items].present?
         process_inventory_changes(original_items, order.items, order)
