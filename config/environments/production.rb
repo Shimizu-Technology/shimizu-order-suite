@@ -119,4 +119,28 @@ Rails.application.configure do
 
   # Additional DNS rebind etc…
   # config.hosts = [...]
+  
+  # Action Cable configuration for production
+  # Allow WebSocket connections from the frontend URL
+  if ENV['FRONTEND_URL']
+    # Parse the URL to extract protocol, host and port
+    frontend_uri = URI.parse(ENV['FRONTEND_URL'])
+    frontend_host = frontend_uri.host
+    frontend_protocol = frontend_uri.scheme
+    
+    # Create allowed origins based on the FRONTEND_URL
+    config.action_cable.allowed_request_origins = [
+      ENV['FRONTEND_URL'],
+      # Also allow subdomains
+      /#{frontend_protocol}:\/\/.*\.#{Regexp.escape(frontend_host)}/
+    ]
+  end
+  
+  # Use secure WebSockets in production
+  # Determine the host URL for Action Cable
+  host_url = ENV['HOST_URL'] || (ENV['HEROKU_APP_NAME'] ? "#{ENV['HEROKU_APP_NAME']}.herokuapp.com" : 'localhost:3000')
+  config.action_cable.url = "wss://#{host_url}/cable"
+  
+  # Enable Action Cable in production
+  config.action_cable.mount_path = '/cable'
 end
