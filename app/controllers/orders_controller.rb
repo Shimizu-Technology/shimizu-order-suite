@@ -22,23 +22,74 @@ class OrdersController < ApplicationController
       return render json: { error: "Unauthorized" }, status: :unauthorized
     end
 
-    # Add pagination
-    page = (params[:page] || 1).to_i
-    per_page = (params[:per_page] || 5).to_i
+    # Filter by restaurant_id if provided
+    if params[:restaurant_id].present?
+      @orders = @orders.where(restaurant_id: params[:restaurant_id])
+    end
 
-    # Get total count before pagination
+    # Filter by status if provided
+    if params[:status].present?
+      @orders = @orders.where(status: params[:status])
+    end
+
+    # Filter by date range if provided
+    if params[:date_from].present? && params[:date_to].present?
+      date_from = Date.parse(params[:date_from]).beginning_of_day
+      date_to = Date.parse(params[:date_to]).end_of_day
+      @orders = @orders.where(created_at: date_from..date_to)
+    end
+
+    # Search functionality
+    if params[:search].present?
+      search_term = "%#{params[:search]}%"
+      @orders = @orders.where(
+        "id::text ILIKE ? OR contact_name ILIKE ? OR contact_email ILIKE ? OR contact_phone ILIKE ? OR special_instructions ILIKE ?",
+        search_term, search_term, search_term, search_term, search_term
+      )
+      
+      # Also search in order items (requires a join)
+      order_items_search = Order.joins(:order_items)
+                               .where("order_items.name ILIKE ? OR order_items.notes ILIKE ?", 
+                                     search_term, search_term)
+                               .distinct
+                               .pluck(:id)
+      
+      if order_items_search.any?
+        @orders = @orders.or(Order.where(id: order_items_search))
+      end
+    end
+
+    # Get total count after filtering but before pagination
     total_count = @orders.count
 
-    # Apply sorting and pagination
-    @orders = @orders.order(created_at: :desc)
+    # Add pagination
+    page = (params[:page] || 1).to_i
+    per_page = (params[:per_page] || 10).to_i
+
+    # Apply sorting
+    sort_by = params[:sort_by] || 'created_at'
+    sort_direction = params[:sort_direction] || 'desc'
+    
+    # Validate sort parameters to prevent SQL injection
+    valid_sort_columns = ['id', 'created_at', 'updated_at', 'status', 'total']
+    valid_sort_directions = ['asc', 'desc']
+    
+    sort_by = 'created_at' unless valid_sort_columns.include?(sort_by)
+    sort_direction = 'desc' unless valid_sort_directions.include?(sort_direction)
+    
+    @orders = @orders.order("#{sort_by} #{sort_direction}")
                      .offset((page - 1) * per_page)
                      .limit(per_page)
+
+    # Calculate total pages
+    total_pages = (total_count.to_f / per_page).ceil
 
     render json: {
       orders: @orders,
       total_count: total_count,
       page: page,
-      per_page: per_page
+      per_page: per_page,
+      total_pages: total_pages
     }, status: :ok
   end
 
