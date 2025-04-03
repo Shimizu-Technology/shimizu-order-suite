@@ -184,6 +184,21 @@ module Broadcastable
     Rails.logger.info("Broadcasting notification to #{channel_name} - Notification: #{id}")
     ActionCable.server.broadcast(channel_name, payload)
   end
+  
+  def broadcast_restaurant_update(options = {})
+    # For restaurant model, the restaurant_id is the id of the restaurant itself
+    restaurant_id = self.id
+    return unless restaurant_id.present?
+    
+    channel_name = "restaurant_channel_#{restaurant_id}"
+    payload = {
+      type: 'restaurant_update',
+      restaurant: options[:destroyed] ? { id: id, destroyed: true } : self.as_json
+    }
+    
+    Rails.logger.info("Broadcasting restaurant_update to #{channel_name} - Restaurant: #{id}")
+    ActionCable.server.broadcast(channel_name, payload)
+  end
 
   # Helper method for inventory updates
   def inventory_json

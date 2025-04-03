@@ -1,5 +1,9 @@
 # app/models/restaurant.rb
 class Restaurant < ApplicationRecord
+  include Broadcastable
+  
+  # Define which attributes should trigger broadcasts when changed
+  broadcasts_on :name, :description, :address, :phone, :email, :website, :logo, :banner, :admin_settings, :allowed_origins
   # Ensure allowed_origins is always an array
   attribute :allowed_origins, :string, array: true, default: []
   
