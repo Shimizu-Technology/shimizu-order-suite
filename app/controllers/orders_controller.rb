@@ -266,11 +266,63 @@ class OrdersController < ApplicationController
 
     new_params = order_params_admin # Since create does not forcibly restrict user fields
     new_params[:restaurant_id] ||= params[:restaurant_id] || 1
+    
+    # For regular orders, use the current user's ID
+    # For staff orders, the user_id will be set to the staff member's user_id if available
     new_params[:user_id] = @current_user&.id
 
     # Set VIP access code if found
     if defined?(vip_access_code) && vip_access_code
       new_params[:vip_access_code_id] = vip_access_code.id
+    end
+    
+    # Handle staff order parameters
+    if params[:order][:is_staff_order].present? && params[:order][:is_staff_order] == true
+      # Set staff order fields
+      new_params[:is_staff_order] = true
+      new_params[:staff_member_id] = params[:order][:staff_member_id]
+      new_params[:staff_on_duty] = params[:order][:staff_on_duty] || false
+      new_params[:use_house_account] = params[:order][:use_house_account] || false
+      
+      # Check if created_by_staff_id was provided in the request parameters
+      if params[:order][:created_by_staff_id].present?
+        # Use the provided created_by_staff_id from the frontend
+        new_params[:created_by_staff_id] = params[:order][:created_by_staff_id]
+        Rails.logger.info("Using provided created_by_staff_id: #{params[:order][:created_by_staff_id]} from request")
+      elsif params[:order][:payment_details].present? && 
+            params[:order][:payment_details][:staffOrderParams].present? && 
+            params[:order][:payment_details][:staffOrderParams][:created_by_staff_id].present?
+        # Extract from staffOrderParams if available
+        new_params[:created_by_staff_id] = params[:order][:payment_details][:staffOrderParams][:created_by_staff_id]
+        Rails.logger.info("Using created_by_staff_id: #{new_params[:created_by_staff_id]} from staffOrderParams")
+      elsif @current_user&.staff_member.present?
+        # Fallback to current user's staff record if no explicit ID was provided
+        new_params[:created_by_staff_id] = @current_user.staff_member.id
+        Rails.logger.info("Fallback: Setting created_by_staff_id to #{@current_user.staff_member.id} for user #{@current_user.id}")
+      else
+        Rails.logger.info("Current user #{@current_user&.id} does not have an associated staff record")
+      end
+      
+      # Store the pre-discount total for reporting
+      new_params[:pre_discount_total] = new_params[:total]
+      
+      # If payment_details is present, ensure staffOrderParams is properly formatted
+      if new_params[:payment_details].present? && new_params[:payment_details]['staffOrderParams'].present?
+        staff_params = new_params[:payment_details]['staffOrderParams']
+        
+        # Convert staff params to string representation
+        formatted_staff_params = {
+          'is_staff_order' => staff_params['is_staff_order'] ? 'true' : 'false',
+          'staff_member_id' => staff_params['staff_member_id'].to_s,
+          'staff_on_duty' => staff_params['staff_on_duty'] ? 'true' : 'false',
+          'use_house_account' => staff_params['use_house_account'] ? 'true' : 'false',
+          'created_by_staff_id' => staff_params['created_by_staff_id'].to_s,
+          'pre_discount_total' => staff_params['pre_discount_total'].to_s
+        }
+        
+        # Replace the object with the formatted version
+        new_params[:payment_details]['staffOrderParams'] = formatted_staff_params
+      end
     end
 
     # Set payment fields
@@ -280,6 +332,32 @@ class OrdersController < ApplicationController
     # Set payment details if provided
     if params[:order][:payment_details].present?
       new_params[:payment_details] = params[:order][:payment_details]
+      
+      # Extract staff order parameters if present
+      if params[:order][:payment_details][:staffOrderParams].present?
+        staff_params = params[:order][:payment_details][:staffOrderParams]
+        
+        # Set staff order attributes directly on the order
+        new_params[:is_staff_order] = staff_params[:is_staff_order] if staff_params[:is_staff_order].present?
+        new_params[:staff_member_id] = staff_params[:staff_member_id] if staff_params[:staff_member_id].present?
+        new_params[:staff_on_duty] = staff_params[:staff_on_duty] if staff_params[:staff_on_duty].present?
+        new_params[:use_house_account] = staff_params[:use_house_account] if staff_params[:use_house_account].present?
+        new_params[:created_by_staff_id] = staff_params[:created_by_staff_id] if staff_params[:created_by_staff_id].present?
+        new_params[:pre_discount_total] = staff_params[:pre_discount_total] if staff_params[:pre_discount_total].present?
+        
+        # Format staff order params for display
+        formatted_staff_params = {
+          'is_staff_order' => staff_params[:is_staff_order] ? 'true' : 'false',
+          'staff_member_id' => staff_params[:staff_member_id].to_s,
+          'staff_on_duty' => staff_params[:staff_on_duty] ? 'true' : 'false',
+          'use_house_account' => staff_params[:use_house_account] ? 'true' : 'false',
+          'created_by_staff_id' => staff_params[:created_by_staff_id].to_s,
+          'pre_discount_total' => staff_params[:pre_discount_total].to_s
+        }
+        
+        # Replace the object with the formatted version in payment_details
+        new_params[:payment_details][:staffOrderParams] = formatted_staff_params
+      end
     end
 
     @order = Order.new(new_params)
@@ -355,6 +433,27 @@ class OrdersController < ApplicationController
           Rails.logger.info("Generated Stripe-like payment_id for test mode: #{payment_id}")
         end
 
+        # Format payment details to ensure proper display in UI
+        payment_details = @order.payment_details || params[:order][:payment_details]
+        
+        # Format staff order params if present
+        if payment_details && payment_details['staffOrderParams'].present?
+          staff_params = payment_details['staffOrderParams']
+          
+          # Convert staff params to string representation
+          formatted_staff_params = {
+            'is_staff_order' => staff_params['is_staff_order'].to_s == 'true' || staff_params['is_staff_order'] == true ? 'true' : 'false',
+            'staff_member_id' => staff_params['staff_member_id'].to_s,
+            'staff_on_duty' => staff_params['staff_on_duty'].to_s == 'true' || staff_params['staff_on_duty'] == true ? 'true' : 'false',
+            'use_house_account' => staff_params['use_house_account'].to_s == 'true' || staff_params['use_house_account'] == true ? 'true' : 'false',
+            'created_by_staff_id' => staff_params['created_by_staff_id'].to_s,
+            'pre_discount_total' => staff_params['pre_discount_total'].to_s
+          }
+          
+          # Replace the object with the formatted version
+          payment_details['staffOrderParams'] = formatted_staff_params
+        end
+        
         payment = @order.order_payments.create(
           payment_type: "initial",
           amount: @order.payment_amount,
@@ -363,7 +462,7 @@ class OrdersController < ApplicationController
           transaction_id: @order.transaction_id || payment_id,
           payment_id: payment_id,
           description: "Initial payment",
-          payment_details: @order.payment_details || params[:order][:payment_details]
+          payment_details: payment_details
         )
         Rails.logger.info("Created initial OrderPayment record: #{payment.inspect}")
       end
@@ -681,6 +780,13 @@ class OrdersController < ApplicationController
       :vip_code,
       :payment_details,
       :items, # Permit items as a whole first
+      # Staff order parameters
+      :is_staff_order,
+      :staff_member_id,
+      :staff_on_duty,
+      :use_house_account,
+      :created_by_staff_id,
+      :pre_discount_total,
       merchandise_items: [
         :id,
         :merchandise_variant_id,

@@ -9,6 +9,9 @@ class User < ApplicationRecord
   # Add associations for order acknowledgments
   has_many :order_acknowledgments, dependent: :destroy
   has_many :acknowledged_orders, through: :order_acknowledgments, source: :order
+  
+  # Staff member association
+  has_one :staff_member, dependent: :nullify
 
   has_secure_password
 

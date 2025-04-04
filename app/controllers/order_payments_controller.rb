@@ -49,6 +49,24 @@ class OrderPaymentsController < ApplicationController
       # Use payment details from params if provided
       payment_details = params[:payment_details] || {}
       
+      # Format staff order params if present
+      if payment_details && payment_details['staffOrderParams'].present?
+        staff_params = payment_details['staffOrderParams']
+        
+        # Convert staff params to string representation
+        formatted_staff_params = {
+          'is_staff_order' => staff_params['is_staff_order'].to_s == 'true' || staff_params['is_staff_order'] == true ? 'true' : 'false',
+          'staff_member_id' => staff_params['staff_member_id'].to_s,
+          'staff_on_duty' => staff_params['staff_on_duty'].to_s == 'true' || staff_params['staff_on_duty'] == true ? 'true' : 'false',
+          'use_house_account' => staff_params['use_house_account'].to_s == 'true' || staff_params['use_house_account'] == true ? 'true' : 'false',
+          'created_by_staff_id' => staff_params['created_by_staff_id'].to_s,
+          'pre_discount_total' => staff_params['pre_discount_total'].to_s
+        }
+        
+        # Replace the object with the formatted version
+        payment_details['staffOrderParams'] = formatted_staff_params
+      end
+      
       @payment = @order.order_payments.create(
         payment_type: "additional",
         amount: additional_amount,

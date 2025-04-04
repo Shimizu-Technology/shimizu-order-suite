@@ -4,7 +4,7 @@ class Order < ApplicationRecord
   include Broadcastable
   
   # Define which attributes should trigger broadcasts
-  broadcasts_on :status, :total, :items, :eta, :pickup_time
+  broadcasts_on :status, :total, :items, :eta, :pickup_time, :is_staff_order, :staff_member_id
   # Order status constants
   STATUS_PENDING = "pending"
   STATUS_PREPARING = "preparing"
@@ -26,6 +26,9 @@ class Order < ApplicationRecord
   ]
 
   has_many :order_payments, dependent: :destroy
+  has_many :house_account_transactions, dependent: :nullify
+  belongs_to :staff_member, optional: true
+  belongs_to :created_by_staff, class_name: 'StaffMember', foreign_key: 'created_by_staff_id', optional: true
 
   # Payment helper methods
   def initial_payment
@@ -116,6 +119,116 @@ class Order < ApplicationRecord
   def has_refunds?
     refunded? || partially_refunded? || total_refunded > 0
   end
+  
+  # Staff discount constants
+  STAFF_ON_DUTY_DISCOUNT = 0.5  # 50% discount
+  STAFF_OFF_DUTY_DISCOUNT = 0.3  # 30% discount
+  
+  # Staff order helper methods
+  
+  # Calculate the appropriate discount rate based on duty status
+  def staff_discount_rate
+    return 0 unless is_staff_order
+    staff_on_duty ? STAFF_ON_DUTY_DISCOUNT : STAFF_OFF_DUTY_DISCOUNT
+  end
+  
+  # Calculate the pre-discount total if not already set
+  def calculate_pre_discount_total
+    return pre_discount_total if pre_discount_total.present?
+    
+    # Sum up the price of all items
+    items_total = items.sum { |item| (item['price'].to_f * item['quantity'].to_i) }
+    
+    # Add merchandise items if present
+    merch_total = 0
+    if merchandise_items.present?
+      merch_total = merchandise_items.sum { |item| (item['price'].to_f * item['quantity'].to_i) }
+    end
+    
+    items_total + merch_total
+  end
+  
+  # Calculate the discount amount
+  def discount_amount
+    return 0 unless is_staff_order
+    calculate_pre_discount_total * staff_discount_rate
+  end
+  
+  # Apply staff discount to the order
+  def apply_staff_discount
+    return unless is_staff_order
+    
+    # Set the pre-discount total if not already set
+    self.pre_discount_total ||= calculate_pre_discount_total
+    
+    # Calculate the discounted total
+    discounted_total = pre_discount_total * (1 - staff_discount_rate)
+    
+    # Update the total
+    self.total = discounted_total.round(2)
+    
+    # Store the pre-discount price for each item
+    if items.present?
+      items_with_pre_discount = items.map do |item|
+        # Store the original price as pre_discount_price
+        item_price = item['price'].to_f
+        item.merge({
+          'pre_discount_price' => item_price,
+          'price' => (item_price * (1 - staff_discount_rate)).round(2)
+        })
+      end
+      self.items = items_with_pre_discount
+    end
+  end
+  
+  # Process house account payment if needed
+  def process_house_account
+    return unless is_staff_order && use_house_account && staff_member.present?
+    
+    # Add a transaction to the staff member's house account
+    transaction = staff_member.charge_order_to_house_account(self, created_by_staff)
+    
+    # Mark the payment as completed via house account
+    self.payment_method = 'house_account'
+    self.payment_status = 'completed'
+    self.payment_amount = total
+    
+    # Generate a test transaction ID if none exists
+    test_transaction_id = "TEST-#{SecureRandom.hex(8)}"
+    self.transaction_id = test_transaction_id
+    
+    # Set detailed payment details for house account
+    if payment_details.present? && payment_details['staffOrderParams'].present?
+      # Extract the staff order params to be displayed properly
+      staff_params = payment_details['staffOrderParams']
+      
+      # Format the staff order params for display - convert to a string representation
+      formatted_staff_params = {
+        'is_staff_order' => staff_params['is_staff_order'].to_s == 'true' || staff_params['is_staff_order'] == true ? 'true' : 'false',
+        'staff_member_id' => staff_params['staff_member_id'].to_s,
+        'staff_on_duty' => staff_params['staff_on_duty'].to_s == 'true' || staff_params['staff_on_duty'] == true ? 'true' : 'false',
+        'use_house_account' => staff_params['use_house_account'].to_s == 'true' || staff_params['use_house_account'] == true ? 'true' : 'false',
+        'created_by_staff_id' => staff_params['created_by_staff_id'].to_s,
+        'pre_discount_total' => staff_params['pre_discount_total'].to_s
+      }
+      
+      # Update payment details with formatted information - use string keys instead of symbol keys
+      self.payment_details = payment_details.merge({
+        'status' => 'succeeded',
+        'payment_date' => Time.now.strftime('%Y-%m-%d'),
+        'transaction_id' => test_transaction_id,
+        'notes' => "Payment charged to #{staff_member.name}'s house account",
+        'processor' => 'house_account',
+        'payment_method' => 'house_account',
+        'staffOrderParams' => formatted_staff_params,
+        'house_account_transaction_id' => transaction.id.to_s
+      })
+    end
+  end
+  
+  # Callbacks for staff orders
+  before_save :apply_staff_discount, if: -> { is_staff_order && (new_record? || is_staff_order_changed? || staff_on_duty_changed?) }
+  after_create :process_house_account, if: -> { is_staff_order && use_house_account }
 
   def update_refund_status
     if total_refunded > 0
@@ -189,7 +302,19 @@ class Order < ApplicationRecord
       "merchandise_items" => merchandise_items || [],
       
       # Acknowledgment timestamp
-      "global_last_acknowledged_at" => global_last_acknowledged_at&.iso8601
+      "global_last_acknowledged_at" => global_last_acknowledged_at&.iso8601,
+      
+      # Staff order fields
+      "is_staff_order" => is_staff_order,
+      "staff_member_id" => staff_member_id,
+      "staff_member_name" => staff_member&.name,
+      "staff_on_duty" => staff_on_duty,
+      "use_house_account" => use_house_account,
+      "created_by_staff_id" => created_by_staff_id,
+      "created_by_staff_name" => created_by_staff&.name,
+      "pre_discount_total" => pre_discount_total.to_f,
+      "discount_amount" => discount_amount.to_f,
+      "discount_rate" => staff_discount_rate
     )
   end
 

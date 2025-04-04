@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_04_01_000001) do
+ActiveRecord::Schema[7.2].define(version: 2025_04_03_124728) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -51,6 +51,22 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_01_000001) do
     t.bigint "menu_id", null: false
     t.index ["menu_id", "name"], name: "index_categories_on_menu_id_and_name", unique: true
     t.index ["menu_id"], name: "index_categories_on_menu_id"
+  end
+
+  create_table "house_account_transactions", force: :cascade do |t|
+    t.bigint "staff_member_id", null: false
+    t.bigint "order_id"
+    t.decimal "amount", precision: 10, scale: 2, null: false
+    t.string "transaction_type", null: false
+    t.string "description"
+    t.string "reference"
+    t.bigint "created_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_by_id"], name: "index_house_account_transactions_on_created_by_id"
+    t.index ["order_id"], name: "index_house_account_transactions_on_order_id"
+    t.index ["staff_member_id"], name: "index_house_account_transactions_on_staff_member_id"
+    t.index ["transaction_type"], name: "index_house_account_transactions_on_transaction_type"
   end
 
   create_table "inventory_statuses", force: :cascade do |t|
@@ -295,10 +311,20 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_01_000001) do
     t.boolean "staff_created", default: false
     t.jsonb "payment_details"
     t.datetime "global_last_acknowledged_at"
+    t.boolean "is_staff_order", default: false
+    t.bigint "staff_member_id"
+    t.boolean "staff_on_duty", default: false
+    t.boolean "use_house_account", default: false
+    t.bigint "created_by_staff_id"
+    t.decimal "pre_discount_total", precision: 10, scale: 2
+    t.index ["created_by_staff_id"], name: "index_orders_on_created_by_staff_id"
     t.index ["global_last_acknowledged_at"], name: "index_orders_on_global_last_acknowledged_at"
+    t.index ["is_staff_order", "use_house_account"], name: "index_orders_on_staff_order_and_house_account"
+    t.index ["is_staff_order"], name: "index_orders_on_is_staff_order"
     t.index ["payment_id"], name: "index_orders_on_payment_id"
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
+    t.index ["staff_member_id"], name: "index_orders_on_staff_member_id"
     t.index ["user_id", "created_at"], name: "index_orders_on_user_id_and_created_at"
     t.index ["user_id"], name: "index_orders_on_user_id"
     t.index ["vip_access_code_id"], name: "index_orders_on_vip_access_code_id"
@@ -443,6 +469,18 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_01_000001) do
     t.index ["restaurant_id"], name: "index_special_events_on_restaurant_id"
   end
 
+  create_table "staff_members", force: :cascade do |t|
+    t.string "name", null: false
+    t.string "position"
+    t.bigint "user_id"
+    t.decimal "house_account_balance", precision: 10, scale: 2, default: "0.0", null: false
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["active"], name: "index_staff_members_on_active"
+    t.index ["user_id"], name: "index_staff_members_on_user_id", unique: true, where: "(user_id IS NOT NULL)"
+  end
+
   create_table "store_credits", force: :cascade do |t|
     t.bigint "order_id"
     t.string "customer_email", null: false
@@ -526,6 +564,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_01_000001) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "categories", "menus"
+  add_foreign_key "house_account_transactions", "orders", on_delete: :nullify
+  add_foreign_key "house_account_transactions", "staff_members"
   add_foreign_key "inventory_statuses", "menu_items"
   add_foreign_key "layouts", "restaurants"
   add_foreign_key "menu_item_categories", "categories"
@@ -547,6 +587,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_01_000001) do
   add_foreign_key "order_acknowledgments", "users"
   add_foreign_key "order_payments", "orders"
   add_foreign_key "orders", "restaurants"
+  add_foreign_key "orders", "staff_members", column: "created_by_staff_id", on_delete: :nullify
+  add_foreign_key "orders", "staff_members", on_delete: :nullify
   add_foreign_key "orders", "users"
   add_foreign_key "orders", "vip_access_codes"
   add_foreign_key "promo_codes", "restaurants"

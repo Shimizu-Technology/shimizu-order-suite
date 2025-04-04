@@ -1,10 +1,11 @@
 # app/controllers/users_controller.rb
 class UsersController < ApplicationController
-  before_action :authorize_request, only: [ :show_profile, :update_profile, :verify_phone, :resend_code ]
+  before_action :authorize_request, only: [ :show_profile, :update_profile, :verify_phone, :resend_code, :index, :show ]
+  before_action :require_admin, only: [ :index, :show ]
 
-  # Mark create, verify_phone, resend_code, show_profile, and update_profile as public endpoints that don't require restaurant context
+  # Mark create, verify_phone, resend_code, show_profile, update_profile, index, and show as public endpoints that don't require restaurant context
   def public_endpoint?
-    action_name.in?([ "create", "verify_phone", "resend_code", "show_profile", "update_profile" ])
+    action_name.in?([ "create", "verify_phone", "resend_code", "show_profile", "update_profile", "index", "show" ])
   end
 
   # POST /signup
@@ -142,7 +143,69 @@ class UsersController < ApplicationController
     end
   end
 
+  # GET /users
+  # List users with optional filtering
+  def index
+    # Start with users from the current restaurant if available
+    @users = if current_user&.restaurant_id
+               User.where(restaurant_id: current_user.restaurant_id)
+             else
+               User.all
+             end
+
+    # Filter by role if specified
+    if params[:role].present?
+      @users = @users.where(role: params[:role])
+    end
+
+    # Exclude specific roles if specified
+    if params[:exclude_role].present?
+      @users = @users.where.not(role: params[:exclude_role])
+    end
+
+    # Filter for users not already assigned to staff members
+    if params[:available_for_staff].present? && params[:available_for_staff] == 'true'
+      # Get IDs of users already assigned to staff members
+      assigned_user_ids = StaffMember.where.not(user_id: nil).pluck(:user_id)
+      @users = @users.where.not(id: assigned_user_ids)
+    end
+
+    # Include a specific user ID even if it's already assigned
+    if params[:include_user_id].present?
+      included_user = User.find_by(id: params[:include_user_id])
+      @users = @users.or(User.where(id: included_user.id)) if included_user
+    end
+
+    # Pagination
+    page = (params[:page] || 1).to_i
+    per_page = (params[:per_page] || 20).to_i
+    total_count = @users.count
+
+    @users = @users.order(:first_name, :last_name).offset((page - 1) * per_page).limit(per_page)
+
+    render json: {
+      users: @users,
+      total_count: total_count,
+      page: page,
+      per_page: per_page,
+      total_pages: (total_count.to_f / per_page).ceil
+    }
+  end
+
+  # GET /users/:id
+  # Get a specific user
+  def show
+    user = User.find(params[:id])
+    render json: user
+  end
+
   private
+
+  def require_admin
+    unless current_user&.role.in?(%w[admin super_admin])
+      render json: { error: "Unauthorized" }, status: :unauthorized
+    end
+  end
 
   def profile_params
     params.require(:user).permit(:first_name, :last_name, :email, :phone)

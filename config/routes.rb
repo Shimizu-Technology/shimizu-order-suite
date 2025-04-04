@@ -13,10 +13,30 @@ Rails.application.routes.draw do
   # Phone verification
   post "/verify_phone", to: "users#verify_phone"
   post "/resend_code",  to: "users#resend_code"
+  
+  # User management (for staff assignment)
+  get "/users", to: "users#index"
+  get "/users/:id", to: "users#show"
 
   # Password resets
   post  "/password/forgot", to: "passwords#forgot"
   patch "/password/reset",  to: "passwords#reset"
+
+  # Staff Members and House Account routes
+  resources :staff_members do
+    member do
+      get :transactions
+      post :transactions, to: 'staff_members#add_transaction'
+    end
+  end
+  
+  # Reports routes
+  namespace :reports do
+    get 'house_account_balances'
+    get 'staff_orders'
+    get 'discount_summary'
+    get 'house_account_activity/:staff_id', to: 'reports#house_account_activity', as: 'house_account_activity'
+  end
 
   # Standard REST resources
   resources :restaurants, only: [ :index, :show, :create, :update, :destroy ] do
