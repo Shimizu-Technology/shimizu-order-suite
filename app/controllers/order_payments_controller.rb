@@ -562,7 +562,7 @@ def create_refund
     @order = Order.find(params[:order_id])
 
     # Ensure the user can access this order
-    unless current_user&.role.in?(%w[admin super_admin]) ||
+    unless current_user&.role.in?(%w[admin super_admin staff]) ||
            (current_user && @order.user_id == current_user.id)
       render json: { error: "Forbidden" }, status: :forbidden
     end

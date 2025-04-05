@@ -10,6 +10,12 @@ module Admin
       true
     end
 
+    # GET /admin/restaurants
+    def index
+      restaurants = Restaurant.all.order(:name)
+      render json: restaurants
+    end
+
     # GET /admin/restaurant/allowed_origins
     def allowed_origins
       restaurant = Restaurant.find(params[:restaurant_id] || current_user&.restaurant_id || 1)

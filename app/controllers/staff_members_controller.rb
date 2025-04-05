@@ -9,8 +9,8 @@ class StaffMembersController < ApplicationController
   
   # GET /staff_members
   def index
-    # Only admin users can access staff members
-    unless current_user&.role.in?(%w[admin super_admin])
+    # Allow staff, admin, and super_admin users to access staff members
+    unless current_user&.role.in?(%w[admin super_admin staff])
       return render json: { error: "Unauthorized" }, status: :unauthorized
     end
     

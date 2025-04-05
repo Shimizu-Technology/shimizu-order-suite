@@ -171,6 +171,9 @@ Rails.application.routes.draw do
     # Restaurant settings
     get "restaurant/allowed_origins",  to: "restaurant#allowed_origins"
     post "restaurant/allowed_origins", to: "restaurant#update_allowed_origins"
+    
+    # Restaurant list for admin dashboard
+    get "restaurants", to: "restaurant#index"
 
     # Admin users => create/edit/delete + resend_invite + reset password
     resources :users, only: [ :index, :create, :update, :destroy ] do
@@ -189,6 +192,7 @@ Rails.application.routes.draw do
 
     collection do
       get :unacknowledged
+      get :staff, to: 'orders#staff_orders'
     end
 
     # Order payments routes

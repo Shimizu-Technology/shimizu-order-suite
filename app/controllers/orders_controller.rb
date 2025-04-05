@@ -14,13 +14,8 @@ class OrdersController < ApplicationController
 
   # GET /orders
   def index
-    if current_user&.role.in?(%w[admin super_admin])
-      @orders = Order.all
-    elsif current_user
-      @orders = current_user.orders
-    else
-      return render json: { error: "Unauthorized" }, status: :unauthorized
-    end
+    # Use Pundit's policy_scope to filter orders based on user role
+    @orders = policy_scope(Order)
 
     # Filter by restaurant_id if provided
     if params[:restaurant_id].present?
@@ -96,25 +91,91 @@ class OrdersController < ApplicationController
   # GET /orders/:id
   def show
     order = Order.find(params[:id])
-    if current_user&.role.in?(%w[admin super_admin]) ||
-       (current_user && current_user.id == order.user_id)
-      render json: order
-    else
-      render json: { error: "Forbidden" }, status: :forbidden
-    end
+    authorize order
+    render json: order
   end
 
   # GET /orders/new_since/:id
   def new_since
-    unless current_user&.role.in?(%w[admin super_admin])
-      return render json: { error: "Forbidden" }, status: :forbidden
-    end
-
+    # Only allow staff or above to access this endpoint
+    authorize Order, :index?
+    
     last_id = params[:id].to_i
-    new_orders = Order.where("id > ?", last_id)
+    # Apply policy scope to ensure proper filtering based on role
+    new_orders = policy_scope(Order).where("id > ?", last_id)
                       .where(staff_created: [false, nil]) # Exclude staff-created orders
                       .order(:id)
     render json: new_orders, status: :ok
+  end
+
+  # GET /orders/staff
+  # Allows admins to filter orders by staff member
+  def staff_orders
+    # Only allow admin or above to access this endpoint
+    unless current_user&.admin_or_above?
+      return render json: { error: "Forbidden" }, status: :forbidden
+    end
+
+    # Start with all orders
+    @orders = Order.all
+
+    # Filter by staff member if provided
+    if params[:staff_member_id].present?
+      @orders = @orders.where(created_by_staff_id: params[:staff_member_id])
+    else
+      # If no staff member specified, only show staff-created orders
+      @orders = @orders.where.not(created_by_staff_id: nil)
+    end
+
+    # Filter by restaurant_id if provided
+    if params[:restaurant_id].present?
+      @orders = @orders.where(restaurant_id: params[:restaurant_id])
+    end
+
+    # Filter by status if provided
+    if params[:status].present?
+      @orders = @orders.where(status: params[:status])
+    end
+
+    # Filter by date range if provided
+    if params[:date_from].present? && params[:date_to].present?
+      date_from = Date.parse(params[:date_from]).beginning_of_day
+      date_to = Date.parse(params[:date_to]).end_of_day
+      @orders = @orders.where(created_at: date_from..date_to)
+    end
+
+    # Get total count after filtering but before pagination
+    total_count = @orders.count
+
+    # Add pagination
+    page = (params[:page] || 1).to_i
+    per_page = (params[:per_page] || 10).to_i
+
+    # Apply sorting
+    sort_by = params[:sort_by] || 'created_at'
+    sort_direction = params[:sort_direction] || 'desc'
+    
+    # Validate sort parameters to prevent SQL injection
+    valid_sort_columns = ['id', 'created_at', 'updated_at', 'status', 'total']
+    valid_sort_directions = ['asc', 'desc']
+    
+    sort_by = 'created_at' unless valid_sort_columns.include?(sort_by)
+    sort_direction = 'desc' unless valid_sort_directions.include?(sort_direction)
+    
+    @orders = @orders.order("#{sort_by} #{sort_direction}")
+                     .offset((page - 1) * per_page)
+                     .limit(per_page)
+
+    # Calculate total pages
+    total_pages = (total_count.to_f / per_page).ceil
+
+    render json: {
+      orders: @orders,
+      total_count: total_count,
+      page: page,
+      per_page: per_page,
+      total_pages: total_pages
+    }, status: :ok
   end
 
   # GET /orders/unacknowledged
@@ -152,6 +213,9 @@ class OrdersController < ApplicationController
   # POST /orders/:id/acknowledge
   def acknowledge
     order = Order.find(params[:id])
+    
+    # Use Pundit to authorize the action
+    authorize order, :acknowledge?
 
     # Create acknowledgment record
     acknowledgment = OrderAcknowledgment.find_or_initialize_by(

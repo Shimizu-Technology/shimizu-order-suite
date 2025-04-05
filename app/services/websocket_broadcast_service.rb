@@ -5,19 +5,30 @@ class WebsocketBroadcastService
   def self.broadcast_new_order(order)
     return unless order.restaurant_id.present?
     
-    # Skip broadcasting for staff-created orders if desired
-    # return if order.staff_created?
-    # Get the order as JSON
-    order_json = order.as_json
+    # Get the order as JSON with all necessary fields for filtering
+    order_json = order.as_json(
+      include: [],
+      methods: [:created_by_staff_id, :is_staff_order]
+    )
     
-    # Items are already included in the order JSON as a parsed array of hashes
-    # No need to use include: :items which causes the error
+    # Add explicit staff information for frontend filtering
+    staff_info = {
+      created_by_staff_id: order.created_by_staff_id,
+      is_staff_order: order.is_staff_order
+    }
+    
+    # Ensure these fields are included in the broadcast
+    order_json.merge!(staff_info)
+    
+    # Log the staff information for debugging
+    Rails.logger.info("Order #{order.id} staff info: created_by=#{order.created_by_staff_id}, is_staff=#{order.is_staff_order}")
     
     ActionCable.server.broadcast(
       "order_channel_#{order.restaurant_id}",
       {
         type: 'new_order',
-        order: order_json
+        order: order_json,
+        staff_info: staff_info # Include staff info separately for easier access
       }
     )
     
@@ -28,16 +39,30 @@ class WebsocketBroadcastService
   def self.broadcast_order_update(order)
     return unless order.restaurant_id.present?
     
-    # Get the order as JSON
-    order_json = order.as_json
+    # Get the order as JSON with all necessary fields for filtering
+    order_json = order.as_json(
+      include: [],
+      methods: [:created_by_staff_id, :is_staff_order]
+    )
     
-    # Items are already included in the order JSON as a parsed array of hashes
+    # Add explicit staff information for frontend filtering
+    staff_info = {
+      created_by_staff_id: order.created_by_staff_id,
+      is_staff_order: order.is_staff_order
+    }
+    
+    # Ensure these fields are included in the broadcast
+    order_json.merge!(staff_info)
+    
+    # Log the staff information for debugging
+    Rails.logger.info("Order update #{order.id} staff info: created_by=#{order.created_by_staff_id}, is_staff=#{order.is_staff_order}")
     
     ActionCable.server.broadcast(
       "order_channel_#{order.restaurant_id}",
       {
         type: 'order_updated',
-        order: order_json
+        order: order_json,
+        staff_info: staff_info # Include staff info separately for easier access
       }
     )
     

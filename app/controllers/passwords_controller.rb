@@ -43,7 +43,12 @@ class PasswordsController < ApplicationController
       user.clear_reset_password_token!
 
       # Generate a new JWT so the user can be auto-logged in
-      jwt = JWT.encode({ user_id: user.id }, Rails.application.secret_key_base)
+      jwt = JWT.encode({ 
+        user_id: user.id,
+        restaurant_id: user.restaurant_id,
+        role: user.role,
+        exp: 24.hours.from_now.to_i
+      }, Rails.application.secret_key_base)
 
       # Return both the token and the user object => front end can store them
       render json: {

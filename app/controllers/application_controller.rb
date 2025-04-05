@@ -2,9 +2,13 @@
 
 class ApplicationController < ActionController::API
   include RestaurantScope
+  include Pundit::Authorization
   
   # Add around_action to track controller actions
   around_action :track_request, unless: :skip_tracking?
+  
+  # Rescue from Pundit authorization errors
+  rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
   def authorize_request
     header = request.headers["Authorization"]
     token = header.split(" ").last if header
@@ -46,7 +50,19 @@ class ApplicationController < ActionController::API
   end
 
   def is_admin?
-    current_user && current_user.role.in?(%w[admin super_admin])
+    current_user && current_user.admin_or_above?
+  end
+  
+  def require_admin!
+    unless current_user && current_user.admin_or_above?
+      render json: { error: "Forbidden" }, status: :forbidden
+    end
+  end
+  
+  private
+  
+  def user_not_authorized
+    render json: { error: "You are not authorized to perform this action" }, status: :forbidden
   end
   
   private

@@ -46,10 +46,11 @@ class UsersController < ApplicationController
         )
       end
 
-      # Issue JWT with user_id, restaurant_id, and 24-hour expiration
+      # Issue JWT with user_id, restaurant_id, role, and 24-hour expiration
       token_payload = {
         user_id: user.id,
         restaurant_id: user.restaurant_id,
+        role: user.role,
         exp: 24.hours.from_now.to_i
       }
 

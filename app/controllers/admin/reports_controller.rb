@@ -328,7 +328,8 @@ module Admin
     private
 
     def ensure_admin_or_staff
-      unless current_user&.admin? || current_user&.staff?
+      # Check for super_admin, admin, or staff roles
+      unless current_user&.super_admin? || current_user&.admin? || current_user&.staff?
         render json: { error: 'Unauthorized' }, status: :unauthorized
       end
     end

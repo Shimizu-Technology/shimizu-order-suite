@@ -230,7 +230,8 @@ class MenuItemsController < ApplicationController
   # POST /menu_items/:id/mark_as_damaged
   def mark_as_damaged
     Rails.logger.info "=== MenuItemsController#mark_as_damaged ==="
-    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
+    # Allow both admin and staff users to mark items as damaged
+    return render json: { error: "Forbidden" }, status: :forbidden unless current_user&.staff_or_above?
 
     menu_item = MenuItem.find(params[:id])
 
@@ -273,7 +274,8 @@ class MenuItemsController < ApplicationController
   # POST /menu_items/:id/update_stock
   def update_stock
     Rails.logger.info "=== MenuItemsController#update_stock ==="
-    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
+    # Allow both admin and staff users to update inventory
+    return render json: { error: "Forbidden" }, status: :forbidden unless current_user&.staff_or_above?
 
     menu_item = MenuItem.find(params[:id])
 

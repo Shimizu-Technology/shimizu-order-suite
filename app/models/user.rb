@@ -39,8 +39,32 @@ class User < ApplicationRecord
     "#{first_name} #{last_name}".strip
   end
 
+  # Role validation
+  validates :role, inclusion: { in: %w[super_admin admin staff customer] }
+
+  # Role helper methods
+  def super_admin?
+    role == "super_admin"
+  end
+  
   def admin?
     role == "admin"
+  end
+  
+  def staff?
+    role == "staff"
+  end
+  
+  def customer?
+    role == "customer"
+  end
+  
+  def admin_or_above?
+    role.in?(["admin", "super_admin"])
+  end
+  
+  def staff_or_above?
+    role.in?(["staff", "admin", "super_admin"])
   end
 
   # -----------------------------------------------------------
