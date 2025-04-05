@@ -180,7 +180,7 @@ class OrdersController < ApplicationController
 
   # GET /orders/unacknowledged
   def unacknowledged
-    unless current_user&.role.in?(%w[admin super_admin])
+    unless current_user&.role.in?(%w[admin super_admin staff])
       return render json: { error: "Forbidden" }, status: :forbidden
     end
 

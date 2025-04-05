@@ -45,11 +45,11 @@ class OrderPolicy < ApplicationPolicy
 
   def show?
     # Admins can see any order
-    # Staff can see orders they created or online orders
+    # Staff can see orders they created or any non-staff order
     # Customers can only see their own orders
     admin_or_above? || 
     record.user_id == user.id || 
-    (staff? && (record.created_by_staff_id == user.staff_member&.id || record.source == 'online'))
+    (staff? && (record.created_by_staff_id == user.staff_member&.id || !record.staff_created))
   end
 
   def acknowledge?
@@ -77,9 +77,9 @@ class OrderPolicy < ApplicationPolicy
 
   def acknowledge?
     # Admins can acknowledge any order
-    # Staff can acknowledge online orders or orders they created
+    # Staff can acknowledge any non-staff order or orders they created
     admin_or_above? || 
-    (staff? && (record.created_by_staff_id == user.staff_member&.id || record.source == 'online'))
+    (staff? && (record.created_by_staff_id == user.staff_member&.id || !record.staff_created))
   end
 
   def unacknowledge?

@@ -134,7 +134,7 @@ class NotificationsController < ApplicationController
   end
 
   def require_admin_or_super_admin
-    unless current_user && current_user.role.in?(%w[admin super_admin])
+    unless current_user && current_user.role.in?(%w[admin super_admin staff])
       render json: { error: "Unauthorized - Admin access required" }, status: :forbidden
     end
   end
