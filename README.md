@@ -27,6 +27,7 @@ The backend is built with **Ruby on Rails** in API-only mode, with a multi-tenan
 - **Sidekiq** for background job processing
 - **Action Cable** for WebSocket communication
 - **JWT Authentication** with restaurant context
+- **Pundit-based Authorization** with fine-grained policy-based access control
 - **Multi-tenant** data isolation through default scopes
 - **CORS configuration** for restaurant-specific frontend origins
 
@@ -123,6 +124,33 @@ The platform now includes a comprehensive store credit system:
 - Admin tools for managing customer credits
 
 For detailed documentation, see [Store Credit System Documentation](docs/store_credit_system.md).
+
+### Staff Discount and House Account System
+
+The platform includes a staff discount and house account system:
+
+- Staff discounts (50% for on-duty, 30% for off-duty)
+- House account system for deferred payment via payroll deduction
+- Staff member management with user account association
+- Comprehensive transaction history for house accounts
+- Detailed reporting for staff discounts and house account balances
+- Integration with the order system for seamless staff order creation
+
+For detailed documentation, see [Staff Discount and House Account System Documentation](docs/staff_discount_house_account_system.md).
+
+### Order Notification System
+
+The platform features a robust order notification system:
+
+- Real-time notifications via WebSockets
+- Fallback polling mechanism for network disruptions
+- Notification deduplication to prevent duplicate alerts
+- Centralized WebSocket connection management
+- Local storage for offline notification handling
+- Notification acknowledgment tracking
+- Multi-channel notification delivery (UI, email, SMS)
+
+For detailed documentation, see [Order Notification System Documentation](docs/order_notification_system.md).
 
 ### Merchandise Categories and Stock Management
 
