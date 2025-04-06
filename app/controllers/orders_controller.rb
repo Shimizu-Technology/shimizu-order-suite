@@ -29,8 +29,10 @@ class OrdersController < ApplicationController
 
     # Filter by date range if provided
     if params[:date_from].present? && params[:date_to].present?
-      date_from = Date.parse(params[:date_from]).beginning_of_day
-      date_to = Date.parse(params[:date_to]).end_of_day
+      # Parse dates with timezone consideration
+      # If timezone info is included in the string, it will be respected
+      date_from = Time.zone.parse(params[:date_from]).beginning_of_day
+      date_to = Time.zone.parse(params[:date_to]).end_of_day
       @orders = @orders.where(created_at: date_from..date_to)
     end
 
@@ -143,8 +145,10 @@ class OrdersController < ApplicationController
 
     # Filter by date range if provided
     if params[:date_from].present? && params[:date_to].present?
-      date_from = Date.parse(params[:date_from]).beginning_of_day
-      date_to = Date.parse(params[:date_to]).end_of_day
+      # Parse dates with timezone consideration
+      # If timezone info is included in the string, it will be respected
+      date_from = Time.zone.parse(params[:date_from]).beginning_of_day
+      date_to = Time.zone.parse(params[:date_to]).end_of_day
       @orders = @orders.where(created_at: date_from..date_to)
     end
 

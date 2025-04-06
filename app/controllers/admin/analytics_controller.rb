@@ -12,8 +12,9 @@ module Admin
 
     # GET /admin/analytics/customer_orders?start=YYYY-MM-DD&end=YYYY-MM-DD
     def customer_orders
-      start_date = params[:start].present? ? Date.parse(params[:start]) : (Date.today - 30)
-      end_date   = params[:end].present?   ? Date.parse(params[:end])   : Date.today
+      # Use Time.zone.parse to respect any timezone information in the input
+      start_date = params[:start].present? ? Time.zone.parse(params[:start]) : (Time.zone.today - 30)
+      end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.today
       end_date = end_date.end_of_day
 
       orders = Order
@@ -78,9 +79,9 @@ module Admin
     # GET /admin/analytics/revenue_trend?interval=30min|hour|day|week|month&start=...&end=...
     def revenue_trend
       interval   = params[:interval].presence || "day"
-      # Parse as DateTime instead of Date to support time-based intervals
-      start_date = params[:start].present? ? DateTime.parse(params[:start]) : 30.days.ago
-      end_date   = params[:end].present?   ? DateTime.parse(params[:end])   : DateTime.now
+      # Parse with timezone consideration
+      start_date = params[:start].present? ? Time.zone.parse(params[:start]) : 30.days.ago
+      end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.now
       end_date = end_date.end_of_day
 
       orders = Order.where.not(status: "cancelled").where(created_at: start_date..end_date)
@@ -136,8 +137,9 @@ module Admin
     # GET /admin/analytics/top_items?limit=5&start=...&end=...
     def top_items
       limit = (params[:limit] || 5).to_i
-      start_date = params[:start].present? ? Date.parse(params[:start]) : 30.days.ago
-      end_date   = params[:end].present?   ? Date.parse(params[:end])   : Date.today
+      # Parse with timezone consideration
+      start_date = params[:start].present? ? Time.zone.parse(params[:start]) : 30.days.ago
+      end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.today
       end_date = end_date.end_of_day
 
       orders = Order.where.not(status: "cancelled").where(created_at: start_date..end_date)
@@ -189,8 +191,9 @@ module Admin
 
     # GET /admin/analytics/user_signups?start=YYYY-MM-DD&end=YYYY-MM-DD
     def user_signups
-      start_date = params[:start].present? ? Date.parse(params[:start]) : (Date.today - 30)
-      end_date   = params[:end].present?   ? Date.parse(params[:end])   : Date.today
+      # Parse with timezone consideration
+      start_date = params[:start].present? ? Time.zone.parse(params[:start]) : (Time.zone.today - 30)
+      end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.today
       end_date = end_date.end_of_day
 
       # Query users created within the date range, grouped by day
@@ -217,8 +220,9 @@ module Admin
 
     # GET /admin/analytics/user_activity_heatmap?start=YYYY-MM-DD&end=YYYY-MM-DD
     def user_activity_heatmap
-      start_date = params[:start].present? ? Date.parse(params[:start]) : (Date.today - 30)
-      end_date   = params[:end].present?   ? Date.parse(params[:end])   : Date.today
+      # Parse with timezone consideration
+      start_date = params[:start].present? ? Time.zone.parse(params[:start]) : (Time.zone.today - 30)
+      end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.today
       end_date = end_date.end_of_day
 
       # Query orders within the date range, grouped by day of week (0-6, Sunday-Saturday) and hour (0-23)

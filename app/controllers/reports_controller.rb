@@ -53,8 +53,9 @@ class ReportsController < ApplicationController
     
     # Filter by date range if provided
     if params[:date_from].present? && params[:date_to].present?
-      date_from = Date.parse(params[:date_from]).beginning_of_day
-      date_to = Date.parse(params[:date_to]).end_of_day
+      # Parse with timezone consideration
+      date_from = Time.zone.parse(params[:date_from]).beginning_of_day
+      date_to = Time.zone.parse(params[:date_to]).end_of_day
       @orders = @orders.where(created_at: date_from..date_to)
     end
     
@@ -108,12 +109,13 @@ class ReportsController < ApplicationController
     
     # Filter by date range if provided
     if params[:date_from].present? && params[:date_to].present?
-      date_from = Date.parse(params[:date_from]).beginning_of_day
-      date_to = Date.parse(params[:date_to]).end_of_day
+      # Parse with timezone consideration
+      date_from = Time.zone.parse(params[:date_from]).beginning_of_day
+      date_to = Time.zone.parse(params[:date_to]).end_of_day
       date_range = date_from..date_to
     else
-      # Default to current month
-      date_range = Time.current.beginning_of_month..Time.current.end_of_month
+      # Default to current month in Guam timezone
+      date_range = Time.zone.now.beginning_of_month..Time.zone.now.end_of_month
     end
     
     # Get all staff orders in the date range
