@@ -12,7 +12,6 @@ class Order < ApplicationRecord
   STATUS_COMPLETED = "completed"
   STATUS_CANCELLED = "cancelled"
   STATUS_REFUNDED = "refunded"
-  STATUS_PARTIALLY_REFUNDED = "partially_refunded"
 
   # Valid order statuses
   VALID_STATUSES = [
@@ -21,8 +20,7 @@ class Order < ApplicationRecord
     STATUS_READY,
     STATUS_COMPLETED,
     STATUS_CANCELLED,
-    STATUS_REFUNDED,
-    STATUS_PARTIALLY_REFUNDED
+    STATUS_REFUNDED
   ]
 
   has_many :order_payments, dependent: :destroy
@@ -113,12 +111,8 @@ class Order < ApplicationRecord
     status == STATUS_REFUNDED
   end
 
-  def partially_refunded?
-    status == STATUS_PARTIALLY_REFUNDED
-  end
-
   def has_refunds?
-    refunded? || partially_refunded? || total_refunded > 0
+    refunded? || total_refunded > 0
   end
   
   # Staff discount constants
@@ -237,8 +231,9 @@ class Order < ApplicationRecord
         # Full refund (allowing for small floating point differences)
         update(payment_status: STATUS_REFUNDED, status: STATUS_REFUNDED)
       else
-        # Partial refund
-        update(payment_status: STATUS_PARTIALLY_REFUNDED, status: STATUS_PARTIALLY_REFUNDED)
+        # Partial refund - keep original status
+        update(payment_status: STATUS_REFUNDED)
+        # No longer changing status for partial refunds
       end
     end
   end

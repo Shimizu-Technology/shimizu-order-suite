@@ -554,11 +554,8 @@ def create_refund
       Rails.logger.info("Is full refund: #{is_full_refund}")
       
       # Always update payment_status to reflect the refund state
-      if payment_fully_refunded
-        @order.update(payment_status: Order::STATUS_REFUNDED)
-      else
-        @order.update(payment_status: Order::STATUS_PARTIALLY_REFUNDED)
-      end
+      # We now use 'refunded' for both full and partial refunds
+      @order.update(payment_status: Order::STATUS_REFUNDED)
       
       # Only update the order status if ALL items are refunded
       # This preserves the original order status (pending, completed, etc.) for partial refunds

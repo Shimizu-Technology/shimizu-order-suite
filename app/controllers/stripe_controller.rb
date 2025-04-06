@@ -209,8 +209,8 @@ class StripeController < ApplicationController
             )
           else
             order.update(
-              payment_status: "partially_refunded",
-              status: Order::STATUS_PARTIALLY_REFUNDED,
+              payment_status: "refunded",
+              # No longer changing status for partial refunds
               refund_amount: charge.amount_refunded / 100.0, # Convert from cents
               payment_id: payment_intent_id # Ensure payment_id is set
             )
@@ -489,8 +489,8 @@ class StripeController < ApplicationController
             )
           else
             order.update(
-              payment_status: "partially_refunded",
-              status: Order::STATUS_PARTIALLY_REFUNDED,
+              payment_status: "refunded",
+              # No longer changing status for partial refunds
               refund_amount: charge.amount_refunded / 100.0, # Convert from cents
               payment_id: payment_intent_id # Ensure payment_id is set
             )

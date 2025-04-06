@@ -677,8 +677,8 @@ class OrdersController < ApplicationController
     # IMPORTANT: Don't allow frontend to set or override refund status
     # This prevents inconsistencies between payment_status and status
     if permitted_params[:status].present? && 
-       (['refunded', 'partially_refunded'].include?(permitted_params[:status]) || 
-        ['refunded', 'partially_refunded'].include?(order.status))
+       (['refunded'].include?(permitted_params[:status]) || 
+        ['refunded'].include?(order.status))
       # Remove status from permitted params to preserve the server-calculated refund status
       # or prevent the frontend from setting a refund status
       Rails.logger.info("Preventing frontend refund status change: #{permitted_params[:status]} -> #{order.status}")

@@ -277,8 +277,8 @@ class PaypalController < ApplicationController
       else
         # Partial refund
         order.update(
-          payment_status: "partially_refunded",
-          status: Order::STATUS_PARTIALLY_REFUNDED,
+          payment_status: "refunded",
+          # No longer changing status for partial refunds
           refund_amount: refund_amount
         )
       end
@@ -393,8 +393,8 @@ class PaypalController < ApplicationController
       else
         # Partial refund
         order.update(
-          payment_status: "partially_refunded",
-          status: Order::STATUS_PARTIALLY_REFUNDED,
+          payment_status: "refunded",
+          # No longer changing status for partial refunds
           refund_amount: refund_amount
         )
       end
