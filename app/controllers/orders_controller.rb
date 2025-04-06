@@ -3,12 +3,13 @@
 class OrdersController < ApplicationController
   before_action :authorize_request, except: [ :create, :show ]
 
-  # Mark create, show, new_since, index, update, and destroy as public endpoints
+  # Mark create, show, new_since, index, update, destroy, staff_orders, and order_creators as public endpoints
   # that don't require restaurant context
   def public_endpoint?
     action_name.in?([
       "create", "show", "new_since", "index",
-      "update", "destroy", "acknowledge", "unacknowledged"
+      "update", "destroy", "acknowledge", "unacknowledged",
+      "staff_orders", "order_creators" # Added staff_orders and order_creators to the list of public endpoints
     ])
   end
 
@@ -25,6 +26,17 @@ class OrdersController < ApplicationController
     # Filter by status if provided
     if params[:status].present?
       @orders = @orders.where(status: params[:status])
+    end
+
+    # Filter for online orders only (customer orders)
+    if params[:online_orders_only].present? && params[:online_orders_only] == 'true'
+
+      @orders = @orders.where(staff_created: false)
+    end
+
+    # Filter by staff member if provided
+    if params[:staff_member_id].present?
+      @orders = @orders.where(created_by_staff_id: params[:staff_member_id])
     end
 
     # Filter by date range if provided
@@ -111,7 +123,7 @@ class OrdersController < ApplicationController
   end
 
   # GET /orders/staff
-  # Allows admins to filter orders by staff member
+  # Allows admins to filter orders by staff member or user
   def staff_orders
     # Only allow admin or above to access this endpoint
     unless current_user&.admin_or_above?
@@ -121,12 +133,33 @@ class OrdersController < ApplicationController
     # Start with all orders
     @orders = Order.all
 
-    # Filter by staff member if provided
-    if params[:staff_member_id].present?
-      @orders = @orders.where(created_by_staff_id: params[:staff_member_id])
+    # Primary filtering logic - these are mutually exclusive
+    if params[:online_orders_only].present? && params[:online_orders_only] == 'true'
+      # Filter for online orders only (customer orders)
+      @orders = @orders.where(staff_created: false)
+    elsif params[:staff_member_id].present?
+      # Filter by staff member or user if provided
+      # Check if this is a user ID (admin/super_admin) or a staff member ID
+      if params[:staff_member_id].to_s.include?('user_')
+        # If the ID starts with 'user_', it's a user ID
+        user_id = params[:staff_member_id].to_s.gsub('user_', '')
+        # Only filter by user_id for user-created orders
+        @orders = @orders.where(created_by_user_id: user_id)
+      else
+        # This is a staff member ID
+        @orders = @orders.where(created_by_staff_id: params[:staff_member_id])
+      end
     elsif params[:user_id].present?
       # Filter by user_id if provided
-      @orders = @orders.where(created_by_user_id: params[:user_id])
+      user_orders = @orders.where(created_by_user_id: params[:user_id])
+      
+      # Include online orders if requested
+      if params[:include_online_orders].present? && params[:include_online_orders] == 'true'
+        online_orders = @orders.where(staff_created: false)
+        @orders = user_orders.or(online_orders)
+      else
+        @orders = user_orders
+      end
     else
       # If no staff member or user specified, show all staff-created orders
       # Include orders created by either staff_id or user_id
@@ -146,9 +179,10 @@ class OrdersController < ApplicationController
     # Filter by date range if provided
     if params[:date_from].present? && params[:date_to].present?
       # Parse dates with timezone consideration
-      # If timezone info is included in the string, it will be respected
-      date_from = Time.zone.parse(params[:date_from]).beginning_of_day
-      date_to = Time.zone.parse(params[:date_to]).end_of_day
+      # Parse dates with timezone consideration
+      # Use exact timestamps from frontend instead of modifying them
+      date_from = Time.zone.parse(params[:date_from])
+      date_to = Time.zone.parse(params[:date_to])
       @orders = @orders.where(created_at: date_from..date_to)
     end
 
@@ -184,6 +218,35 @@ class OrdersController < ApplicationController
       per_page: per_page,
       total_pages: total_pages
     }, status: :ok
+  end
+
+  # GET /orders/creators
+  # Returns a list of users who have created orders (staff, admin, super_admin)
+  def order_creators
+    # Only allow admin or above to access this endpoint
+    unless current_user&.admin_or_above?
+      return render json: { error: "Forbidden" }, status: :forbidden
+    end
+    
+    # Find all users who have created orders
+    # Get unique user_ids from orders where created_by_user_id is not null
+    user_ids = Order.where.not(created_by_user_id: nil).distinct.pluck(:created_by_user_id)
+    
+    # Get users with those IDs who are staff, admin, or super_admin
+    @users = User.where(id: user_ids).where(role: ['staff', 'admin', 'super_admin'])
+    
+    # Format the response
+    creators = @users.map do |user|
+      {
+        id: "user_#{user.id}",
+        name: "#{user.first_name} #{user.last_name}",
+        type: 'user',
+        role: user.role
+      }
+    end
+    
+    # Return only users who have created orders
+    render json: creators
   end
 
   # GET /orders/unacknowledged

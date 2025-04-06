@@ -193,6 +193,7 @@ Rails.application.routes.draw do
     collection do
       get :unacknowledged
       get :staff, to: 'orders#staff_orders'
+      get :creators, to: 'orders#order_creators'
     end
 
     # Order payments routes

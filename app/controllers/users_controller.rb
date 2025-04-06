@@ -158,6 +158,13 @@ class UsersController < ApplicationController
     if params[:role].present?
       @users = @users.where(role: params[:role])
     end
+    
+    # Filter by multiple roles if specified
+    if params[:roles].present?
+      # Convert to array if it's a string
+      roles = params[:roles].is_a?(Array) ? params[:roles] : [params[:roles]]
+      @users = @users.where(role: roles)
+    end
 
     # Exclude specific roles if specified
     if params[:exclude_role].present?
@@ -184,13 +191,19 @@ class UsersController < ApplicationController
 
     @users = @users.order(:first_name, :last_name).offset((page - 1) * per_page).limit(per_page)
 
-    render json: {
-      users: @users,
-      total_count: total_count,
-      page: page,
-      per_page: per_page,
-      total_pages: (total_count.to_f / per_page).ceil
-    }
+    # For the staff filter in OrderManager, we need to return just the array of users
+    if params[:roles].present?
+      render json: @users
+    else
+      # For other cases, return the paginated response with metadata
+      render json: {
+        users: @users,
+        total_count: total_count,
+        page: page,
+        per_page: per_page,
+        total_pages: (total_count.to_f / per_page).ceil
+      }
+    end
   end
 
   # GET /users/:id
