@@ -161,9 +161,9 @@ class OrdersController < ApplicationController
         @orders = user_orders
       end
     else
-      # If no staff member or user specified, show all staff-created orders
-      # Include orders created by either staff_id, user_id, or with staff_created flag
-      @orders = @orders.where("created_by_staff_id IS NOT NULL OR created_by_user_id IS NOT NULL OR staff_created = TRUE")
+      # If no staff member or user specified, show ALL orders (both staff and customer orders)
+      # No additional filtering needed here - we want to show everything
+      # The 'online_orders_only' parameter will handle filtering to only customer orders if needed
     end
 
     # Filter by restaurant_id if provided
