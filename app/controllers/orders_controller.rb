@@ -162,8 +162,8 @@ class OrdersController < ApplicationController
       end
     else
       # If no staff member or user specified, show all staff-created orders
-      # Include orders created by either staff_id or user_id
-      @orders = @orders.where("created_by_staff_id IS NOT NULL OR created_by_user_id IS NOT NULL")
+      # Include orders created by either staff_id, user_id, or with staff_created flag
+      @orders = @orders.where("created_by_staff_id IS NOT NULL OR created_by_user_id IS NOT NULL OR staff_created = TRUE")
     end
 
     # Filter by restaurant_id if provided
@@ -179,11 +179,62 @@ class OrdersController < ApplicationController
     # Filter by date range if provided
     if params[:date_from].present? && params[:date_to].present?
       # Parse dates with timezone consideration
-      # Parse dates with timezone consideration
-      # Use exact timestamps from frontend instead of modifying them
-      date_from = Time.zone.parse(params[:date_from])
-      date_to = Time.zone.parse(params[:date_to])
-      @orders = @orders.where(created_at: date_from..date_to)
+      # Ensure we capture the full day by extending the range slightly
+      begin
+        # Debug log for incoming date parameters
+        Rails.logger.info("[DATE FILTER DEBUG] Received date parameters:")
+        Rails.logger.info("[DATE FILTER DEBUG] date_from: #{params[:date_from]}")
+        Rails.logger.info("[DATE FILTER DEBUG] date_to: #{params[:date_to]}")
+        Rails.logger.info("[DATE FILTER DEBUG] Current time in Rails: #{Time.zone.now}")
+        
+        # Parse the dates with timezone information preserved
+        # If the date string has 'Z' at the end (UTC timezone), convert it to Guam time (UTC+10)
+        date_from_str = params[:date_from]
+        date_to_str = params[:date_to]
+        
+        # Parse the dates - Time.zone.parse will handle the timezone conversion
+        date_from = Time.zone.parse(date_from_str)
+        date_to = Time.zone.parse(date_to_str)
+        
+        # For dates in UTC (ending with Z), we need to adjust the query to match Guam timezone
+        if date_from_str.end_with?('Z') || date_to_str.end_with?('Z')
+          Rails.logger.info("[DATE FILTER DEBUG] Detected UTC dates, adjusting for Guam timezone")
+          
+          # For custom date range, ensure we're using the full day in Guam time
+          # Start at 00:00:00 Guam time for the start date
+          date_from = date_from.beginning_of_day
+          # End at 23:59:59 Guam time for the end date
+          date_to = date_to.end_of_day
+        end
+        
+        # Debug log for parsed dates
+        Rails.logger.info("[DATE FILTER DEBUG] Parsed dates:")
+        Rails.logger.info("[DATE FILTER DEBUG] date_from parsed: #{date_from}")
+        Rails.logger.info("[DATE FILTER DEBUG] date_to parsed: #{date_to}")
+        
+        # Extend the range slightly to ensure we capture all orders
+        # Subtract 1 second from start and add 1 second to end
+        date_from = date_from - 1.second
+        date_to = date_to + 1.second
+        
+        # Debug log for extended dates
+        Rails.logger.info("[DATE FILTER DEBUG] Extended dates:")
+        Rails.logger.info("[DATE FILTER DEBUG] date_from extended: #{date_from}")
+        Rails.logger.info("[DATE FILTER DEBUG] date_to extended: #{date_to}")
+        
+        # Debug log for SQL query
+        @orders_before_filter = @orders.count
+        @orders = @orders.where(created_at: date_from..date_to)
+        @orders_after_filter = @orders.count
+        
+        Rails.logger.info("[DATE FILTER DEBUG] Orders count before filter: #{@orders_before_filter}")
+        Rails.logger.info("[DATE FILTER DEBUG] Orders count after filter: #{@orders_after_filter}")
+        Rails.logger.info("[DATE FILTER DEBUG] Difference: #{@orders_before_filter - @orders_after_filter}")
+      rescue => e
+        # Log the error but continue with unfiltered orders
+        Rails.logger.error("Error parsing date range: #{e.message}")
+        Rails.logger.error("date_from: #{params[:date_from]}, date_to: #{params[:date_to]}")
+      end
     end
 
     # Get total count after filtering but before pagination
