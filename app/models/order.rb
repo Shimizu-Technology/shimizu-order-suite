@@ -29,6 +29,7 @@ class Order < ApplicationRecord
   has_many :house_account_transactions, dependent: :nullify
   belongs_to :staff_member, optional: true
   belongs_to :created_by_staff, class_name: 'StaffMember', foreign_key: 'created_by_staff_id', optional: true
+  belongs_to :created_by_user, class_name: 'User', foreign_key: 'created_by_user_id', optional: true
 
   # Payment helper methods
   def initial_payment
@@ -312,6 +313,8 @@ class Order < ApplicationRecord
       "use_house_account" => use_house_account,
       "created_by_staff_id" => created_by_staff_id,
       "created_by_staff_name" => created_by_staff&.name,
+      "created_by_user_id" => created_by_user_id,
+      "created_by_user_name" => created_by_user&.full_name,
       "pre_discount_total" => pre_discount_total.to_f,
       "discount_amount" => discount_amount.to_f,
       "discount_rate" => staff_discount_rate

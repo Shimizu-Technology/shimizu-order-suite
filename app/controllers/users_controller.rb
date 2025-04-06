@@ -1,7 +1,7 @@
 # app/controllers/users_controller.rb
 class UsersController < ApplicationController
   before_action :authorize_request, only: [ :show_profile, :update_profile, :verify_phone, :resend_code, :index, :show ]
-  before_action :require_admin, only: [ :index, :show ]
+  before_action :require_admin_or_staff, only: [ :index, :show ]
 
   # Mark create, verify_phone, resend_code, show_profile, update_profile, index, and show as public endpoints that don't require restaurant context
   def public_endpoint?

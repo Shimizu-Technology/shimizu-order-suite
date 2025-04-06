@@ -122,9 +122,13 @@ class OrdersController < ApplicationController
     # Filter by staff member if provided
     if params[:staff_member_id].present?
       @orders = @orders.where(created_by_staff_id: params[:staff_member_id])
+    elsif params[:user_id].present?
+      # Filter by user_id if provided
+      @orders = @orders.where(created_by_user_id: params[:user_id])
     else
-      # If no staff member specified, only show staff-created orders
-      @orders = @orders.where.not(created_by_staff_id: nil)
+      # If no staff member or user specified, show all staff-created orders
+      # Include orders created by either staff_id or user_id
+      @orders = @orders.where("created_by_staff_id IS NOT NULL OR created_by_user_id IS NOT NULL")
     end
 
     # Filter by restaurant_id if provided
@@ -334,6 +338,10 @@ class OrdersController < ApplicationController
     # For regular orders, use the current user's ID
     # For staff orders, the user_id will be set to the staff member's user_id if available
     new_params[:user_id] = @current_user&.id
+    
+    # Set created_by_user_id to the current user's ID if authenticated
+    # This tracks which user (employee) created the order
+    new_params[:created_by_user_id] = @current_user&.id if @current_user
 
     # Set VIP access code if found
     if defined?(vip_access_code) && vip_access_code
@@ -665,6 +673,17 @@ class OrdersController < ApplicationController
                        else
                          order_params_user
                        end
+    
+    # IMPORTANT: Don't allow frontend to set or override refund status
+    # This prevents inconsistencies between payment_status and status
+    if permitted_params[:status].present? && 
+       (['refunded', 'partially_refunded'].include?(permitted_params[:status]) || 
+        ['refunded', 'partially_refunded'].include?(order.status))
+      # Remove status from permitted params to preserve the server-calculated refund status
+      # or prevent the frontend from setting a refund status
+      Rails.logger.info("Preventing frontend refund status change: #{permitted_params[:status]} -> #{order.status}")
+      permitted_params.delete(:status)
+    end
 
     if order.update(permitted_params)
       # Broadcast the order update via WebSockets
@@ -850,6 +869,7 @@ class OrdersController < ApplicationController
       :staff_on_duty,
       :use_house_account,
       :created_by_staff_id,
+      :created_by_user_id,
       :pre_discount_total,
       merchandise_items: [
         :id,

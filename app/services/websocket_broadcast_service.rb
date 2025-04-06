@@ -8,12 +8,13 @@ class WebsocketBroadcastService
     # Get the order as JSON with all necessary fields for filtering
     order_json = order.as_json(
       include: [],
-      methods: [:created_by_staff_id, :is_staff_order]
+      methods: [:created_by_staff_id, :created_by_user_id, :is_staff_order]
     )
     
     # Add explicit staff information for frontend filtering
     staff_info = {
       created_by_staff_id: order.created_by_staff_id,
+      created_by_user_id: order.created_by_user_id,
       is_staff_order: order.is_staff_order
     }
     
@@ -21,7 +22,7 @@ class WebsocketBroadcastService
     order_json.merge!(staff_info)
     
     # Log the staff information for debugging
-    Rails.logger.info("Order #{order.id} staff info: created_by=#{order.created_by_staff_id}, is_staff=#{order.is_staff_order}")
+    Rails.logger.info("Order #{order.id} staff info: created_by_staff=#{order.created_by_staff_id}, created_by_user=#{order.created_by_user_id}, is_staff=#{order.is_staff_order}")
     
     ActionCable.server.broadcast(
       "order_channel_#{order.restaurant_id}",
@@ -42,12 +43,13 @@ class WebsocketBroadcastService
     # Get the order as JSON with all necessary fields for filtering
     order_json = order.as_json(
       include: [],
-      methods: [:created_by_staff_id, :is_staff_order]
+      methods: [:created_by_staff_id, :created_by_user_id, :is_staff_order]
     )
     
     # Add explicit staff information for frontend filtering
     staff_info = {
       created_by_staff_id: order.created_by_staff_id,
+      created_by_user_id: order.created_by_user_id,
       is_staff_order: order.is_staff_order
     }
     
@@ -55,7 +57,7 @@ class WebsocketBroadcastService
     order_json.merge!(staff_info)
     
     # Log the staff information for debugging
-    Rails.logger.info("Order update #{order.id} staff info: created_by=#{order.created_by_staff_id}, is_staff=#{order.is_staff_order}")
+    Rails.logger.info("Order update #{order.id} staff info: created_by_staff=#{order.created_by_staff_id}, created_by_user=#{order.created_by_user_id}, is_staff=#{order.is_staff_order}")
     
     ActionCable.server.broadcast(
       "order_channel_#{order.restaurant_id}",

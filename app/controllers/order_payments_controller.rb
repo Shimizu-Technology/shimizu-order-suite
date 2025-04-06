@@ -12,6 +12,18 @@ class OrderPaymentsController < ApplicationController
   # GET /orders/:order_id/payments
   def index
     @payments = @order.order_payments
+    
+    # Enhance payment details with created_by_user_id
+    @payments = @payments.map do |payment|
+      payment_hash = payment.as_json
+      
+      # Add created_by_user_id to payment_details if not already present
+      if payment_hash['payment_details'].is_a?(Hash) && !payment_hash['payment_details']['created_by_user_id']
+        payment_hash['payment_details']['created_by_user_id'] = @order.created_by_user_id
+      end
+      
+      payment_hash
+    end
 
     render json: {
       payments: @payments,
@@ -452,6 +464,10 @@ def create_refund
       Rails.logger.info("Creating refund with payment method: #{original_payment.payment_method} (from original payment)")
       
       # Prepare refund attributes
+      # Ensure refunded_items is properly serialized as JSON
+      # This prevents [object Object] issues in the frontend
+      serialized_refunded_items = refunded_items.is_a?(Array) ? refunded_items : []
+      
       refund_attributes = {
         payment_type: "refund",
         amount: refund_amount,
@@ -459,9 +475,10 @@ def create_refund
         status: "completed",
         transaction_id: result[:transaction_id],
         payment_id: result[:refund_id],
-        payment_details: result[:details].merge(refunded_items: refunded_items),
+        # Don't store refunded_items in payment_details to avoid duplication and serialization issues
+        payment_details: result[:details],
         description: params[:description] || params[:reason] || "Refund",
-        refunded_items: refunded_items # Store refunded items directly on the record
+        refunded_items: serialized_refunded_items # Store refunded items directly on the record
       }
       
       # For cash payments, we need to set cash_received and change_due to satisfy validations
@@ -522,21 +539,31 @@ def create_refund
         Rails.logger.info("All items refunded: #{all_items_refunded}")
       end
       
-      # Update payment status based on refund amount
-      if (@order.total_paid - @order.total_refunded - refund_amount).abs < 0.01
-        # Full payment refund
+      # Determine if this is a full refund based on BOTH payment amount AND item quantities
+      is_full_refund = false
+      
+      # Check if all money has been refunded (within a small margin of error)
+      payment_fully_refunded = (@order.total_paid - @order.total_refunded - refund_amount).abs < 0.01
+      
+      # Only consider it a full refund if BOTH conditions are met:
+      # 1. All money has been refunded
+      # 2. All items have been refunded
+      is_full_refund = payment_fully_refunded && all_items_refunded
+      
+      Rails.logger.info("Payment fully refunded: #{payment_fully_refunded}, All items refunded: #{all_items_refunded}")
+      Rails.logger.info("Is full refund: #{is_full_refund}")
+      
+      # Always update payment_status to reflect the refund state
+      if payment_fully_refunded
         @order.update(payment_status: Order::STATUS_REFUNDED)
       else
-        # Partial payment refund
         @order.update(payment_status: Order::STATUS_PARTIALLY_REFUNDED)
       end
       
-      # Update order status based on whether all items were refunded
+      # Only update the order status if ALL items are refunded
+      # This preserves the original order status (pending, completed, etc.) for partial refunds
       if all_items_refunded
         @order.update(status: Order::STATUS_REFUNDED)
-      elsif @order.status != Order::STATUS_REFUNDED
-        # Only update to partially refunded if not already refunded
-        @order.update(status: Order::STATUS_PARTIALLY_REFUNDED)
       end
 
       render json: { refund: @refund }

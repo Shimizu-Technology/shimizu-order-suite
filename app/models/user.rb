@@ -12,6 +12,9 @@ class User < ApplicationRecord
   
   # Staff member association
   has_one :staff_member, dependent: :nullify
+  
+  # Orders created by this user
+  has_many :created_orders, class_name: 'Order', foreign_key: 'created_by_user_id', dependent: :nullify
 
   has_secure_password
 

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_04_04_150024) do
+ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -317,7 +317,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_04_150024) do
     t.boolean "use_house_account", default: false
     t.bigint "created_by_staff_id"
     t.decimal "pre_discount_total", precision: 10, scale: 2
+    t.bigint "created_by_user_id"
     t.index ["created_by_staff_id"], name: "index_orders_on_created_by_staff_id"
+    t.index ["created_by_user_id"], name: "index_orders_on_created_by_user_id"
     t.index ["global_last_acknowledged_at"], name: "index_orders_on_global_last_acknowledged_at"
     t.index ["is_staff_order", "use_house_account"], name: "index_orders_on_staff_order_and_house_account"
     t.index ["is_staff_order"], name: "index_orders_on_is_staff_order"
@@ -590,6 +592,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_04_150024) do
   add_foreign_key "orders", "staff_members", column: "created_by_staff_id", on_delete: :nullify
   add_foreign_key "orders", "staff_members", on_delete: :nullify
   add_foreign_key "orders", "users"
+  add_foreign_key "orders", "users", column: "created_by_user_id"
   add_foreign_key "orders", "vip_access_codes"
   add_foreign_key "promo_codes", "restaurants"
   add_foreign_key "push_subscriptions", "restaurants"

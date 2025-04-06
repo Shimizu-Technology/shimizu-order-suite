@@ -59,6 +59,12 @@ class ApplicationController < ActionController::API
     end
   end
   
+  def require_admin_or_staff
+    unless current_user && (current_user.admin_or_above? || current_user.staff?)
+      render json: { error: "Forbidden" }, status: :forbidden
+    end
+  end
+  
   private
   
   def user_not_authorized
