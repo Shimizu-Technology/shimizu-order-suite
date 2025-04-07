@@ -180,17 +180,10 @@ class Restaurant < ApplicationRecord
     end
   end
 
-  private
-
-  def normalize_origin(origin)
-    # Remove trailing slash if present
-    origin.sub(/\/$/, "")
-  end
-
   #--------------------------------------------------------------------------
   # Helper if you only want seats from the "active" layout:
   #--------------------------------------------------------------------------
-  # Make this method public so it can be called from controllers
+  # This method is public so it can be called from controllers
   def current_seats
     return [] unless current_layout
     current_layout.seat_sections.includes(:seats).flat_map(&:seats)
@@ -210,5 +203,12 @@ class Restaurant < ApplicationRecord
   def set_active_merchandise_collection(collection_id)
     collection = self.merchandise_collections.find(collection_id)
     update(current_merchandise_collection_id: collection.id)
+  end
+
+  private
+
+  def normalize_origin(origin)
+    # Remove trailing slash if present
+    origin.sub(/\/$/, "")
   end
 end

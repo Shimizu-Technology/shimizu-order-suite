@@ -123,6 +123,18 @@ Rails.application.routes.draw do
   # Availability
   get "/availability", to: "availability#index"
 
+  # Operating Hours (for backward compatibility with frontend)
+  get "/operating_hours", to: "admin/operating_hours#index"
+  patch "/operating_hours/:id", to: "admin/operating_hours#update"
+
+  # Special Events (for backward compatibility with frontend)
+  get "/special_events", to: "admin/special_events#index"
+  post "/special_events", to: "admin/special_events#create"
+  get "/special_events/:id", to: "admin/special_events#show"
+  patch "/special_events/:id", to: "admin/special_events#update"
+  delete "/special_events/:id", to: "admin/special_events#destroy"
+  post "/special_events/:id/set_as_current", to: "restaurants#set_current_event"
+
   # -------------------------
   # PUBLIC categories endpoint (for backward compatibility)
   # -------------------------

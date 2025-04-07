@@ -41,6 +41,11 @@ module Admin
 
     private
 
+    def public_endpoint?
+      # Allow access to special events for authenticated users
+      true
+    end
+
     def require_admin!
       unless current_user && %w[admin super_admin].include?(current_user.role)
         render json: { error: "Forbidden: admin only" }, status: :forbidden

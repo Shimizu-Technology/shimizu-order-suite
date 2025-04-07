@@ -16,6 +16,27 @@ module RestaurantScope
       return
     end
 
+    # Special handling for reservation-related controllers
+    if ["reservations", "waitlist_entries", "layouts"].include?(controller_name) || 
+       (controller_name == "operating_hours" || controller_name.start_with?("admin/"))
+      
+      # Use restaurant_id from params if provided
+      if params[:restaurant_id].present?
+        @current_restaurant = Restaurant.find_by(id: params[:restaurant_id])
+      elsif params[:id].present? && controller_name == "restaurants"
+        @current_restaurant = Restaurant.find_by(id: params[:id])
+      elsif current_user&.restaurant.present?
+        @current_restaurant = current_user.restaurant
+      else
+        # Default to first restaurant for reservation system if no context
+        @current_restaurant = Restaurant.first
+      end
+      
+      # Make current_restaurant available to models for default scoping
+      ActiveRecord::Base.current_restaurant = @current_restaurant if ActiveRecord::Base.respond_to?(:current_restaurant=)
+      return
+    end
+
     # For super_admin users who can access multiple restaurants
     if current_user&.role == "super_admin"
       # Allow super_admin to specify which restaurant to work with

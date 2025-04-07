@@ -2,6 +2,11 @@
 
 class SeatAllocationsController < ApplicationController
   before_action :authorize_request
+  
+  # Allow access to seat allocations for authenticated users
+  def public_endpoint?
+    true
+  end
 
   # GET /seat_allocations?date=YYYY-MM-DD
   def index
@@ -12,7 +17,9 @@ class SeatAllocationsController < ApplicationController
 
     if params[:date].present?
       begin
-        date_filter = Date.parse(params[:date])
+        # Handle both simple string and nested parameter formats
+        date_param = params[:date].is_a?(ActionController::Parameters) ? params[:date][:date] : params[:date]
+        date_filter = Date.parse(date_param)
 
         # For a staff user:
         restaurant = Restaurant.find(current_user.restaurant_id)

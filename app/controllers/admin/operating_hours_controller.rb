@@ -29,6 +29,11 @@ module Admin
 
     private
 
+    def public_endpoint?
+      # Allow access to operating hours for authenticated users
+      true
+    end
+
     def require_admin
       unless current_user.role.in?(%w[admin super_admin])
         render json: { error: "Forbidden: admin only" }, status: :forbidden

@@ -13,7 +13,9 @@ class WaitlistEntriesController < ApplicationController
     # If ?date=YYYY-MM-DD is given, filter by local date for check_in_time
     if params[:date].present?
       begin
-        date_filter = Date.parse(params[:date])
+        # Handle both simple string and nested parameter formats
+        date_param = params[:date].is_a?(ActionController::Parameters) ? params[:date][:date] : params[:date]
+        date_filter = Date.parse(date_param)
 
         restaurant = Restaurant.find(current_user.restaurant_id)
         tz = restaurant.time_zone.presence || "Pacific/Guam"
@@ -118,6 +120,20 @@ class WaitlistEntriesController < ApplicationController
   end
 
   private
+
+  def public_endpoint?
+    # Allow access to waitlist entries for authenticated users
+    # For index and other actions, we need to ensure the user has a valid restaurant context
+    # or is a super_admin with a restaurant_id parameter
+    if current_user
+      if current_user.role == 'super_admin'
+        return params[:restaurant_id].present?
+      else
+        return %w[admin staff].include?(current_user.role) && current_user.restaurant_id.present?
+      end
+    end
+    false
+  end
 
   def waitlist_entry_params
     params.require(:waitlist_entry).permit(

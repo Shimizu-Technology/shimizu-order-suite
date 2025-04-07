@@ -253,6 +253,20 @@ class LayoutsController < ApplicationController
 
   private
 
+  def public_endpoint?
+    # Allow access to layouts for authenticated users
+    # For index and other actions, we need to ensure the user has a valid restaurant context
+    # or is a super_admin with a restaurant_id parameter
+    if current_user
+      if current_user.role == 'super_admin'
+        return params[:restaurant_id].present? || params[:id].present?
+      else
+        return %w[admin staff].include?(current_user.role) && current_user.restaurant_id.present?
+      end
+    end
+    false
+  end
+
   def set_layout
     @layout = Layout.find(params[:id])
   end
