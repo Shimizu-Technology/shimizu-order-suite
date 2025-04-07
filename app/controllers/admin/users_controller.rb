@@ -10,7 +10,7 @@ module Admin
       true
     end
 
-    # GET /admin/users?search=...&role=...&page=1&per_page=10&sort_by=email&sort_dir=asc
+    # GET /admin/users?search=...&role=...&page=1&per_page=10&sort_by=email&sort_dir=asc&exclude_super_admin=true
     def index
       # Pagination
       page     = (params[:page] || 1).to_i
@@ -22,7 +22,7 @@ module Admin
       sort_dir = params[:sort_dir] == "asc" ? "asc" : "desc"
 
       # Start building query
-      users = User.order("#{sort_by} #{sort_dir}")
+      users = policy_scope(User).order("#{sort_by} #{sort_dir}")
 
       # Search filter
       if params[:search].present?
@@ -36,6 +36,11 @@ module Admin
       # Role filter
       if params[:role].present? && params[:role] != "all"
         users = users.where(role: params[:role])
+      end
+      
+      # Exclude super_admin users for non-super_admin users
+      if params[:exclude_super_admin] == 'true' && !current_user.super_admin?
+        users = users.where.not(role: 'super_admin')
       end
 
       total_count = users.count
@@ -54,6 +59,14 @@ module Admin
     # POST /admin/users
     def create
       user = User.new(user_params)
+      
+      # Authorize the user creation
+      authorize user
+      
+      # Check if trying to create super_admin when not authorized
+      if user.role == 'super_admin' && !current_user.super_admin?
+        return render json: { errors: ["Only Super Admins can create Super Admin accounts"] }, status: :forbidden
+      end
 
       # If admin didn't supply a password => generate random
       if params[:password].blank?
@@ -75,6 +88,20 @@ module Admin
     # PATCH /admin/users/:id
     def update
       user = User.find(params[:id])
+      
+      # Authorize the user update
+      authorize user
+      
+      # Check if trying to update to super_admin when not authorized
+      if params[:role] == 'super_admin' && !current_user.super_admin?
+        return render json: { errors: ["Only Super Admins can assign the Super Admin role"] }, status: :forbidden
+      end
+      
+      # Prevent non-super_admin from updating super_admin users
+      if user.role == 'super_admin' && !current_user.super_admin?
+        return render json: { errors: ["You do not have permission to edit Super Admin users"] }, status: :forbidden
+      end
+      
       if user.update(user_params)
         render json: user
       else
@@ -172,11 +199,14 @@ module Admin
       role_param = params[:role].presence || user_attributes[:role].presence
       
       if role_param.present?
-        # Only allow "customer", "staff", or "admin" roles (no super_admin)
-        if role_param.in?(%w[customer staff admin])
+        # Allow super_admin role only for super_admin users
+        if role_param == 'super_admin' && current_user.super_admin?
+          permitted[:role] = role_param
+        # Allow customer, staff, or admin roles for admin or super_admin users
+        elsif role_param.in?(%w[customer staff admin]) && current_user.admin_or_above?
           permitted[:role] = role_param
         else
-          # Default to customer if an invalid role is provided
+          # Default to customer if an invalid role is provided or user doesn't have permission
           permitted[:role] = "customer"
         end
       end

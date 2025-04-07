@@ -55,11 +55,18 @@ class UserPolicy < ApplicationPolicy
 
   # For role assignment
   def assign_role?
-    # Super admins can assign any role except super_admin
+    # Only super admins can assign super_admin role
+    # Super admins can assign any role
     # Admins can assign staff and customer roles
     # Staff and customers cannot assign roles
-    super_admin? || 
-    (admin? && record.role.in?(['staff', 'customer']))
+    return true if super_admin?
+    return admin? && record.role.in?(['staff', 'customer'])
+  end
+
+  # For checking if user can assign super_admin role
+  def can_assign_super_admin?
+    # Only super admins can assign super_admin role
+    super_admin?
   end
 
   # For resending invites
