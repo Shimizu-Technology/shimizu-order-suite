@@ -1,10 +1,10 @@
-# **Hafaloha Backend (Rails API)**
+# **Shimizu Order Suite (Rails API)**
 
 A multi-tenant SaaS platform for restaurant reservation and order management.
 
 ## **Overview**
 
-Hafaloha is a SaaS (Software as a Service) platform that enables multiple restaurants to:
+Shimizu Order Suite is a SaaS (Software as a Service) platform that enables multiple restaurants to:
 
 - Manage **reservations** and table layouts
 - Take **food orders** online
