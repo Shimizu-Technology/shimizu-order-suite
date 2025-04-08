@@ -1,10 +1,10 @@
 # Manual Payment Options
 
-This document describes the implementation of manual payment options in the Hafaloha ordering system, including Clover, Revel, and other payment methods.
+This document describes the implementation of manual payment options in the Shimizu Order Suite ordering system, including Clover, Revel, and other payment methods.
 
 ## Overview
 
-The system now supports multiple payment methods beyond the built-in Stripe and PayPal integrations. This allows staff to process payments through external systems like Clover or Revel POS systems, or to handle other manual payment methods, while still tracking the payment information within the Hafaloha system.
+The system now supports multiple payment methods beyond the built-in Stripe and PayPal integrations. This allows staff to process payments through external systems like Clover or Revel POS systems, or to handle other manual payment methods, while still tracking the payment information within the Shimizu Order Suite system.
 
 ## Payment Methods
 

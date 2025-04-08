@@ -1,6 +1,6 @@
 # Inventory Tracking System
 
-This document outlines the inventory tracking system implemented for menu items in the Hafaloha application.
+This document outlines the inventory tracking system implemented for menu items in the Shimizu Order Suite application.
 
 ## Overview
 

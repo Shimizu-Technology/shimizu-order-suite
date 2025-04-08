@@ -1,6 +1,6 @@
 # PostHog Analytics Integration
 
-This document outlines how PostHog analytics is integrated into the Hafaloha application for tracking user behavior, feature usage, and system events.
+This document outlines how PostHog analytics is integrated into the Shimizu Order Suite application for tracking user behavior, feature usage, and system events.
 
 ## Overview
 
@@ -94,7 +94,7 @@ end
 
 ## Multi-Tenant Considerations
 
-Since Hafaloha is a multi-tenant application, analytics are structured to support this architecture:
+Since Shimizu Order Suite is a multi-tenant application, analytics are structured to support this architecture:
 
 1. **Restaurant Groups**: Each restaurant is set up as a group in PostHog, allowing for:
    - Cross-restaurant analytics for super admins

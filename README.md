@@ -52,7 +52,7 @@ The backend is built with **Ruby on Rails** in API-only mode, with a multi-tenan
 
 ## **Real-time Features**
 
-Hafaloha uses WebSockets via Action Cable to provide real-time updates to clients:
+Order Suite uses WebSockets via Action Cable to provide real-time updates to clients:
 
 - **Order Notifications**: Instant notifications when new orders are placed
 - **Inventory Alerts**: Real-time alerts when inventory items reach low stock thresholds
@@ -172,7 +172,7 @@ Restaurants can now configure custom pickup locations for orders, providing more
 
 ## **Multi-tenant Architecture**
 
-Hafaloha uses a multi-tenant architecture where all restaurants share the same database, but data is isolated through application-level controls. This provides efficient resource utilization while ensuring proper data separation.
+Order Suite uses a multi-tenant architecture where all restaurants share the same database, but data is isolated through application-level controls. This provides efficient resource utilization while ensuring proper data separation.
 
 For comprehensive documentation on the multi-tenant architecture, see [Multi-tenant Architecture Documentation](docs/multi_tenant_architecture.md).
 
@@ -949,4 +949,4 @@ To ensure database schema consistency between the application's schema.rb file a
 
 ---
 
-**Hafaloha - Your Restaurant Management SaaS Platform**
+**Shimizu Order Suite - Your Restaurant Management SaaS Platform**

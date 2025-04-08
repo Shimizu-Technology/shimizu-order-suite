@@ -1,6 +1,6 @@
 # Web Push Notifications Integration Guide (Backend)
 
-This document explains how web push notifications are implemented in the Hafaloha API.
+This document explains how web push notifications are implemented in the Shimizu Order Suite.
 
 ## Overview
 

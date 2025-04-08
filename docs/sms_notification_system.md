@@ -1,6 +1,6 @@
 # SMS Notification System
 
-This document describes the SMS notification system used in the Hafaloha application, including configuration, usage, and troubleshooting.
+This document describes the SMS notification system used in the Shimizu Order Suite application, including configuration, usage, and troubleshooting.
 
 ## Overview
 

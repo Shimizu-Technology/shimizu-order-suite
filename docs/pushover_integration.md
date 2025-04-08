@@ -1,10 +1,10 @@
 # Pushover Integration
 
-This document describes the integration of Pushover notifications into the Hafaloha backend application.
+This document describes the integration of Pushover notifications into the Shimizu Order Suite backend application.
 
 ## Overview
 
-Pushover is a service that makes it easy to get real-time notifications on your Android, iPhone, iPad, and Desktop devices. The Hafaloha application integrates with Pushover to send notifications to restaurant staff when new orders are placed, ensuring they're immediately aware of incoming orders even when not actively monitoring the admin dashboard.
+Pushover is a service that makes it easy to get real-time notifications on your Android, iPhone, iPad, and Desktop devices. The Shimizu Order Suite application integrates with Pushover to send notifications to restaurant staff when new orders are placed, ensuring they're immediately aware of incoming orders even when not actively monitoring the admin dashboard.
 
 ## Architecture
 

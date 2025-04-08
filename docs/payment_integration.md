@@ -1,10 +1,10 @@
 # Payment Integration with Braintree/PayPal
 
-This document outlines how the payment integration with Braintree/PayPal works in the Hafaloha application.
+This document outlines how the payment integration with Braintree/PayPal works in the Shimizu Order Suite application.
 
 ## Overview
 
-The Hafaloha application uses Braintree as the payment gateway, which also supports PayPal payments. The integration follows a client-server model:
+The Shimizu Order Suite application uses Braintree as the payment gateway, which also supports PayPal payments. The integration follows a client-server model:
 
 1. The client (frontend) requests a client token from the server
 2. The client uses this token to initialize the Braintree SDK

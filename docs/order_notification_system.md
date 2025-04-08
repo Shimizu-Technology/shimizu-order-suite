@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Order Notification System is a critical component of the Hafaloha application that ensures staff members are promptly notified about new orders and inventory changes. This document outlines the backend implementation of the notification system, including its core components, data flow, and integration with other parts of the application.
+The Order Notification System is a critical component of the Shimizu Order Suite application that ensures staff members are promptly notified about new orders and inventory changes. This document outlines the backend implementation of the notification system, including its core components, data flow, and integration with other parts of the application.
 
 ## Core Components
 

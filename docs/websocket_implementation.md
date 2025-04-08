@@ -1,6 +1,6 @@
-# WebSocket Implementation for Hafaloha
+# WebSocket Implementation for Shimizu Order Suite
 
-This document provides a comprehensive guide to the WebSocket implementation in the Hafaloha application, which enables real-time updates for orders and inventory. WebSockets are now fully functional and provide real-time notifications for new orders and inventory changes.
+This document provides a comprehensive guide to the WebSocket implementation in the Shimizu Order Suite application, which enables real-time updates for orders and inventory. WebSockets are now fully functional and provide real-time notifications for new orders and inventory changes.
 
 ## Overview
 

@@ -1,10 +1,10 @@
 # Pundit Authorization System
 
-This document provides an overview of the Pundit-based authorization system in Hafaloha, explaining how policy classes are used to implement fine-grained access control.
+This document provides an overview of the Pundit-based authorization system in Shimizu Order Suite, explaining how policy classes are used to implement fine-grained access control.
 
 ## Overview
 
-Hafaloha uses the Pundit gem to implement a comprehensive policy-based authorization system. This approach provides several benefits:
+Shimizu Order Suite uses the Pundit gem to implement a comprehensive policy-based authorization system. This approach provides several benefits:
 
 1. **Centralized Authorization Logic**: All authorization rules are defined in policy classes, making them easy to maintain and update
 2. **Fine-grained Access Control**: Permissions can be defined at the action level for each resource
@@ -13,7 +13,7 @@ Hafaloha uses the Pundit gem to implement a comprehensive policy-based authoriza
 
 ## Role System
 
-Hafaloha implements a tiered role system with four distinct roles:
+Shimizu Order Suite implements a tiered role system with four distinct roles:
 
 1. **Super Admin**: Platform administrators with complete system access
 2. **Admin**: Restaurant managers with broad administrative access
@@ -434,4 +434,4 @@ To add a new policy for a resource:
 
 ## Conclusion
 
-Pundit provides a powerful and flexible authorization system that allows Hafaloha to implement fine-grained access control based on user roles and resource ownership. By centralizing authorization logic in policy classes, the application maintains a clean separation of concerns and makes it easier to reason about and update permission rules.
+Pundit provides a powerful and flexible authorization system that allows Shimizu Order Suite to implement fine-grained access control based on user roles and resource ownership. By centralizing authorization logic in policy classes, the application maintains a clean separation of concerns and makes it easier to reason about and update permission rules.

@@ -2,7 +2,7 @@
 module Examples
   class AnalyticsExampleController < ApplicationController
     # This is an example controller demonstrating how to use the AnalyticsService
-    # in the Hafaloha application. This controller is for demonstration purposes only
+    # in the Shimizu Order Suite application. This controller is for demonstration purposes only
     # and is not meant to be used in production.
     
     # This controller is for demonstration purposes only

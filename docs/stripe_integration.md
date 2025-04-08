@@ -1,6 +1,6 @@
 # Stripe Integration API Documentation
 
-This document provides technical details on the Stripe integration in the Hafaloha API.
+This document provides technical details on the Stripe integration in the Shimizu Order Suite.
 
 ## API Endpoints
 

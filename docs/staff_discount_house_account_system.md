@@ -1,6 +1,6 @@
 # Staff Discount and House Account System
 
-This document provides a comprehensive overview of the Staff Discount and House Account system in Hafaloha, explaining how it allows restaurants to provide discounted meals to staff members and track purchases for payroll deduction.
+This document provides a comprehensive overview of the Staff Discount and House Account system in Shimizu Order Suite, explaining how it allows restaurants to provide discounted meals to staff members and track purchases for payroll deduction.
 
 ## Overview
 
@@ -421,7 +421,7 @@ addOrder: async (
 
 ## Authorization
 
-The Staff Discount and House Account system integrates with Hafaloha's role-based access control system:
+The Staff Discount and House Account system integrates with Shimizu Order Suite's role-based access control system:
 
 ### Staff Member Policy
 

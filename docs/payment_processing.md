@@ -1,10 +1,10 @@
-# Payment Processing in Hafaloha
+# Payment Processing in Shimizu Order Suite
 
-The Hafaloha platform offers flexible payment processing with support for both PayPal and Stripe integrations. This document provides an overview of the payment system and links to detailed documentation for each payment processor.
+The Shimizu Order Suite platform offers flexible payment processing with support for both PayPal and Stripe integrations. This document provides an overview of the payment system and links to detailed documentation for each payment processor.
 
 ## Overview
 
-The payment processing system in Hafaloha allows restaurant owners to choose between PayPal and Stripe as their payment processor. Key features include:
+The payment processing system in Shimizu Order Suite allows restaurant owners to choose between PayPal and Stripe as their payment processor. Key features include:
 
 - Toggle between PayPal and Stripe in the admin settings
 - Consistent API for handling payments regardless of the selected processor

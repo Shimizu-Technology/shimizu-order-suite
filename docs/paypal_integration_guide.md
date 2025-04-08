@@ -1,6 +1,6 @@
 # PayPal Integration Guide
 
-This guide explains how to set up and configure PayPal for your Hafaloha application.
+This guide explains how to set up and configure PayPal for your Shimizu Order Suite application.
 
 ## Prerequisites
 
@@ -14,7 +14,7 @@ This guide explains how to set up and configure PayPal for your Hafaloha applica
 1. Log in to the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/)
 2. Navigate to "My Apps & Credentials"
 3. Click "Create App" under the REST API apps section
-4. Enter a name for your app (e.g., "Hafaloha")
+4. Enter a name for your app (e.g., "Shimizu Order Suite")
 5. Select "Merchant" as the app type
 6. Click "Create App"
 
@@ -25,7 +25,7 @@ After creating your app, you'll be taken to the app details page. Here you can f
 1. **Client ID**: This is your public identifier for the PayPal API
 2. **Secret**: This is your private key for the PayPal API
 
-You'll need to enter these credentials in the Hafaloha admin settings.
+You'll need to enter these credentials in the Shimizu Order Suite admin settings.
 
 ### 3. Configure Webhooks
 
@@ -52,7 +52,7 @@ Webhooks allow PayPal to notify your application about payment events in real-ti
    - `CUSTOMER.DISPUTE.UPDATED`
 5. Click "Save"
 6. After saving, you'll see your webhook details including the **Webhook ID**
-7. Copy the **Webhook ID** as you'll need it for the Hafaloha admin settings
+7. Copy the **Webhook ID** as you'll need it for the Shimizu Order Suite admin settings
 
 #### How PayPal Webhook Verification Works
 
@@ -69,9 +69,9 @@ PayPal uses a different approach than Stripe for webhook verification:
 
 3. Unlike Stripe, PayPal doesn't use a "Webhook Secret" - instead, the **Webhook ID** is the key piece of information needed for verification.
 
-### 4. Configure Hafaloha Admin Settings
+### 4. Configure Shimizu Order Suite Admin Settings
 
-1. Log in to your Hafaloha admin dashboard
+1. Log in to your Shimizu Order Suite admin dashboard
 2. Navigate to "Settings" > "Payment Gateway"
 3. Select "PayPal" as the payment processor
 4. Fill in the following fields:
@@ -90,7 +90,7 @@ PayPal uses a different approach than Stripe for webhook verification:
 
 1. Make sure "Test Mode" is enabled in your admin settings
 2. Use the [PayPal Sandbox test accounts](https://developer.paypal.com/dashboard/accounts) to simulate payments
-3. Create a test order in your Hafaloha application
+3. Create a test order in your Shimizu Order Suite application
 4. Complete the payment using a sandbox account
 5. Verify that the order status is updated correctly
 

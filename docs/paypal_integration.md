@@ -1,6 +1,6 @@
 # PayPal Integration API Documentation
 
-This document provides technical details on the PayPal Advanced/Expanded Checkout integration in the Hafaloha API.
+This document provides technical details on the PayPal Advanced/Expanded Checkout integration in the Shimizu Order Suite.
 
 ## API Endpoints
 

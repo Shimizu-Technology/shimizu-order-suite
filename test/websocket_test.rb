@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 # test/websocket_test.rb
 # 
-# A simple test script to verify WebSocket functionality in the Hafaloha application
+# A simple test script to verify WebSocket functionality in the Shimizu Order Suite application
 # Run this script with: ruby test/websocket_test.rb
 
 require 'websocket-client-simple'

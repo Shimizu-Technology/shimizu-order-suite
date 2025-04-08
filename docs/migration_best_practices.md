@@ -1,6 +1,6 @@
 # Migration Best Practices
 
-This document outlines best practices for creating and managing database migrations in the Hafaloha application to prevent schema inconsistencies.
+This document outlines best practices for creating and managing database migrations in the Shimizu Order Suite application to prevent schema inconsistencies.
 
 ## Writing Safe Migrations
 

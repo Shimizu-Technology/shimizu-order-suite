@@ -1,10 +1,10 @@
 # Multi-tenant Architecture
 
-This document provides a comprehensive overview of Hafaloha's multi-tenant architecture, which allows the platform to serve multiple restaurants from a single codebase and database while maintaining strict data isolation.
+This document provides a comprehensive overview of Shimizu Order Suite's multi-tenant architecture, which allows the platform to serve multiple restaurants from a single codebase and database while maintaining strict data isolation.
 
 ## Overview
 
-Hafaloha uses a multi-tenant architecture where all restaurants share the same database and application code, but data is isolated through application-level controls. This approach provides:
+Shimizu Order Suite uses a multi-tenant architecture where all restaurants share the same database and application code, but data is isolated through application-level controls. This approach provides:
 
 - **Efficient Resource Utilization**: Shared infrastructure reduces costs
 - **Simplified Maintenance**: Single codebase for all tenants
@@ -15,7 +15,7 @@ Hafaloha uses a multi-tenant architecture where all restaurants share the same d
 
 ### Restaurant as Tenant
 
-In Hafaloha, each restaurant represents a tenant. The `Restaurant` model is the central entity that:
+In Shimizu Order Suite, each restaurant represents a tenant. The `Restaurant` model is the central entity that:
 
 1. Serves as the root for all tenant-specific data
 2. Provides configuration settings for the tenant
