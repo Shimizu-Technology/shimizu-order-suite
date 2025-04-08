@@ -381,7 +381,7 @@ A test HTML page is provided to verify WebSocket connections:
 
 1. **Start the Rails server**:
    ```
-   cd hafaloha_api
+   cd shimizu-order-suite
    rails server
    ```
 
@@ -396,7 +396,7 @@ A test HTML page is provided to verify WebSocket connections:
 
 5. **Send test messages**:
    ```
-   cd hafaloha_api
+   cd shimizu-order-suite
    rails runner script/test_websocket.rb [restaurant_id]
    ```
 

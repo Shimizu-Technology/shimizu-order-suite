@@ -568,8 +568,8 @@ end
 
 1. **Clone the Repository**  
    ```bash
-   git clone https://github.com/YourUsername/hafaloha-backend.git
-   cd hafaloha-backend
+   git clone https://github.com/YourUsername/shimizu-order-suite.git
+   cd shimizu-order-suite
    ```
 
 2. **Install Ruby Gems**  
@@ -595,6 +595,13 @@ end
    brew install redis
    brew services start redis
    ```
+
+6. **Database Setup**
+   - For a fresh database setup, run:
+     ```bash
+     rails db:create db:migrate db:seed
+     ```
+   - To import an existing database (recommended for development), see [Database Export and Import Guide](docs/database_export_import.md)
 
 6. **Run Sidekiq** in a Separate Terminal  
    ```bash

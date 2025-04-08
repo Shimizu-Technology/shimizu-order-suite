@@ -2,7 +2,7 @@
 require "fileutils"
 
 APP_ROOT = File.expand_path("..", __dir__)
-APP_NAME = "hafaloha-api"
+APP_NAME = "shimizu-order-suite"
 
 def system!(*args)
   system(*args, exception: true)
