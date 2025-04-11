@@ -10,11 +10,11 @@ unless Restaurant.exists?(name: "Shimizu Technology")
   # ------------------------------------------------------------------------------
   restaurant = Restaurant.create!(
     name: "Shimizu Technology",
-    address: "123 Tech Way, Silicon Valley, CA",
+    address: "Barrigada Heights, Guam",
     phone_number: "+14155551234",
     time_slot_interval: 30,
-    time_zone: "America/Los_Angeles",
-    default_reservation_length: 90,
+    time_zone: "Pacific/Guam",
+    default_reservation_length: 60,
     layout_type: "seat-based",
     admin_settings: {
       "require_deposit" => false,
@@ -33,7 +33,7 @@ unless Restaurant.exists?(name: "Shimizu Technology")
     },
     allowed_origins: [
       "http://localhost:5175",
-      "https://shimizu-order-suite.netlify.app/"
+      "https://shimizu-order-suite.netlify.app"
     ]
   )
 

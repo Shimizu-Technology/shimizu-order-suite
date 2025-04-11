@@ -58,7 +58,9 @@ unless Restaurant.exists?(name: "Hafaloha")
     allowed_origins: [
       "http://localhost:5173",
       "http://localhost:5174",
-      "https://hafaloha-orders.com"
+      "https://hafaloha-orders.com",
+      "https://hafaloha.netlify.app",
+      "https://hafaloha-lvmt0.kinsta.page"
     ]
   )
 
