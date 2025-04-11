@@ -1,100 +1,82 @@
 class OrderPaymentsController < ApplicationController
+  include TenantIsolation
+  
   before_action :authorize_request
-  before_action :set_order
-
-  # Override public_endpoint? to allow access to payment endpoints
-  def public_endpoint?
-    # These endpoints should be accessible without a restaurant context
-    # as long as the user is authorized to access the order
-    true
-  end
+  before_action :ensure_tenant_context
+  before_action :set_order, only: [:index, :create_refund]
 
   # GET /orders/:order_id/payments
   def index
-    @payments = @order.order_payments
+    # The set_order before_action will handle temporary order IDs and set @order
+    # If we get here, we either have a valid @order or set_order has already rendered a response
+    return unless @order
     
-    # Enhance payment details with created_by_user_id
-    @payments = @payments.map do |payment|
-      payment_hash = payment.as_json
-      
-      # Add created_by_user_id to payment_details if not already present
-      if payment_hash['payment_details'].is_a?(Hash) && !payment_hash['payment_details']['created_by_user_id']
-        payment_hash['payment_details']['created_by_user_id'] = @order.created_by_user_id
-      end
-      
-      payment_hash
-    end
-
+    # Get payments for this order
+    payments = order_payment_service.list_payments(@order.id)
+    payment_summary = order_payment_service.get_payment_summary(@order.id)
+    
     render json: {
-      payments: @payments,
-      total_paid: @order.total_paid,
-      total_refunded: @order.total_refunded,
-      net_amount: @order.net_amount
+      payments: payments,
+      total_paid: payment_summary[:total_paid],
+      total_refunded: payment_summary[:total_refunded],
+      net_amount: payment_summary[:net_amount]
     }
   end
 
   # POST /orders/:order_id/payments
   def create
-    @payment = @order.order_payments.new(payment_params)
+    result = order_payment_service.create_payment(params[:order_id], payment_params)
     
-    if @payment.save
-      render json: { payment: @payment }, status: :created
+    if result[:success]
+      render json: { payment: result[:payment] }, status: :created
     else
-      render json: { error: @payment.errors.full_messages.join(', ') }, status: :unprocessable_entity
+      render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
     end
   end
 
   # POST /orders/:order_id/payments/additional
   def create_additional
-    # Calculate the price of added items
-    additional_amount = calculate_additional_amount
+    result = order_payment_service.create_additional_payment(
+      params[:order_id],
+      params[:items],
+      params[:payment_method] || "credit_card",
+      params[:payment_details] || {}
+    )
+    
+    if result[:success]
+      if result[:requires_payment_processing]
+        # For standard payment processors, return the amount needed for client-side processing
+        render json: { additional_amount: result[:additional_amount] }
+        
+        # This code was previously at the class level, causing errors
+        # For standard payment processors (Stripe/PayPal), create a payment intent
+        restaurant = @order.restaurant
+        payment_result = nil
 
-    if additional_amount <= 0
-      return render json: { error: "No additional payment needed" }, status: :unprocessable_entity
+        if restaurant.admin_settings&.dig("payment_gateway", "payment_processor") == "stripe"
+          payment_result = create_stripe_payment_intent(result[:additional_amount])
+        else
+          payment_result = create_paypal_order(result[:additional_amount])
+        end
+      else
+        # For manual payment methods, return the created payment
+        render json: { payment: result[:payment] }
+      end
+    else
+      render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
     end
+  end
 
-    # Get payment method from params
+  # POST /orders/:order_id/payments/additional/process
+  def process_additional_payment
+    # Get the order
+    @order = Order.find_by(id: params[:order_id])
+    return render json: { error: "Order not found" }, status: :not_found unless @order
+    
+    # Calculate additional amount
+    additional_amount = params[:amount].to_f
     payment_method = params[:payment_method] || "credit_card"
     
-    # Handle manual payment methods (cash, stripe_reader, clover, revel, other)
-    if ["cash", "stripe_reader", "clover", "revel", "other"].include?(payment_method.downcase)
-      # Use payment details from params if provided
-      payment_details = params[:payment_details] || {}
-      
-      # Format staff order params if present
-      if payment_details && payment_details['staffOrderParams'].present?
-        staff_params = payment_details['staffOrderParams']
-        
-        # Convert staff params to string representation
-        formatted_staff_params = {
-          'is_staff_order' => staff_params['is_staff_order'].to_s == 'true' || staff_params['is_staff_order'] == true ? 'true' : 'false',
-          'staff_member_id' => staff_params['staff_member_id'].to_s,
-          'staff_on_duty' => staff_params['staff_on_duty'].to_s == 'true' || staff_params['staff_on_duty'] == true ? 'true' : 'false',
-          'use_house_account' => staff_params['use_house_account'].to_s == 'true' || staff_params['use_house_account'] == true ? 'true' : 'false',
-          'created_by_staff_id' => staff_params['created_by_staff_id'].to_s,
-          'pre_discount_total' => staff_params['pre_discount_total'].to_s
-        }
-        
-        # Replace the object with the formatted version
-        payment_details['staffOrderParams'] = formatted_staff_params
-      end
-      
-      @payment = @order.order_payments.create(
-        payment_type: "additional",
-        amount: additional_amount,
-        payment_method: payment_method, # Use the payment method as provided
-        status: payment_details["status"] || "paid",
-        description: "Additional items: #{params[:items].map { |i| "#{i[:quantity]}x #{i[:name]}" }.join(", ")}",
-        transaction_id: payment_details["transaction_id"],
-        payment_details: payment_details,
-        cash_received: payment_details["cash_received"],
-        change_due: payment_details["change_due"]
-      )
-      
-      render json: { payment: @payment }
-      return
-    end
-
     # For standard payment processors (Stripe/PayPal), create a payment intent
     restaurant = @order.restaurant
     result = nil
@@ -104,7 +86,7 @@ class OrderPaymentsController < ApplicationController
     else
       result = create_paypal_order(additional_amount)
     end
-
+    
     if result[:success]
       # Create a pending additional payment record
       @payment = @order.order_payments.create(
@@ -128,12 +110,13 @@ class OrderPaymentsController < ApplicationController
 
   # POST /orders/:order_id/payments/additional/capture
   def capture_additional
-    payment_id = params[:payment_id]
-    @payment = @order.order_payments.find_by(id: params[:payment_id])
-
-    unless @payment
-      return render json: { error: "Payment not found" }, status: :not_found
+    result = order_payment_service.find_payment(params[:order_id], params[:payment_id])
+    
+    unless result[:success]
+      return render json: { error: result[:errors].join(', ') }, status: result[:status] || :not_found
     end
+    
+    payment = result[:payment]
 
     # Process the payment capture
     restaurant = @order.restaurant
@@ -348,17 +331,25 @@ end
 
 # POST /orders/:order_id/payments/refund
 def create_refund
+  # Ensure we have a valid order
+  unless @order
+    render json: { error: "Order not found" }, status: :not_found
+    return
+  end
+
   refund_amount = params[:amount].to_f
   Rails.logger.info("Refund amount: #{refund_amount}")
 
-  # Validate the refund amount
-  max_refundable = @order.total_paid - @order.total_refunded
-  Rails.logger.info("Max refundable: #{max_refundable}, total_paid: #{@order.total_paid}, total_refunded: #{@order.total_refunded}")
-    Rails.logger.info("Max refundable: #{max_refundable}, total_paid: #{@order.total_paid}, total_refunded: #{@order.total_refunded}")
+  # Safely calculate the max refundable amount
+  total_paid = @order.total_paid.to_f
+  total_refunded = @order.total_refunded.to_f
+  max_refundable = total_paid - total_refunded
+  
+  Rails.logger.info("Max refundable: #{max_refundable}, total_paid: #{total_paid}, total_refunded: #{total_refunded}")
 
-    # Get restaurant settings
-    restaurant = @order.restaurant
-    test_mode = restaurant.admin_settings&.dig("payment_gateway", "test_mode")
+  # Get restaurant settings
+  restaurant = @order.restaurant
+  test_mode = restaurant.admin_settings&.dig("payment_gateway", "test_mode")
 
     # Only validate refund amount in strict cases:
     # 1. If refund amount is <= 0 (always invalid)
@@ -571,24 +562,38 @@ def create_refund
 
   private
 
+  def order_payment_service
+    @order_payment_service ||= OrderPaymentService.new(current_restaurant)
+  end
+
   def set_order
     # Handle temporary order IDs gracefully
     if params[:order_id].to_s.start_with?("temp-")
+      # For temporary orders, return an empty payment list with zero totals
+      # This prevents 404 errors during the order creation process
       render json: {
         payments: [],
         total_paid: 0,
         total_refunded: 0,
-        net_amount: 0
+        net_amount: 0,
+        is_temporary: true
       }, status: :ok
       return
     end
 
-    @order = Order.find(params[:order_id])
+    begin
+      # Use with_restaurant_scope to ensure proper tenant isolation
+      @order = Order.with_restaurant_scope.find(params[:order_id])
 
-    # Ensure the user can access this order
-    unless current_user&.role.in?(%w[admin super_admin staff]) ||
-           (current_user && @order.user_id == current_user.id)
-      render json: { error: "Forbidden" }, status: :forbidden
+      # Ensure the user can access this order
+      unless current_user&.role.in?(%w[admin super_admin staff]) ||
+             (current_user && @order.user_id == current_user.id)
+        render json: { error: "Forbidden" }, status: :forbidden
+        return
+      end
+    rescue ActiveRecord::RecordNotFound
+      Rails.logger.error("Order not found: #{params[:order_id]} for restaurant_id: #{current_restaurant&.id}")
+      render json: { error: "Order not found" }, status: :not_found
     end
   end
 

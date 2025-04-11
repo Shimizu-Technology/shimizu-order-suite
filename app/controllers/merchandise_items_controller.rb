@@ -1,188 +1,119 @@
 class MerchandiseItemsController < ApplicationController
-  # 1) For index & show, optional_authorize => public can see
-  before_action :optional_authorize, only: [ :index, :show ]
-
-  # 2) For other actions, require token + admin
-  before_action :authorize_request, except: [ :index, :show ]
-
-  # Mark all actions as public endpoints that don't require restaurant context
-  def public_endpoint?
-    true
+  include TenantIsolation
+  
+  # For index & show, we skip the tenant context check to allow public access
+  skip_before_action :set_current_tenant, only: [:index, :show]
+  
+  # For public actions, ensure we still have a restaurant context
+  before_action :ensure_restaurant_context, only: [:index, :show]
+  
+  # For other actions, require token + admin
+  before_action :authorize_request, except: [:index, :show]
+  
+  # Override global_access_permitted to allow public access to index and show
+  def global_access_permitted?
+    action_name.in?(["index", "show"])
   end
-
+  
   # GET /merchandise_items
   def index
-    # Get the restaurant from the params
-    restaurant_id = params[:restaurant_id]
-    restaurant = Restaurant.find_by(id: restaurant_id) if restaurant_id.present?
-
-    # If admin AND params[:show_all] => show all. Otherwise only available.
-    if is_admin? && params[:show_all].present?
-      base_scope = MerchandiseItem.all
+    result = merchandise_item_service.list_items(params, current_user)
+    
+    if result[:success]
+      render json: result[:items]
     else
-      base_scope = MerchandiseItem.where(available: true)
-    end
-
-    # Filter by collection_id if provided
-    if params[:collection_id].present?
-      base_scope = base_scope.where(merchandise_collection_id: params[:collection_id])
-    # Otherwise, filter by the restaurant's current collection if available
-    elsif restaurant&.current_merchandise_collection_id.present?
-      base_scope = base_scope.where(merchandise_collection_id: restaurant.current_merchandise_collection_id)
-    end
-
-    # Sort by name
-    base_scope = base_scope.order(:name)
-
-    items = base_scope.includes(:merchandise_variants)
-
-    # Include collection name for each item when returning all items
-    if params[:include_collection_names].present?
-      items_with_collection = items.map do |item|
-        item_json = item.as_json(include_variants: true)
-        item_json["collection_name"] = item.merchandise_collection&.name
-        item_json
-      end
-      render json: items_with_collection
-    else
-      render json: items.as_json(include_variants: true)
+      render json: { errors: result[:errors] }, status: result[:status] || :internal_server_error
     end
   end
-
+  
   # GET /merchandise_items/:id
   def show
-    item = MerchandiseItem.includes(:merchandise_variants).find(params[:id])
-    render json: item.as_json(include_variants: true)
+    result = merchandise_item_service.get_item(params[:id])
+    
+    if result[:success]
+      render json: result[:item]
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :not_found
+    end
   end
-
+  
   # POST /merchandise_items
   def create
     Rails.logger.info "=== MerchandiseItemsController#create ==="
-    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
-
-    @merchandise_item = MerchandiseItem.new(merchandise_item_params.except(:image, :second_image))
-
-    if @merchandise_item.save
-      Rails.logger.info "Created MerchandiseItem => #{@merchandise_item.inspect}"
-
-      # Handle image upload if present
-      file = merchandise_item_params[:image]
-      if file.present? && file.respond_to?(:original_filename)
-        ext = File.extname(file.original_filename)
-        new_filename = "merchandise_item_#{@merchandise_item.id}_#{Time.now.to_i}#{ext}"
-        public_url   = S3Uploader.upload(file, new_filename)
-        @merchandise_item.update!(image_url: public_url)
-      end
-
-      # Handle second image upload if present
-      second_file = merchandise_item_params[:second_image]
-      if second_file.present? && second_file.respond_to?(:original_filename)
-        ext = File.extname(second_file.original_filename)
-        new_filename = "merchandise_item_second_#{@merchandise_item.id}_#{Time.now.to_i}#{ext}"
-        public_url   = S3Uploader.upload(second_file, new_filename)
-        @merchandise_item.update!(second_image_url: public_url)
-      end
-
-      render json: @merchandise_item, status: :created
+    
+    result = merchandise_item_service.create_item(merchandise_item_params, current_user)
+    
+    if result[:success]
+      Rails.logger.info "Created MerchandiseItem => #{result[:item].inspect}"
+      render json: result[:item], status: :created
     else
-      Rails.logger.info "Failed to create => #{@merchandise_item.errors.full_messages.inspect}"
-      render json: { errors: @merchandise_item.errors.full_messages }, status: :unprocessable_entity
+      Rails.logger.info "Failed to create => #{result[:errors].inspect}"
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
-
+  
   # PATCH/PUT /merchandise_items/:id
   def update
     Rails.logger.info "=== MerchandiseItemsController#update ==="
-    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
-
-    @merchandise_item = MerchandiseItem.find(params[:id])
-    Rails.logger.info "Updating MerchandiseItem => #{@merchandise_item.id}"
-
-    if @merchandise_item.update(merchandise_item_params.except(:image, :second_image))
-      Rails.logger.info "Update success => #{@merchandise_item.inspect}"
-
-      # Handle image if present
-      file = merchandise_item_params[:image]
-      if file.present? && file.respond_to?(:original_filename)
-        ext = File.extname(file.original_filename)
-        new_filename = "merchandise_item_#{@merchandise_item.id}_#{Time.now.to_i}#{ext}"
-        public_url   = S3Uploader.upload(file, new_filename)
-        @merchandise_item.update!(image_url: public_url)
-      end
-
-      # Handle second image if present
-      second_file = merchandise_item_params[:second_image]
-      if second_file.present? && second_file.respond_to?(:original_filename)
-        ext = File.extname(second_file.original_filename)
-        new_filename = "merchandise_item_second_#{@merchandise_item.id}_#{Time.now.to_i}#{ext}"
-        public_url   = S3Uploader.upload(second_file, new_filename)
-        @merchandise_item.update!(second_image_url: public_url)
-        Rails.logger.info "merchandise_item updated with second image => second_image_url: #{public_url}"
-      end
-
-      render json: @merchandise_item
+    
+    result = merchandise_item_service.update_item(params[:id], merchandise_item_params, current_user)
+    
+    if result[:success]
+      Rails.logger.info "Update success => #{result[:item].inspect}"
+      render json: result[:item]
     else
-      Rails.logger.info "Update failed => #{@merchandise_item.errors.full_messages.inspect}"
-      render json: { errors: @merchandise_item.errors.full_messages }, status: :unprocessable_entity
+      Rails.logger.info "Update failed => #{result[:errors].inspect}"
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
-
+  
   # DELETE /merchandise_items/:id
   def destroy
     Rails.logger.info "=== MerchandiseItemsController#destroy ==="
-    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
-
-    merchandise_item = MerchandiseItem.find(params[:id])
-    Rails.logger.info "Destroying MerchandiseItem => #{merchandise_item.id}, image_url: #{merchandise_item.image_url.inspect}"
-
-    merchandise_item.destroy
-    Rails.logger.info "Destroyed MerchandiseItem => #{merchandise_item.id}"
-
-    head :no_content
+    
+    result = merchandise_item_service.delete_item(params[:id], current_user)
+    
+    if result[:success]
+      Rails.logger.info "Destroyed MerchandiseItem => #{params[:id]}"
+      head :no_content
+    else
+      Rails.logger.info "Failed to destroy => #{result[:errors].inspect}"
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
+    end
   end
-
-  # (Optional) POST /merchandise_items/:id/upload_image
+  
+  # POST /merchandise_items/:id/upload_image
   def upload_image
     Rails.logger.info "=== MerchandiseItemsController#upload_image ==="
-    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
-
-    merchandise_item = MerchandiseItem.find(params[:id])
-    file = params[:image]
-    unless file
-      Rails.logger.info "No file param"
-      return render json: { error: "No image file uploaded" }, status: :unprocessable_entity
+    
+    result = merchandise_item_service.upload_image(params[:id], params[:image], current_user)
+    
+    if result[:success]
+      Rails.logger.info "merchandise_item updated => image_url: #{result[:item].image_url.inspect}"
+      render json: result[:item], status: :ok
+    else
+      Rails.logger.info "Failed to upload image => #{result[:errors].inspect}"
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
-
-    ext = File.extname(file.original_filename)
-    new_filename = "merchandise_item_#{merchandise_item.id}_#{Time.now.to_i}#{ext}"
-    public_url   = S3Uploader.upload(file, new_filename)
-    merchandise_item.update!(image_url: public_url)
-
-    Rails.logger.info "merchandise_item updated => image_url: #{merchandise_item.image_url.inspect}"
-    render json: merchandise_item, status: :ok
   end
-
+  
   # POST /merchandise_items/:id/upload_second_image
   def upload_second_image
     Rails.logger.info "=== MerchandiseItemsController#upload_second_image ==="
-    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
-
-    merchandise_item = MerchandiseItem.find(params[:id])
-    file = params[:image]
-    unless file
-      Rails.logger.info "No file param"
-      return render json: { error: "No image file uploaded" }, status: :unprocessable_entity
+    
+    result = merchandise_item_service.upload_image(params[:id], params[:image], current_user, true)
+    
+    if result[:success]
+      Rails.logger.info "merchandise_item updated => second_image_url: #{result[:item].second_image_url.inspect}"
+      render json: result[:item], status: :ok
+    else
+      Rails.logger.info "Failed to upload second image => #{result[:errors].inspect}"
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
-
-    ext = File.extname(file.original_filename)
-    new_filename = "merchandise_item_second_#{merchandise_item.id}_#{Time.now.to_i}#{ext}"
-    public_url   = S3Uploader.upload(file, new_filename)
-    merchandise_item.update!(second_image_url: public_url)
-
-    Rails.logger.info "merchandise_item updated => second_image_url: #{merchandise_item.second_image_url.inspect}"
-    render json: merchandise_item, status: :ok
   end
-
+  
+  private
+  
   def merchandise_item_params
     params.require(:merchandise_item).permit(
       :name,
@@ -199,8 +130,43 @@ class MerchandiseItemsController < ApplicationController
       :status_note
     )
   end
-
-  def is_admin?
-    current_user && current_user.role.in?(%w[admin super_admin])
+  
+  def merchandise_item_service
+    # Make sure we have a restaurant context, even for public actions
+    ensure_restaurant_context if action_name.in?(["index", "show"])
+    
+    # Use the thread-local restaurant context if current_restaurant is nil
+    restaurant = current_restaurant || ActiveRecord::Base.current_restaurant
+    
+    # Ensure we have a restaurant before initializing the service
+    if restaurant.nil?
+      Rails.logger.error "No restaurant context available for MerchandiseItemService"
+      raise "Restaurant context is required for merchandise item operations"
+    end
+    
+    @merchandise_item_service ||= MerchandiseItemService.new(restaurant, analytics)
+  end
+  
+  # Ensure we have a restaurant context for public actions
+  def ensure_restaurant_context
+    return if ActiveRecord::Base.current_restaurant
+    
+    # Find the restaurant from params or use the first one in development
+    restaurant_id = params[:restaurant_id]
+    Rails.logger.info "Attempting to set restaurant context with ID: #{restaurant_id || 'nil (using first)'}"
+    
+    restaurant = if restaurant_id
+                  Restaurant.find_by(id: restaurant_id)
+                else
+                  Restaurant.first
+                end
+    
+    if restaurant
+      # Set the current tenant context
+      Rails.logger.info "Setting tenant context to restaurant_id: #{restaurant.id}"
+      ActiveRecord::Base.current_restaurant = restaurant
+    else
+      Rails.logger.error "Failed to find restaurant with ID: #{restaurant_id || 'nil (first)'}"
+    end
   end
 end

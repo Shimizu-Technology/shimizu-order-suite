@@ -1,42 +1,28 @@
 # app/controllers/admin/settings_controller.rb
 module Admin
   class SettingsController < ApplicationController
+    include TenantIsolation
+    
     before_action :authorize_request
     before_action :require_admin
-
-    # Mark all actions as public endpoints that don't require restaurant context
-    def public_endpoint?
-      true
-    end
+    before_action :ensure_tenant_context
 
     # GET /admin/settings
     def show
-      restaurant = current_user.restaurant
-      render json: {
-        restaurant_id:              restaurant.id,
-        name:                       restaurant.name,
-        default_reservation_length: restaurant.default_reservation_length,
-        time_slot_interval:         restaurant.time_slot_interval,
-        time_zone:                  restaurant.time_zone,
-        # We do not show opening_time or closing_time if removed
-        admin_settings:             restaurant.admin_settings
-      }
+      # Use the SettingsService to get settings with tenant isolation
+      settings = settings_service.get_settings
+      render json: settings
     end
 
     # PATCH/PUT /admin/settings
     def update
-      restaurant = current_user.restaurant
-      if restaurant.update(settings_params)
-        render json: {
-          message:                    "Settings updated successfully",
-          restaurant_id:              restaurant.id,
-          default_reservation_length: restaurant.default_reservation_length,
-          time_slot_interval:         restaurant.time_slot_interval,
-          time_zone:                  restaurant.time_zone,
-          admin_settings:             restaurant.admin_settings
-        }
+      # Use the SettingsService to update settings with tenant isolation
+      result = settings_service.update_settings(settings_params)
+      
+      if result[:success]
+        render json: result
       else
-        render json: { errors: restaurant.errors.full_messages }, status: :unprocessable_entity
+        render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
       end
     end
 
@@ -45,6 +31,16 @@ module Admin
     def require_admin
       unless current_user.role.in?(%w[admin super_admin])
         render json: { error: "Forbidden: admin only" }, status: :forbidden
+      end
+    end
+    
+    def settings_service
+      @settings_service ||= SettingsService.new(current_restaurant)
+    end
+    
+    def ensure_tenant_context
+      unless current_restaurant.present?
+        render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
       end
     end
 

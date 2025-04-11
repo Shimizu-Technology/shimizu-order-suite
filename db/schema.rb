@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
+ActiveRecord::Schema[7.2].define(version: 2025_04_09_031932) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -42,6 +42,24 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "audit_logs", force: :cascade do |t|
+    t.integer "restaurant_id", null: false
+    t.integer "user_id"
+    t.string "action", null: false
+    t.string "resource_type"
+    t.integer "resource_id"
+    t.jsonb "details", default: {}
+    t.string "ip_address"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["action"], name: "index_audit_logs_on_action"
+    t.index ["created_at"], name: "index_audit_logs_on_created_at"
+    t.index ["details"], name: "index_audit_logs_on_details", using: :gin
+    t.index ["resource_type", "resource_id"], name: "index_audit_logs_on_resource_type_and_resource_id"
+    t.index ["restaurant_id"], name: "index_audit_logs_on_restaurant_id"
+    t.index ["user_id"], name: "index_audit_logs_on_user_id"
+  end
+
   create_table "categories", force: :cascade do |t|
     t.string "name", null: false
     t.integer "position", default: 0
@@ -51,6 +69,22 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
     t.bigint "menu_id", null: false
     t.index ["menu_id", "name"], name: "index_categories_on_menu_id_and_name", unique: true
     t.index ["menu_id"], name: "index_categories_on_menu_id"
+  end
+
+  create_table "feature_flags", force: :cascade do |t|
+    t.string "name", null: false
+    t.text "description"
+    t.boolean "enabled", default: false, null: false
+    t.boolean "global", default: false, null: false
+    t.integer "restaurant_id"
+    t.jsonb "configuration", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["configuration"], name: "index_feature_flags_on_configuration", using: :gin
+    t.index ["global"], name: "index_feature_flags_on_global"
+    t.index ["name", "restaurant_id"], name: "index_feature_flags_on_name_and_restaurant_id", unique: true
+    t.index ["name"], name: "index_feature_flags_on_name"
+    t.index ["restaurant_id"], name: "index_feature_flags_on_restaurant_id"
   end
 
   create_table "house_account_transactions", force: :cascade do |t|
@@ -206,7 +240,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
     t.datetime "updated_at", null: false
     t.string "resource_type"
     t.bigint "resource_id"
-    t.bigint "restaurant_id"
+    t.bigint "restaurant_id", null: false
     t.string "title"
     t.text "body"
     t.boolean "acknowledged", default: false
@@ -452,6 +486,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
     t.string "spinner_image_url"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "restaurant_id", null: false
+    t.index ["restaurant_id"], name: "index_site_settings_on_restaurant_id"
   end
 
   create_table "special_events", force: :cascade do |t|
@@ -479,7 +515,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
     t.boolean "active", default: true, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "restaurant_id"
     t.index ["active"], name: "index_staff_members_on_active"
+    t.index ["restaurant_id"], name: "index_staff_members_on_restaurant_id"
     t.index ["user_id"], name: "index_staff_members_on_user_id", unique: true, where: "(user_id IS NOT NULL)"
   end
 
@@ -496,6 +534,20 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
     t.index ["customer_email"], name: "index_store_credits_on_customer_email"
     t.index ["order_id"], name: "index_store_credits_on_order_id"
     t.index ["status"], name: "index_store_credits_on_status"
+  end
+
+  create_table "tenant_events", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.string "event_type", null: false
+    t.jsonb "data", default: {}, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["data"], name: "index_tenant_events_on_data", using: :gin
+    t.index ["event_type"], name: "index_tenant_events_on_event_type"
+    t.index ["restaurant_id", "created_at"], name: "index_tenant_events_on_restaurant_id_and_created_at"
+    t.index ["restaurant_id", "event_type"], name: "index_tenant_events_on_restaurant_id_and_event_type"
+    t.index ["restaurant_id"], name: "index_tenant_events_on_restaurant_id"
+    t.check_constraint "event_type::text <> ''::text", name: "event_type_not_empty"
   end
 
   create_table "users", force: :cascade do |t|
@@ -517,6 +569,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
     t.index ["phone"], name: "index_users_on_phone_not_null", where: "(phone IS NOT NULL)"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["restaurant_id"], name: "index_users_on_restaurant_id"
+    t.check_constraint "role::text = 'super_admin'::text OR restaurant_id IS NOT NULL", name: "users_restaurant_id_check"
   end
 
   create_table "vip_access_codes", force: :cascade do |t|
@@ -565,7 +618,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "audit_logs", "restaurants", on_delete: :cascade
   add_foreign_key "categories", "menus"
+  add_foreign_key "feature_flags", "restaurants", on_delete: :cascade
   add_foreign_key "house_account_transactions", "orders", on_delete: :nullify
   add_foreign_key "house_account_transactions", "staff_members"
   add_foreign_key "inventory_statuses", "menu_items"
@@ -606,7 +661,10 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_06_013845) do
   add_foreign_key "seat_allocations", "waitlist_entries"
   add_foreign_key "seat_sections", "layouts"
   add_foreign_key "seats", "seat_sections"
+  add_foreign_key "site_settings", "restaurants"
   add_foreign_key "special_events", "restaurants"
+  add_foreign_key "staff_members", "restaurants"
+  add_foreign_key "tenant_events", "restaurants", on_delete: :cascade
   add_foreign_key "users", "restaurants"
   add_foreign_key "vip_access_codes", "restaurants"
   add_foreign_key "vip_access_codes", "special_events"

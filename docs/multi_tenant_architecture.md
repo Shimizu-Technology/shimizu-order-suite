@@ -235,34 +235,192 @@ end
 
 ### JWT Authentication with Restaurant Context
 
-JWT tokens include the restaurant_id to maintain tenant context across requests:
+JWT tokens include the restaurant_id to maintain tenant context across requests. The TokenService handles token generation, verification, and revocation:
 
 ```ruby
-# app/controllers/sessions_controller.rb (simplified)
-def create
-  @user = User.find_by(email: params[:email])
+# app/services/token_service.rb (simplified)
+def self.generate_token(user, restaurant_id = nil, expiration = 24.hours.from_now)
+  # Use provided restaurant_id or fall back to user's restaurant_id
+  tenant_id = restaurant_id || user.restaurant_id
   
-  if @user&.authenticate(params[:password])
-    token = encode_token({
-      user_id: @user.id,
-      restaurant_id: @user.restaurant_id,
-      role: @user.role,
-      exp: 24.hours.from_now.to_i
-    })
-    
-    render json: {
-      token: token,
-      user: UserSerializer.new(@user).as_json
-    }
-  else
-    render json: { error: "Invalid email or password" }, status: :unauthorized
-  end
+  # Create token payload
+  payload = {
+    user_id: user.id,
+    restaurant_id: tenant_id,
+    role: user.role,
+    tenant_permissions: user_permissions(user, tenant_id),
+    jti: SecureRandom.uuid, # JWT ID for revocation
+    iat: Time.current.to_i, # Issued at time
+    exp: expiration.to_i
+  }
+  
+  # Encode the token
+  JWT.encode(payload, Rails.application.secret_key_base)
 end
 
-private
+# Token verification also validates tenant context
+def self.verify_token(token)
+  # Decode the token
+  decoded = JWT.decode(token, Rails.application.secret_key_base, true, algorithm: 'HS256')[0]
+  
+  # Check if token has been revoked
+  if token_revoked?(decoded["jti"])
+    raise TokenRevokedError, "Token has been revoked"
+  end
+  
+  # Return the decoded payload
+  decoded
+end
+```
 
-def encode_token(payload)
-  JWT.encode(payload, Rails.application.credentials.secret_key_base)
+## Enhanced Security Features
+
+### Tenant Isolation Concern
+
+The `TenantIsolation` concern provides a robust framework for enforcing multi-tenant isolation throughout the application:
+
+```ruby
+# app/controllers/concerns/tenant_isolation.rb (simplified)
+module TenantIsolation
+  extend ActiveSupport::Concern
+
+  included do
+    before_action :set_current_tenant
+    after_action :clear_tenant_context
+  end
+
+  private
+
+  # Set the current tenant based on user context and request parameters
+  def set_current_tenant
+    # Step 1: Determine the appropriate restaurant context
+    restaurant_id = determine_restaurant_id
+    @current_restaurant = restaurant_id ? Restaurant.find_by(id: restaurant_id) : nil
+
+    # Step 2: Validate tenant access permissions
+    validate_tenant_access(@current_restaurant)
+
+    # Step 3: Set tenant context for the request duration
+    set_tenant_context(@current_restaurant)
+  end
+  
+  # Validate that the user has permission to access the specified tenant
+  def validate_tenant_access(restaurant)
+    # Allow access to global endpoints for super_admins
+    return true if restaurant.nil? && global_access_permitted? && current_user&.role == "super_admin"
+    
+    # Log tenant access for auditing purposes
+    log_tenant_access(restaurant)
+    
+    # Allow super_admins to access any restaurant
+    return true if current_user&.role == "super_admin"
+    
+    # Allow users to access their own restaurant
+    return true if current_user&.restaurant_id == restaurant&.id
+    
+    # Special case for authentication endpoints
+    return true if controller_name == "sessions" || controller_name == "passwords"
+    
+    # If we get here, the user is trying to access a restaurant they don't have permission for
+    # Log cross-tenant access attempt for security monitoring
+    log_cross_tenant_access(restaurant&.id)
+    
+    raise TenantAccessDeniedError, "You don't have permission to access this restaurant's data"
+  end
+end
+```
+
+### Audit Logging
+
+Comprehensive audit logging tracks all tenant-related operations, particularly focusing on security-sensitive actions:
+
+```ruby
+# app/models/audit_log.rb (simplified)
+class AuditLog < ApplicationRecord
+  include TenantScoped
+  
+  # Associations
+  belongs_to :user, optional: true
+  
+  # Validations
+  validates :action, presence: true
+  
+  # Scopes
+  scope :tenant_access_logs, -> { where(action: 'tenant_access') }
+  scope :data_modification_logs, -> { where(action: %w[create update delete]) }
+  scope :suspicious_activity, -> { where(action: 'suspicious_activity') }
+  
+  # Log tenant access
+  def self.log_tenant_access(user, restaurant, ip_address, details = {})
+    create(
+      user_id: user&.id,
+      restaurant_id: restaurant&.id,
+      action: 'tenant_access',
+      resource_type: 'Restaurant',
+      resource_id: restaurant&.id,
+      ip_address: ip_address,
+      details: details
+    )
+  end
+  
+  # Log cross-tenant access attempt
+  def self.log_cross_tenant_access(user, target_restaurant_id, ip_address, details = {})
+    create(
+      user_id: user&.id,
+      restaurant_id: user&.restaurant_id,
+      action: 'suspicious_activity',
+      resource_type: 'Restaurant',
+      resource_id: target_restaurant_id,
+      ip_address: ip_address,
+      details: details.merge({
+        attempt_type: 'cross_tenant_access',
+        user_restaurant_id: user&.restaurant_id,
+        target_restaurant_id: target_restaurant_id
+      })
+    )
+  end
+end
+```
+
+### Tenant Validation Middleware
+
+A dedicated middleware validates tenant context for all requests and implements rate limiting on a per-tenant basis:
+
+```ruby
+# app/middleware/tenant_validation_middleware.rb (simplified)
+class TenantValidationMiddleware
+  def initialize(app, options = {})
+    @app = app
+    @options = options
+    @rate_limit_store = Redis.new(url: ENV['REDIS_URL'] || 'redis://localhost:6379/0')
+    @rate_limit_window = options[:rate_limit_window] || 60 # seconds
+    @rate_limit_max_requests = options[:rate_limit_max_requests] || 100 # requests per window
+  end
+
+  def call(env)
+    request = ActionDispatch::Request.new(env)
+    
+    # Skip validation for public endpoints
+    if public_endpoint?(request)
+      return @app.call(env)
+    end
+    
+    # Extract tenant context from the request
+    tenant_id = extract_tenant_id(request)
+    
+    # Validate tenant context
+    unless valid_tenant?(tenant_id, request)
+      return invalid_tenant_response
+    end
+    
+    # Apply rate limiting
+    unless within_rate_limit?(tenant_id, request)
+      return rate_limit_exceeded_response
+    end
+    
+    # Process the request
+    @app.call(env)
+  end
 end
 ```
 

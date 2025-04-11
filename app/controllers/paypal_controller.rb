@@ -1,129 +1,70 @@
 # frozen_string_literal: true
 
 class PaypalController < ApplicationController
-  include RestaurantScope
-  before_action :validate_amount, only: [ :create_order ]
+  include TenantIsolation
+  
+  before_action :ensure_tenant_context, except: [:webhook]
+  before_action :validate_amount, only: [:create_order]
 
   # POST /paypal/create_order
   def create_order
-    request = PayPalCheckoutSdk::Orders::OrdersCreateRequest.new
-    # Get currency from params or default to USD
-    currency = params[:currency] || "USD"
+    result = tenant_paypal_service.create_order(
+      params[:amount],
+      params[:currency] || "USD"
+    )
 
-    request.request_body({
-      intent: "CAPTURE",
-      purchase_units: [ {
-        amount: {
-          currency_code: currency,
-          value: params[:amount]
-        },
-        # Add reference_id for tracking which restaurant the order belongs to
-        reference_id: "restaurant_#{current_restaurant.id}"
-      } ]
-    })
-
-    begin
-      client = PaypalHelper.client(current_restaurant)
-      response = client.execute(request)
-
-      # The order ID can be retrieved from the response
-      order_id = response.result.id
-
-      # Store order details in a temporary storage if needed
-      # You can associate this with a cart/session or pending order
-
-      render json: { orderId: order_id }, status: :ok
-    rescue PayPalHttp::HttpError => e
-      Rails.logger.error "PayPal Order Create Failed: #{e.status_code} #{e.message}"
-      render json: { error: "PayPal order creation failed: #{e.message}" }, status: :unprocessable_entity
+    if result[:success]
+      render json: { orderId: result[:order_id] }, status: :ok
+    else
+      render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
     end
   end
 
   # POST /paypal/capture_order
   def capture_order
-    order_id = params[:orderID]
+    result = tenant_paypal_service.capture_order(params[:orderID])
 
-    begin
-      request = PayPalCheckoutSdk::Orders::OrdersCaptureRequest.new(order_id)
-      client = PaypalHelper.client(current_restaurant)
-      response = client.execute(request)
-
-      capture_status = response.result.status # Should be "COMPLETED"
-
-      # Extract transaction details for your records
-      transaction_id = response.result.purchase_units[0].payments.captures[0].id
-      payment_amount = response.result.purchase_units[0].payments.captures[0].amount.value
-      payment_currency = response.result.purchase_units[0].payments.captures[0].amount.currency_code
-
-      # Update your order/payment records based on the transaction details
-      # Note: In production, you'll want to validate the amount against your records
-
+    if result[:success]
       render json: {
-        status: capture_status,
-        transaction_id: transaction_id,
-        amount: payment_amount,
-        currency: payment_currency
+        status: result[:status],
+        transaction_id: result[:capture_id],
+        amount: result[:amount],
+        currency: params[:currency] || "USD"
       }, status: :ok
-    rescue PayPalHttp::HttpError => e
-      Rails.logger.error "PayPal Order Capture Failed: #{e.status_code} #{e.message}"
-      render json: { error: "PayPal capture failed: #{e.message}" }, status: :unprocessable_entity
+    else
+      render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
     end
   end
 
   # POST /paypal/webhook
   def webhook
     # Get the webhook notification body
-    webhook_body = request.body.read
-
-    # Get the webhook signature from headers
-    webhook_id = request.headers["PAYPAL-TRANSMISSION-ID"]
-    timestamp = request.headers["PAYPAL-TRANSMISSION-TIME"]
-    signature = request.headers["PAYPAL-TRANSMISSION-SIG"]
-    cert_url = request.headers["PAYPAL-CERT-URL"]
-    auth_algo = request.headers["PAYPAL-AUTH-ALGO"]
-
-    # Get the webhook ID from restaurant settings
-    restaurant = find_restaurant
-    paypal_webhook_id = restaurant&.admin_settings&.dig("payment_gateway", "paypal_webhook_id")
-
-    if paypal_webhook_id.blank?
-      Rails.logger.error "PayPal webhook verification failed: No webhook ID configured"
-      render json: { error: "Webhook ID not configured" }, status: :unauthorized
+    payload = request.body.read
+    
+    # Get the restaurant ID from the URL parameter
+    restaurant_id = params[:restaurant_id]
+    
+    # Find the restaurant for this webhook
+    restaurant = Restaurant.find_by(id: restaurant_id)
+    
+    unless restaurant
+      Rails.logger.error "PayPal webhook failed: Restaurant not found"
+      render json: { error: "Restaurant not found" }, status: :not_found
       return
     end
+    
+    # Set the current restaurant context for the tenant service
+    @current_restaurant = restaurant
 
     begin
-      # Verify the webhook signature
-      if verify_paypal_webhook_signature(webhook_body, webhook_id, timestamp, signature, cert_url, auth_algo, paypal_webhook_id)
-        # Parse the webhook event
-        event_data = JSON.parse(webhook_body)
-        event_type = event_data["event_type"]
-
-        # Log the event for debugging
-        Rails.logger.info "Received PayPal webhook: #{event_type}"
-
-        # Handle different event types
-        case event_type
-        when "PAYMENT.CAPTURE.COMPLETED"
-          handle_payment_completed(event_data)
-        when "PAYMENT.CAPTURE.DENIED"
-          handle_payment_denied(event_data)
-        when "PAYMENT.CAPTURE.PENDING"
-          handle_payment_pending(event_data)
-        when "PAYMENT.CAPTURE.REFUNDED"
-          handle_payment_refunded(event_data)
-        when "PAYMENT.CAPTURE.REVERSED"
-          handle_payment_reversed(event_data)
-        when "CHECKOUT.ORDER.APPROVED"
-          handle_checkout_approved(event_data)
-        when "CHECKOUT.ORDER.COMPLETED"
-          handle_checkout_completed(event_data)
-        when "CHECKOUT.ORDER.DECLINED"
-          handle_checkout_declined(event_data)
-        when "PAYMENT.REFUND.COMPLETED"
-          handle_refund_completed(event_data)
-        when "PAYMENT.REFUND.FAILED"
-          handle_refund_failed(event_data)
+      # Process the webhook using the tenant service
+      result = tenant_paypal_service.process_webhook(payload, request.headers)
+      
+      if result[:success]
+        render json: { received: true }, status: :ok
+      else
+        render json: { error: result[:errors].join(', ') }, status: result[:status] || :bad_request
+      end
         when "CUSTOMER.DISPUTE.CREATED"
           handle_dispute_created(event_data)
         when "CUSTOMER.DISPUTE.RESOLVED"
@@ -546,5 +487,19 @@ class PaypalController < ApplicationController
 
     # Return true to indicate the webhook is valid
     true
+  end
+  
+  def tenant_paypal_service
+    @tenant_paypal_service ||= begin
+      service = TenantPaypalService.new(current_restaurant)
+      service.current_user = current_user
+      service
+    end
+  end
+  
+  def ensure_tenant_context
+    unless current_restaurant.present?
+      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+    end
   end
 end

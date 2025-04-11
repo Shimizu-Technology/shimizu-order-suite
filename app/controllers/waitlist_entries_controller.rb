@@ -1,6 +1,9 @@
 # app/controllers/waitlist_entries_controller.rb
 class WaitlistEntriesController < ApplicationController
+  include TenantIsolation
+  
   before_action :authorize_request
+  before_action :ensure_tenant_context
 
   def index
     # Only staff/admin/super_admin can list the entire waitlist
@@ -8,53 +11,40 @@ class WaitlistEntriesController < ApplicationController
       return render json: { error: "Forbidden: staff/admin only" }, status: :forbidden
     end
 
-    scope = WaitlistEntry.where(restaurant_id: current_user.restaurant_id)
-
-    # If ?date=YYYY-MM-DD is given, filter by local date for check_in_time
+    # Prepare filter parameters
+    filter_params = {}
+    
     if params[:date].present?
-      begin
-        # Handle both simple string and nested parameter formats
-        date_param = params[:date].is_a?(ActionController::Parameters) ? params[:date][:date] : params[:date]
-        date_filter = Date.parse(date_param)
-
-        restaurant = Restaurant.find(current_user.restaurant_id)
-        tz = restaurant.time_zone.presence || "Pacific/Guam"
-
-        start_local = Time.use_zone(tz) do
-          Time.zone.local(date_filter.year, date_filter.month, date_filter.day, 0, 0, 0)
-        end
-        end_local = start_local.end_of_day
-
-        start_utc = start_local.utc
-        end_utc   = end_local.utc
-
-        # Show waitlist entries whose check_in_time is in [start_utc..end_utc)
-        scope = scope.where("check_in_time >= ? AND check_in_time < ?", start_utc, end_utc)
-      rescue ArgumentError
-        Rails.logger.warn "[WaitlistEntriesController#index] invalid date param=#{params[:date]}"
-        # optionally: scope = scope.none
-      end
+      # Handle both simple string and nested parameter formats
+      date_param = params[:date].is_a?(ActionController::Parameters) ? params[:date][:date] : params[:date]
+      filter_params[:date] = date_param
     end
-
-    waitlist = scope.all
-
-    ############################
-    ## ADDED/CHANGED
-    render json: waitlist.as_json(
-      only: [
-        :id,
-        :restaurant_id,
-        :contact_name,
-        :party_size,
-        :check_in_time,
-        :status,
-        :contact_phone,
-        :created_at,
-        :updated_at
-      ],
-      methods: :seat_labels
-    )
-    ############################
+    
+    # Add other filters if present
+    [:status, :customer_name, :phone, :page, :per_page].each do |param|
+      filter_params[param] = params[param] if params[param].present?
+    end
+    
+    result = waitlist_entry_service.list_entries(filter_params)
+    
+    if result[:success]
+      render json: result[:entries].as_json(
+        only: [
+          :id,
+          :restaurant_id,
+          :contact_name,
+          :party_size,
+          :check_in_time,
+          :status,
+          :contact_phone,
+          :created_at,
+          :updated_at
+        ],
+        methods: :seat_labels
+      )
+    else
+      render json: { error: result[:errors].join(', ') }, status: result[:status] || :internal_server_error
+    end
   end
 
   def show
@@ -62,37 +52,46 @@ class WaitlistEntriesController < ApplicationController
       return render json: { error: "Forbidden: staff/admin only" }, status: :forbidden
     end
 
-    entry = WaitlistEntry.find(params[:id])
-
-    ############################
-    ## ADDED/CHANGED
-    render json: entry.as_json(
-      only: [
-        :id,
-        :restaurant_id,
-        :contact_name,
-        :party_size,
-        :check_in_time,
-        :status,
-        :contact_phone,
-        :created_at,
-        :updated_at
-      ],
-      methods: :seat_labels
-    )
-    ############################
+    result = waitlist_entry_service.find_entry(params[:id])
+    
+    if result[:success]
+      render json: result[:entry].as_json(
+        only: [
+          :id,
+          :restaurant_id,
+          :contact_name,
+          :party_size,
+          :check_in_time,
+          :status,
+          :contact_phone,
+          :created_at,
+          :updated_at,
+          :estimated_wait_minutes,
+          :notification_count,
+          :last_notified_at,
+          :notes
+        ],
+        methods: :seat_labels
+      )
+    else
+      render json: { error: result[:errors].join(', ') }, status: result[:status] || :not_found
+    end
   end
 
   def create
-    # If guests can create waitlist entries, skip :authorize_request or handle differently
-    entry = WaitlistEntry.new(waitlist_entry_params)
-    # Force restaurant if desired:
-    entry.restaurant_id = current_user.restaurant_id
-
-    if entry.save
-      render json: entry, status: :created
+    # Prepare the entry parameters
+    create_params = waitlist_entry_params.to_h
+    
+    # Set the restaurant_id to the current restaurant
+    create_params[:restaurant_id] = current_restaurant.id
+    
+    # Create the entry using the service
+    result = waitlist_entry_service.create_entry(create_params)
+    
+    if result[:success]
+      render json: result[:entry], status: :created
     else
-      render json: { errors: entry.errors.full_messages }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
 
@@ -101,11 +100,12 @@ class WaitlistEntriesController < ApplicationController
       return render json: { error: "Forbidden: staff/admin only" }, status: :forbidden
     end
 
-    entry = WaitlistEntry.find(params[:id])
-    if entry.update(waitlist_entry_params)
-      render json: entry
+    result = waitlist_entry_service.update_entry(params[:id], waitlist_entry_params.to_h)
+    
+    if result[:success]
+      render json: result[:entry]
     else
-      render json: { errors: entry.errors.full_messages }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
 
@@ -114,26 +114,16 @@ class WaitlistEntriesController < ApplicationController
       return render json: { error: "Forbidden: staff/admin only" }, status: :forbidden
     end
 
-    entry = WaitlistEntry.find(params[:id])
-    entry.destroy
-    head :no_content
+    result = waitlist_entry_service.delete_entry(params[:id])
+    
+    if result[:success]
+      head :no_content
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
+    end
   end
 
   private
-
-  def public_endpoint?
-    # Allow access to waitlist entries for authenticated users
-    # For index and other actions, we need to ensure the user has a valid restaurant context
-    # or is a super_admin with a restaurant_id parameter
-    if current_user
-      if current_user.role == 'super_admin'
-        return params[:restaurant_id].present?
-      else
-        return %w[admin staff].include?(current_user.role) && current_user.restaurant_id.present?
-      end
-    end
-    false
-  end
 
   def waitlist_entry_params
     params.require(:waitlist_entry).permit(
@@ -142,7 +132,23 @@ class WaitlistEntriesController < ApplicationController
       :party_size,
       :check_in_time,
       :status,
-      :contact_phone
+      :contact_phone,
+      :notes,
+      :estimated_wait_minutes
     )
+  end
+  
+  def waitlist_entry_service
+    @waitlist_entry_service ||= begin
+      service = WaitlistEntryService.new(current_restaurant)
+      service.current_user = current_user
+      service
+    end
+  end
+  
+  def ensure_tenant_context
+    unless current_restaurant.present?
+      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+    end
   end
 end

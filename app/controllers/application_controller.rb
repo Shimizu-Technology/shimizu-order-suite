@@ -1,7 +1,7 @@
 # app/controllers/application_controller.rb
 
 class ApplicationController < ActionController::API
-  include RestaurantScope
+  include TenantIsolation
   include Pundit::Authorization
   
   # Add around_action to track controller actions
@@ -14,15 +14,31 @@ class ApplicationController < ActionController::API
     token = header.split(" ").last if header
 
     begin
-      decoded = JWT.decode(token, Rails.application.secret_key_base)[0]
+      # Use TokenService to verify and decode the token
+      decoded = TokenService.verify_token(token)
       @current_user = User.find(decoded["user_id"])
-
-      # Check token expiration if exp is present
-      if decoded["exp"].present? && Time.at(decoded["exp"]) < Time.current
-        render json: { errors: "Token expired" }, status: :unauthorized
-        nil
+      
+      # Verify restaurant context from token
+      restaurant_id = decoded["restaurant_id"]
+      if restaurant_id.present?
+        @current_restaurant = Restaurant.find_by(id: restaurant_id)
+        
+        # Verify user still belongs to this restaurant
+        unless @current_user.super_admin? || @current_user.restaurant_id == @current_restaurant&.id
+          render json: { errors: "User not authorized for this restaurant" }, status: :forbidden
+          return nil
+        end
+        
+        # Set tenant context
+        set_tenant_context(@current_restaurant)
+      elsif !global_access_permitted?
+        render json: { errors: "Restaurant context required" }, status: :unprocessable_entity
+        return nil
       end
-    rescue ActiveRecord::RecordNotFound, JWT::DecodeError
+    rescue TokenService::TokenRevokedError
+      render json: { errors: "Token has been revoked" }, status: :unauthorized
+    rescue ActiveRecord::RecordNotFound, JWT::DecodeError => e
+      Rails.logger.error("JWT Authorization error: #{e.message}")
       render json: { errors: "Unauthorized" }, status: :unauthorized
     end
   end
@@ -38,13 +54,19 @@ class ApplicationController < ActionController::API
     return unless token  # no token => do nothing => user remains nil
 
     begin
-      # Use the same decode logic & secret as authorize_request
-      decoded = JWT.decode(token, Rails.application.secret_key_base)[0]
+      # Use TokenService to verify and decode the token
+      decoded = TokenService.verify_token(token)
       @current_user = User.find(decoded["user_id"])
-
-      # Check token expiration if exp is present
-      nil if decoded["exp"].present? && Time.at(decoded["exp"]) < Time.current
-    rescue ActiveRecord::RecordNotFound, JWT::DecodeError
+      
+      # Try to set restaurant context if available in token
+      restaurant_id = decoded["restaurant_id"]
+      if restaurant_id.present?
+        @current_restaurant = Restaurant.find_by(id: restaurant_id)
+        set_tenant_context(@current_restaurant) if @current_restaurant
+      end
+    rescue TokenService::TokenRevokedError, ActiveRecord::RecordNotFound, JWT::DecodeError => e
+      # Log the error but don't fail the request
+      Rails.logger.debug("Optional JWT authorization failed: #{e.message}")
       # do nothing => user stays nil
     end
   end

@@ -2,6 +2,13 @@
 
 class Order < ApplicationRecord
   include Broadcastable
+  include TenantScoped
+  
+  # Virtual attribute for staff_modal flag
+  attr_accessor :staff_modal
+  
+  # Set staff_created flag based on staff_modal attribute
+  before_create :set_staff_created_from_staff_modal
   
   # Define which attributes should trigger broadcasts
   broadcasts_on :status, :total, :items, :eta, :pickup_time, :is_staff_order, :staff_member_id
@@ -12,6 +19,27 @@ class Order < ApplicationRecord
   STATUS_COMPLETED = "completed"
   STATUS_CANCELLED = "cancelled"
   STATUS_REFUNDED = "refunded"
+  
+  # Set staff-related flags based on staff_modal virtual attribute
+  def set_staff_created_from_staff_modal
+    if staff_modal.present? && staff_modal.to_s == 'true'
+      # Always mark as staff_created when using the staff modal
+      self.staff_created = true
+      
+      # Only set is_staff_order to true if this is actually an order for a staff member
+      # This is determined by checking if staff_member_id is present
+      # Do not override if is_staff_order was explicitly set
+      if self.is_staff_order.nil? && self.staff_member_id.present?
+        self.is_staff_order = true
+      elsif self.is_staff_order.nil?
+        # Default to false if not explicitly set and no staff_member_id
+        self.is_staff_order = false
+      end
+      
+      # Log for debugging
+      Rails.logger.info("Order created from staff modal: staff_created=#{self.staff_created}, is_staff_order=#{self.is_staff_order}, staff_member_id=#{self.staff_member_id}")
+    end
+  end
 
   # Valid order statuses
   VALID_STATUSES = [
@@ -131,8 +159,14 @@ class Order < ApplicationRecord
   def calculate_pre_discount_total
     return pre_discount_total if pre_discount_total.present?
     
-    # Sum up the price of all items
-    items_total = items.sum { |item| (item['price'].to_f * item['quantity'].to_i) }
+    # Check if items already have pre_discount_price set
+    if items.present? && items.first['pre_discount_price'].present?
+      # Items already have pre-discount prices, use those
+      items_total = items.sum { |item| (item['pre_discount_price'].to_f * item['quantity'].to_i) }
+    else
+      # Use the current price as the pre-discount price
+      items_total = items.sum { |item| (item['price'].to_f * item['quantity'].to_i) }
+    end
     
     # Add merchandise items if present
     merch_total = 0
@@ -153,26 +187,84 @@ class Order < ApplicationRecord
   def apply_staff_discount
     return unless is_staff_order
     
-    # Set the pre-discount total if not already set
-    self.pre_discount_total ||= calculate_pre_discount_total
+    # IMPORTANT: Always prioritize the pre_discount_total from the order parameters
+    # This is the original value sent from the frontend before any discounts
+    original_pre_discount = nil
     
-    # Calculate the discounted total
-    discounted_total = pre_discount_total * (1 - staff_discount_rate)
+    if params_pre_discount_total.present?
+      original_pre_discount = params_pre_discount_total.to_f
+      Rails.logger.info("Using pre_discount_total from params: #{original_pre_discount}")
+      
+      # Store the original pre-discount total from params
+      self.pre_discount_total = original_pre_discount
+    end
     
-    # Update the total
-    self.total = discounted_total.round(2)
+    # Check if discount has already been applied in the frontend
+    already_discounted = items.present? && items.first['pre_discount_price'].present?
     
-    # Store the pre-discount price for each item
-    if items.present?
-      items_with_pre_discount = items.map do |item|
-        # Store the original price as pre_discount_price
-        item_price = item['price'].to_f
-        item.merge({
-          'pre_discount_price' => item_price,
-          'price' => (item_price * (1 - staff_discount_rate)).round(2)
-        })
+    if already_discounted
+      # For already discounted items, verify the pre_discount_total matches item pre_discount_prices
+      calculated_pre_discount = items.sum { |item| (item['pre_discount_price'].to_f * item['quantity'].to_i) }
+      
+      # If there's a significant discrepancy, log it but trust the explicit pre_discount_total
+      if (pre_discount_total.to_f - calculated_pre_discount).abs > 0.01
+        Rails.logger.info("Note: pre_discount_total (#{pre_discount_total}) differs from sum of item pre_discount_prices (#{calculated_pre_discount})")
+        
+        # If we have the original pre-discount total from params, use that as the source of truth
+        if original_pre_discount.present?
+          Rails.logger.info("Overriding with original pre_discount_total from params: #{original_pre_discount}")
+          self.pre_discount_total = original_pre_discount
+        end
       end
-      self.items = items_with_pre_discount
+      
+      # If total is already discounted, don't apply discount again
+      Rails.logger.info("Staff discount already applied in frontend. Pre-discount total: #{pre_discount_total}, Current total: #{total}")
+      
+      # Ensure payment_amount reflects the actual amount charged
+      self.payment_amount = total if payment_amount.nil? || payment_amount.to_f.zero?
+      
+      return
+    else
+      # Regular flow - calculate pre_discount_total from current prices if not already set
+      self.pre_discount_total ||= calculate_pre_discount_total
+      
+      # Calculate the discounted total
+      discounted_total = pre_discount_total * (1 - staff_discount_rate)
+      
+      # Update the total
+      self.total = discounted_total.round(2)
+      
+      # Store the pre-discount price for each item
+      if items.present?
+        items_with_pre_discount = items.map do |item|
+          # Store the original price as pre_discount_price
+          item_price = item['price'].to_f
+          item.merge({
+            'pre_discount_price' => item_price,
+            'price' => (item_price * (1 - staff_discount_rate)).round(2)
+          })
+        end
+        self.items = items_with_pre_discount
+      end
+      
+      # Ensure payment_amount reflects the actual amount charged
+      self.payment_amount = total if payment_amount.nil? || payment_amount.to_f.zero?
+    end
+  end
+  
+  # Get pre_discount_total from params if available
+  def params_pre_discount_total
+    return nil unless defined?(params) && params.is_a?(ActionController::Parameters)
+    
+    # Try to get pre_discount_total from different possible locations in params
+    if params[:order] && params[:order][:pre_discount_total].present?
+      params[:order][:pre_discount_total]
+    elsif params[:order] && params[:order][:payment_details] && 
+          params[:order][:payment_details][:staffOrderParams] && 
+          params[:order][:payment_details][:staffOrderParams][:pre_discount_total].present?
+      params[:order][:payment_details][:staffOrderParams][:pre_discount_total]
+    else
+      nil
     end
   end
   

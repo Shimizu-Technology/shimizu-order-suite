@@ -28,6 +28,8 @@ gem "stripe"
 gem "web-push", "~> 3.0.1"
 # Analytics
 gem "posthog-ruby"
+# Monitoring and metrics
+gem "prometheus-client"
 # Authorization
 gem "pundit"
 # Use the Puma web server [https://github.com/puma/puma]
