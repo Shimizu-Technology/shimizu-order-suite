@@ -3,6 +3,11 @@ class MerchandiseCollectionsController < ApplicationController
   
   before_action :authorize_request, only: [:set_active]
   
+  # Override global_access_permitted to allow public access to index and show
+  def global_access_permitted?
+    action_name.in?(["index", "show"])
+  end
+  
   # GET /merchandise_collections
   def index
     result = merchandise_collection_service.list_collections(params)

@@ -88,6 +88,28 @@ module TenantIsolation
   # This method ensures that users can only access data from their own restaurant,
   # with an exception for super_admin users who can access all restaurants.
   def validate_tenant_access(restaurant)
+    # Check if this is a public request (no authenticated user)
+    is_public_request = !current_user.present?
+    
+    # For public requests, check if this is a global endpoint
+    if is_public_request && global_access_permitted?
+      # If this is a public endpoint and the request has an origin header
+      if request.headers['Origin'].present?
+        origin = request.headers['Origin']
+        Rails.logger.debug { "Public request from origin: #{origin} for restaurant: #{restaurant&.id}" }
+        
+        # Check if this origin is allowed for any restaurant
+        if Restaurant.where("allowed_origins @> ARRAY[?]::varchar[]", [origin]).exists?
+          Rails.logger.debug { "Origin #{origin} is allowed for some restaurant" }
+          return true
+        end
+      else
+        # Even without an origin, allow access to global endpoints for public requests
+        Rails.logger.debug { "Allowing public access to global endpoint: #{controller_name}##{action_name}" }
+        return true
+      end
+    end
+    
     # Allow access to global endpoints for super_admins
     return true if restaurant.nil? && global_access_permitted? && current_user&.role == "super_admin"
     

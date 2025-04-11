@@ -6,6 +6,11 @@ module Admin
     before_action :authorize_request, except: [ :show ]
     before_action :require_admin!, except: [ :show ]
     before_action :ensure_tenant_context
+    
+    # Override global_access_permitted to allow public access to show
+    def global_access_permitted?
+      action_name == "show"
+    end
 
     # GET /admin/site_settings
     def show

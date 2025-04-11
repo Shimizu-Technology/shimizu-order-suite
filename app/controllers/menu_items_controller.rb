@@ -9,6 +9,11 @@ class MenuItemsController < ApplicationController
   
   # Ensure tenant context for all actions
   before_action :ensure_tenant_context
+  
+  # Override global_access_permitted to allow public access to index and show
+  def global_access_permitted?
+    action_name.in?(["index", "show"])
+  end
 
   # GET /menu_items
   def index
