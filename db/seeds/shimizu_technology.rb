@@ -90,7 +90,8 @@ unless Restaurant.exists?(name: "Shimizu Technology")
   # ------------------------------------------------------------------------------
   main_menu = Menu.create!(
     name: "Main Menu",
-    restaurant_id: restaurant.id
+    restaurant_id: restaurant.id,
+    active: true
   )
 
   # Create a category for the menu
