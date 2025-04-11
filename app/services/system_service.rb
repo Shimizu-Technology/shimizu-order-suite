@@ -3,6 +3,8 @@ class SystemService < TenantScopedService
   # This service handles system-level operations
   # Some operations are tenant-scoped, while others are global (super_admin only)
   
+  attr_accessor :current_user
+  
   # Test SMS functionality
   def test_sms(params)
     to = params[:phone]
@@ -68,21 +70,18 @@ class SystemService < TenantScopedService
   end
   
   # Generate web push keys for a restaurant
-  def generate_web_push_keys(restaurant_id = nil)
-    # Use the current restaurant if no restaurant_id is provided
-    restaurant_id ||= current_restaurant&.id
-    
+  def generate_web_push_keys(restaurant_id = nil, user = nil)
     # Log the request
-    Rails.logger.info("Generating VAPID keys for restaurant_id: #{restaurant_id}")
+    Rails.logger.info("Generating VAPID keys for restaurant_id: #{restaurant_id || @restaurant&.id}")
     
-    # Find the restaurant
     begin
-      # For super_admin, allow accessing any restaurant
-      # For regular admin, only allow accessing their own restaurant
-      restaurant = if current_user&.super_admin?
+      # Determine which restaurant to use
+      # If user is super_admin and a different restaurant_id is provided, use that restaurant
+      # Otherwise, use the restaurant that was passed to the service constructor
+      restaurant = if user&.super_admin? && restaurant_id.present? && restaurant_id.to_s != @restaurant&.id.to_s
                      Restaurant.find_by(id: restaurant_id)
                    else
-                     restaurant_id == current_restaurant&.id ? current_restaurant : nil
+                     @restaurant
                    end
       
       # Ensure we have a restaurant

@@ -39,11 +39,9 @@ module Admin
     end
     
     def generate_web_push_keys
-      # Set current_user for the service
-      system_service.current_user = current_user
-      
       # Use the SystemService to generate web push keys with tenant isolation
-      result = system_service.generate_web_push_keys(params[:restaurant_id])
+      # Pass the current_user as a parameter instead of setting it on the service
+      result = system_service.generate_web_push_keys(params[:restaurant_id], current_user)
       
       if result[:success]
         render json: { 
