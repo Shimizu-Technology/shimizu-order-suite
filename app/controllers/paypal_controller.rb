@@ -61,10 +61,12 @@ class PaypalController < ApplicationController
       result = tenant_paypal_service.process_webhook(payload, request.headers)
       
       if result[:success]
-        render json: { received: true }, status: :ok
-      else
-        render json: { error: result[:errors].join(', ') }, status: result[:status] || :bad_request
-      end
+        # Parse the event data and type
+        event_data = JSON.parse(payload)
+        event_type = event_data['event_type']
+        
+        # Handle different event types
+        case event_type
         when "CUSTOMER.DISPUTE.CREATED"
           handle_dispute_created(event_data)
         when "CUSTOMER.DISPUTE.RESOLVED"
@@ -77,8 +79,8 @@ class PaypalController < ApplicationController
 
         render json: { status: "success" }, status: :ok
       else
-        Rails.logger.error "PayPal webhook signature verification failed"
-        render json: { error: "Invalid signature" }, status: :unauthorized
+        Rails.logger.error "PayPal webhook processing failed: #{result[:errors]}"
+        render json: { error: result[:errors].join(', ') }, status: result[:status] || :bad_request
       end
     rescue JSON::ParserError => e
       Rails.logger.error "Invalid PayPal webhook payload: #{e.message}"
@@ -115,14 +117,14 @@ class PaypalController < ApplicationController
 
     # The order_id might be in different places depending on the event structure
     # You'll need to adjust this based on actual PayPal webhook data
-    payment_id = resource["supplementary_data"]&.dig("related_ids", "order_id") ||
-                 resource["links"]&.find { |link| link["rel"] == "up" }&.dig("href")&.split("/")&.last
+    payment_id = (resource["supplementary_data"]&.dig("related_ids", "order_id") ||
+                 resource["links"]&.find { |link| link["rel"] == "up" }&.dig("href")&.split("/")&.last)
 
     amount = resource.dig("amount", "value")
 
     # Find the order by payment_id or transaction_id
-    order = Order.find_by(payment_id: payment_id) ||
-            Order.find_by(transaction_id: transaction_id)
+    order = (Order.find_by(payment_id: payment_id) ||
+            Order.find_by(transaction_id: transaction_id))
 
     if order
       # Update order status
@@ -156,11 +158,11 @@ class PaypalController < ApplicationController
   def handle_payment_denied(event_data)
     resource = event_data["resource"]
     transaction_id = resource["id"]
-    payment_id = resource["supplementary_data"]&.dig("related_ids", "order_id") ||
-                 resource["links"]&.find { |link| link["rel"] == "up" }&.dig("href")&.split("/")&.last
+    payment_id = (resource["supplementary_data"]&.dig("related_ids", "order_id") ||
+                 resource["links"]&.find { |link| link["rel"] == "up" }&.dig("href")&.split("/")&.last)
 
-    order = Order.find_by(payment_id: payment_id) ||
-            Order.find_by(transaction_id: transaction_id)
+    order = (Order.find_by(payment_id: payment_id) ||
+            Order.find_by(transaction_id: transaction_id))
 
     if order
       order.update(
@@ -177,11 +179,11 @@ class PaypalController < ApplicationController
   def handle_payment_pending(event_data)
     resource = event_data["resource"]
     transaction_id = resource["id"]
-    payment_id = resource["supplementary_data"]&.dig("related_ids", "order_id") ||
-                 resource["links"]&.find { |link| link["rel"] == "up" }&.dig("href")&.split("/")&.last
+    payment_id = (resource["supplementary_data"]&.dig("related_ids", "order_id") ||
+                 resource["links"]&.find { |link| link["rel"] == "up" }&.dig("href")&.split("/")&.last)
 
-    order = Order.find_by(payment_id: payment_id) ||
-            Order.find_by(transaction_id: transaction_id)
+    order = (Order.find_by(payment_id: payment_id) ||
+            Order.find_by(transaction_id: transaction_id))
 
     if order
       order.update(
@@ -198,13 +200,13 @@ class PaypalController < ApplicationController
   def handle_payment_refunded(event_data)
     resource = event_data["resource"]
     transaction_id = resource["id"]
-    payment_id = resource["supplementary_data"]&.dig("related_ids", "order_id") ||
-                 resource["links"]&.find { |link| link["rel"] == "up" }&.dig("href")&.split("/")&.last
+    payment_id = (resource["supplementary_data"]&.dig("related_ids", "order_id") ||
+                 resource["links"]&.find { |link| link["rel"] == "up" }&.dig("href")&.split("/")&.last)
 
     refund_amount = resource.dig("amount", "value").to_f
 
-    order = Order.find_by(payment_id: payment_id) ||
-            Order.find_by(transaction_id: transaction_id)
+    order = (Order.find_by(payment_id: payment_id) ||
+            Order.find_by(transaction_id: transaction_id))
 
     if order
       # Check if it's a full or partial refund
@@ -244,11 +246,11 @@ class PaypalController < ApplicationController
   def handle_payment_reversed(event_data)
     resource = event_data["resource"]
     transaction_id = resource["id"]
-    payment_id = resource["supplementary_data"]&.dig("related_ids", "order_id") ||
-                 resource["links"]&.find { |link| link["rel"] == "up" }&.dig("href")&.split("/")&.last
+    payment_id = (resource["supplementary_data"]&.dig("related_ids", "order_id") ||
+                 resource["links"]&.find { |link| link["rel"] == "up" }&.dig("href")&.split("/")&.last)
 
-    order = Order.find_by(payment_id: payment_id) ||
-            Order.find_by(transaction_id: transaction_id)
+    order = (Order.find_by(payment_id: payment_id) ||
+            Order.find_by(transaction_id: transaction_id))
 
     if order
       order.update(
