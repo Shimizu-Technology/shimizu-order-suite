@@ -76,226 +76,231 @@ class StripeController < ApplicationController
     # Set the current restaurant context for the tenant service
     @current_restaurant = restaurant
     
-    # Process the webhook using the tenant service
-    result = tenant_stripe_service.process_webhook(payload, signature)
-
+    begin
+      # Process the webhook using the tenant service
+      result = tenant_stripe_service.process_webhook(payload, signature)
+      event = result[:event]
+      
       if result[:success]
-        render json: { received: true }, status: :ok
-      else
-        render json: { error: result[:errors].join(', ') }, status: result[:status] || :bad_request
-      end
+        # Handle the event based on its type
+        case event["type"]
+        when "payment_intent.requires_action"
+          payment_intent = event["data"]["object"]
 
-      when "payment_intent.requires_action"
-        payment_intent = event["data"]["object"]
-
-        # Handle payment requiring additional authentication
-        order = Order.find_by(payment_id: payment_intent.id) ||
-                Order.find_by(transaction_id: payment_intent.id)
-        if order
-          order.update(
-            payment_status: "requires_action",
-            payment_method: "stripe",
-            payment_id: payment_intent.id # Ensure payment_id is set
-          )
-          # You might want to notify the customer that additional action is required
-        end
-
-      when "charge.refunded"
-        charge = event["data"]["object"]
-
-        # Handle refund
-        payment_intent_id = charge.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
-        if order
-          # Check if it's a full or partial refund
-          if charge.amount == charge.amount_refunded
+          # Handle payment requiring additional authentication
+          order = (Order.find_by(payment_id: payment_intent.id) ||
+                  Order.find_by(transaction_id: payment_intent.id))
+          if order
             order.update(
-              payment_status: "refunded",
-              status: Order::STATUS_REFUNDED,
-              refund_amount: charge.amount_refunded / 100.0, # Convert from cents
-              payment_id: payment_intent_id # Ensure payment_id is set
+              payment_status: "requires_action",
+              payment_method: "stripe",
+              payment_id: payment_intent.id # Ensure payment_id is set
             )
-          else
-            order.update(
-              payment_status: "refunded",
-              # No longer changing status for partial refunds
-              refund_amount: charge.amount_refunded / 100.0, # Convert from cents
-              payment_id: payment_intent_id # Ensure payment_id is set
-            )
-          end
-        end
-
-      when "charge.dispute.created"
-        dispute = event["data"]["object"]
-
-        # Handle dispute creation
-        payment_intent_id = dispute.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
-        if order
-          order.update(
-            payment_status: "disputed",
-            dispute_reason: dispute.reason,
-            payment_id: payment_intent_id # Ensure payment_id is set
-          )
-          # You might want to notify administrators about the dispute
-        end
-
-      when "payment_intent.processing"
-        payment_intent = event["data"]["object"]
-
-        # Handle payment processing
-        order = Order.find_by(payment_id: payment_intent.id) ||
-                Order.find_by(transaction_id: payment_intent.id)
-        if order
-          order.update(
-            payment_status: "processing",
-            payment_method: "stripe",
-            payment_id: payment_intent.id # Ensure payment_id is set
-          )
-        end
-
-      when "payment_intent.canceled"
-        payment_intent = event["data"]["object"]
-
-        # Handle payment cancellation
-        order = Order.find_by(payment_id: payment_intent.id) ||
-                Order.find_by(transaction_id: payment_intent.id)
-        if order
-          order.update(
-            payment_status: "canceled",
-            payment_method: "stripe",
-            payment_id: payment_intent.id # Ensure payment_id is set
-          )
-        end
-
-      when "charge.dispute.updated"
-        dispute = event["data"]["object"]
-
-        # Handle dispute update
-        payment_intent_id = dispute.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
-        if order
-          # Update payment_id to ensure it's set
-          order.update(payment_id: payment_intent_id) if order.payment_id.blank?
-          # You might want to update dispute details or notify administrators
-        end
-
-      when "charge.dispute.closed"
-        dispute = event["data"]["object"]
-
-        # Handle dispute resolution
-        payment_intent_id = dispute.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
-        if order
-          # Update payment_id to ensure it's set
-          order_updates = { payment_id: payment_intent_id }
-
-          if dispute.status == "won"
-            order_updates[:payment_status] = "paid" # Dispute resolved in your favor
-          elsif dispute.status == "lost"
-            order_updates[:payment_status] = "refunded" # Dispute resolved in customer's favor
+            # You might want to notify the customer that additional action is required
           end
 
-          order.update(order_updates)
-        end
+        when "charge.refunded"
+          charge = event["data"]["object"]
 
-      when "payment_method.attached"
-        payment_method = event["data"]["object"]
+          # Handle refund
+          payment_intent_id = charge.payment_intent
+          order = (Order.find_by(payment_id: payment_intent_id) ||
+                  Order.find_by(transaction_id: payment_intent_id))
+          if order
+            # Check if it's a full or partial refund
+            if charge.amount == charge.amount_refunded
+              order.update(
+                payment_status: "refunded",
+                status: Order::STATUS_REFUNDED,
+                refund_amount: charge.amount_refunded / 100.0, # Convert from cents
+                payment_id: payment_intent_id # Ensure payment_id is set
+              )
+            else
+              order.update(
+                payment_status: "refunded",
+                # No longer changing status for partial refunds
+                refund_amount: charge.amount_refunded / 100.0, # Convert from cents
+                payment_id: payment_intent_id # Ensure payment_id is set
+              )
+            end
+          end
 
-        # Handle payment method attachment
-        # This is useful if you implement saved payment methods
-        # You might want to associate this payment method with a customer
+        when "charge.dispute.created"
+          dispute = event["data"]["object"]
 
-      when "checkout.session.completed"
-        session = event["data"]["object"]
+          # Handle dispute creation
+          payment_intent_id = dispute.payment_intent
+          order = (Order.find_by(payment_id: payment_intent_id) ||
+                  Order.find_by(transaction_id: payment_intent_id))
+          if order
+            order.update(
+              payment_status: "disputed",
+              dispute_reason: dispute.reason,
+              payment_id: payment_intent_id # Ensure payment_id is set
+            )
+            # You might want to notify administrators about the dispute
+          end
 
-        # Handle checkout completion
-        # If you use Stripe Checkout, this confirms when a checkout process is complete
-        payment_intent_id = session.payment_intent
-        order_id = session.metadata&.order_id
-        restaurant_id = session.metadata&.restaurant_id
-        
-        # Find the order either by metadata or by payment_intent_id
-        order = order_id.present? ? Order.find_by(id: order_id) :
-                Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
-                
-        if order
-          # Find the restaurant
-          restaurant = restaurant_id.present? ? Restaurant.find_by(id: restaurant_id) : order.restaurant
+        when "payment_intent.processing"
+          payment_intent = event["data"]["object"]
+
+          # Handle payment processing
+          order = (Order.find_by(payment_id: payment_intent.id) ||
+                  Order.find_by(transaction_id: payment_intent.id))
+          if order
+            order.update(
+              payment_status: "processing",
+              payment_method: "stripe",
+              payment_id: payment_intent.id # Ensure payment_id is set
+            )
+          end
+
+        when "payment_intent.canceled"
+          payment_intent = event["data"]["object"]
+
+          # Handle payment cancellation
+          order = (Order.find_by(payment_id: payment_intent.id) ||
+                  Order.find_by(transaction_id: payment_intent.id))
+          if order
+            order.update(
+              payment_status: "canceled",
+              payment_method: "stripe",
+              payment_id: payment_intent.id # Ensure payment_id is set
+            )
+          end
+
+        when "charge.dispute.updated"
+          dispute = event["data"]["object"]
+
+          # Handle dispute update
+          payment_intent_id = dispute.payment_intent
+          order = (Order.find_by(payment_id: payment_intent_id) ||
+                  Order.find_by(transaction_id: payment_intent_id))
+          if order
+            # Update payment_id to ensure it's set
+            order.update(payment_id: payment_intent_id) if order.payment_id.blank?
+            # You might want to update dispute details or notify administrators
+          end
+
+        when "charge.dispute.closed"
+          dispute = event["data"]["object"]
+
+          # Handle dispute resolution
+          payment_intent_id = dispute.payment_intent
+          order = (Order.find_by(payment_id: payment_intent_id) ||
+                  Order.find_by(transaction_id: payment_intent_id))
+          if order
+            # Update payment_id to ensure it's set
+            order_updates = { payment_id: payment_intent_id }
+
+            if dispute.status == "won"
+              order_updates[:payment_status] = "paid" # Dispute resolved in your favor
+            elsif dispute.status == "lost"
+              order_updates[:payment_status] = "refunded" # Dispute resolved in customer's favor
+            end
+
+            order.update(order_updates)
+          end
+
+        when "payment_method.attached"
+          payment_method = event["data"]["object"]
+
+          # Handle payment method attachment
+          # This is useful if you implement saved payment methods
+          # You might want to associate this payment method with a customer
+
+        when "checkout.session.completed"
+          session = event["data"]["object"]
+
+          # Handle checkout completion
+          # If you use Stripe Checkout, this confirms when a checkout process is complete
+          payment_intent_id = session.payment_intent
+          order_id = session.metadata&.order_id
+          restaurant_id = session.metadata&.restaurant_id
           
-          # Update the order payment status
-          order.update(
-            payment_status: "paid",
-            payment_method: "stripe",
-            payment_id: payment_intent_id # Ensure payment_id is set
-          )
-          
-          # Find and update any pending payment_link payments
-          pending_payment = order.order_payments.find_by(payment_method: "payment_link", status: "pending")
-          if pending_payment
-            pending_payment.update(
-              status: "paid",
-              transaction_id: payment_intent_id,
-              payment_id: payment_intent_id
+          # Find the order either by metadata or by payment_intent_id
+          order = order_id.present? ? Order.find_by(id: order_id) :
+                  (Order.find_by(payment_id: payment_intent_id) ||
+                  Order.find_by(transaction_id: payment_intent_id))
+                  
+          if order
+            # Find the restaurant
+            restaurant = restaurant_id.present? ? Restaurant.find_by(id: restaurant_id) : order.restaurant
+            
+            # Update the order payment status
+            order.update(
+              payment_status: "paid",
+              payment_method: "stripe",
+              payment_id: payment_intent_id # Ensure payment_id is set
             )
             
-            # Send confirmation notification if restaurant has this setting enabled
-            if restaurant&.admin_settings&.dig("notifications", "payment_confirmation")
-              # Send email confirmation if we have customer email
-              if pending_payment.payment_details&.dig("email").present?
-                OrderMailer.payment_confirmation(
-                  pending_payment.payment_details["email"],
-                  order,
-                  restaurant&.name,
-                  restaurant&.logo_url
-                ).deliver_later
-              end
+            # Find and update any pending payment_link payments
+            pending_payment = order.order_payments.find_by(payment_method: "payment_link", status: "pending")
+            if pending_payment
+              pending_payment.update(
+                status: "paid",
+                transaction_id: payment_intent_id,
+                payment_id: payment_intent_id
+              )
               
-              # Send SMS confirmation if we have customer phone
-              if pending_payment.payment_details&.dig("phone").present?
-                message = "Your payment for order ##{order.id} from #{restaurant&.name} has been received. Thank you!"
-                SendSmsJob.perform_later(pending_payment.payment_details["phone"], message, restaurant&.id)
+              # Send confirmation notification if restaurant has this setting enabled
+              if restaurant&.admin_settings&.dig("notifications", "payment_confirmation")
+                # Send email confirmation if we have customer email
+                if pending_payment.payment_details&.dig("email").present?
+                  OrderMailer.payment_confirmation(
+                    pending_payment.payment_details["email"],
+                    order,
+                    restaurant&.name,
+                    restaurant&.logo_url
+                  ).deliver_later
+                end
+                
+                # Send SMS confirmation if we have customer phone
+                if pending_payment.payment_details&.dig("phone").present?
+                  message = "Your payment for order ##{order.id} from #{restaurant&.name} has been received. Thank you!"
+                  SendSmsJob.perform_later(pending_payment.payment_details["phone"], message, restaurant&.id)
+                end
               end
             end
           end
+
+        when "charge.succeeded"
+          charge = event["data"]["object"]
+
+          # Handle successful charge
+          # This provides additional confirmation of successful charges
+          payment_intent_id = charge.payment_intent
+          order = (Order.find_by(payment_id: payment_intent_id) ||
+                  Order.find_by(transaction_id: payment_intent_id))
+          if order
+            order.update(
+              payment_status: "paid",
+              payment_method: "stripe",
+              payment_id: payment_intent_id # Ensure payment_id is set
+            )
+          end
+
+        when "charge.updated"
+          charge = event["data"]["object"]
+
+          # Handle charge update
+          # This notifies of any updates to charge metadata or description
+
+        when "balance.available"
+          balance = event["data"]["object"]
+
+          # Handle balance available
+          # This is useful for financial reconciliation
+          # You might want to record this for accounting purposes
+        else
+          # Handle unknown event type
+          Rails.logger.info "Unhandled event type: #{event['type']}"
         end
-
-      when "charge.succeeded"
-        charge = event["data"]["object"]
-
-        # Handle successful charge
-        # This provides additional confirmation of successful charges
-        payment_intent_id = charge.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
-        if order
-          order.update(
-            payment_status: "paid",
-            payment_method: "stripe",
-            payment_id: payment_intent_id # Ensure payment_id is set
-          )
-        end
-
-      when "charge.updated"
-        charge = event["data"]["object"]
-
-        # Handle charge update
-        # This notifies of any updates to charge metadata or description
-
-      when "balance.available"
-        balance = event["data"]["object"]
-
-        # Handle balance available
-        # This is useful for financial reconciliation
-        # You might want to record this for accounting purposes
+        
+        render json: { status: "success" }
+      else
+        render json: { error: result[:errors].join(', ') }, status: result[:status] || :bad_request
       end
-
-      render json: { status: "success" }
     rescue JSON::ParserError => e
       render json: { error: "Invalid payload" }, status: :bad_request
     rescue Stripe::SignatureVerificationError => e
@@ -324,8 +329,8 @@ class StripeController < ApplicationController
 
         # Handle successful payment
         # Look up the order by payment_id or transaction_id
-        order = Order.find_by(payment_id: payment_intent.id) ||
-                Order.find_by(transaction_id: payment_intent.id)
+        order = (Order.find_by(payment_id: payment_intent.id) ||
+                Order.find_by(transaction_id: payment_intent.id))
 
         if order
           # Update order payment fields
@@ -355,8 +360,8 @@ class StripeController < ApplicationController
         payment_intent = event["data"]["object"]
 
         # Handle failed payment
-        order = Order.find_by(payment_id: payment_intent.id) ||
-                Order.find_by(transaction_id: payment_intent.id)
+        order = (Order.find_by(payment_id: payment_intent.id) ||
+                Order.find_by(transaction_id: payment_intent.id))
         if order
           order.update(
             payment_status: "failed",
@@ -369,8 +374,8 @@ class StripeController < ApplicationController
         payment_intent = event["data"]["object"]
 
         # Handle payment requiring additional authentication
-        order = Order.find_by(payment_id: payment_intent.id) ||
-                Order.find_by(transaction_id: payment_intent.id)
+        order = (Order.find_by(payment_id: payment_intent.id) ||
+                Order.find_by(transaction_id: payment_intent.id))
         if order
           order.update(
             payment_status: "requires_action",
@@ -385,8 +390,8 @@ class StripeController < ApplicationController
 
         # Handle refund
         payment_intent_id = charge.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
+        order = (Order.find_by(payment_id: payment_intent_id) ||
+                Order.find_by(transaction_id: payment_intent_id))
         if order
           # Check if it's a full or partial refund
           if charge.amount == charge.amount_refunded
@@ -411,8 +416,8 @@ class StripeController < ApplicationController
 
         # Handle dispute creation
         payment_intent_id = dispute.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
+        order = (Order.find_by(payment_id: payment_intent_id) ||
+                Order.find_by(transaction_id: payment_intent_id))
         if order
           order.update(
             payment_status: "disputed",
@@ -426,8 +431,8 @@ class StripeController < ApplicationController
         payment_intent = event["data"]["object"]
 
         # Handle payment processing
-        order = Order.find_by(payment_id: payment_intent.id) ||
-                Order.find_by(transaction_id: payment_intent.id)
+        order = (Order.find_by(payment_id: payment_intent.id) ||
+                Order.find_by(transaction_id: payment_intent.id))
         if order
           order.update(
             payment_status: "processing",
@@ -440,8 +445,8 @@ class StripeController < ApplicationController
         payment_intent = event["data"]["object"]
 
         # Handle payment cancellation
-        order = Order.find_by(payment_id: payment_intent.id) ||
-                Order.find_by(transaction_id: payment_intent.id)
+        order = (Order.find_by(payment_id: payment_intent.id) ||
+                Order.find_by(transaction_id: payment_intent.id))
         if order
           order.update(
             payment_status: "canceled",
@@ -455,8 +460,8 @@ class StripeController < ApplicationController
 
         # Handle dispute update
         payment_intent_id = dispute.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
+        order = (Order.find_by(payment_id: payment_intent_id) ||
+                Order.find_by(transaction_id: payment_intent_id))
         if order
           # Update payment_id to ensure it's set
           order.update(payment_id: payment_intent_id) if order.payment_id.blank?
@@ -468,8 +473,8 @@ class StripeController < ApplicationController
 
         # Handle dispute resolution
         payment_intent_id = dispute.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
+        order = (Order.find_by(payment_id: payment_intent_id) ||
+                Order.find_by(transaction_id: payment_intent_id))
         if order
           # Update payment_id to ensure it's set
           order_updates = { payment_id: payment_intent_id }
@@ -502,8 +507,8 @@ class StripeController < ApplicationController
         
         # Find the order either by metadata or by payment_intent_id
         order = order_id.present? ? Order.find_by(id: order_id) :
-                Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
+                (Order.find_by(payment_id: payment_intent_id) ||
+                Order.find_by(transaction_id: payment_intent_id))
                 
         if order
           # Find the restaurant
@@ -552,8 +557,8 @@ class StripeController < ApplicationController
         # Handle successful charge
         # This provides additional confirmation of successful charges
         payment_intent_id = charge.payment_intent
-        order = Order.find_by(payment_id: payment_intent_id) ||
-                Order.find_by(transaction_id: payment_intent_id)
+        order = (Order.find_by(payment_id: payment_intent_id) ||
+                Order.find_by(transaction_id: payment_intent_id))
         if order
           order.update(
             payment_status: "paid",
