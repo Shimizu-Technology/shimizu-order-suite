@@ -1,54 +1,20 @@
 class StripeController < ApplicationController
-  include RestaurantScope
-
-  # Mark these as public endpoints that don't require restaurant context
-  def public_endpoint?
-    action_name.in?([ "create_intent", "webhook", "global_webhook" ])
-  end
+  include TenantIsolation
+  
+  before_action :ensure_tenant_context, except: [:webhook, :global_webhook]
 
   # Create a payment intent for Stripe
   def create_intent
-    restaurant = find_restaurant
+    result = tenant_stripe_service.create_payment_intent(
+      params[:amount],
+      params[:currency] || "USD"
+    )
 
-    # Return 404 if restaurant not found
-    return render_not_found unless restaurant
-
-    # Get payment settings from restaurant
-    payment_settings = restaurant.admin_settings&.dig("payment_gateway") || {}
-
-    # Check if test mode is enabled
-    test_mode = payment_settings["test_mode"]
-
-    if test_mode
-      # Generate a dummy client secret in test mode
-      client_secret = "pi_test_#{SecureRandom.hex(16)}_secret_#{SecureRandom.hex(16)}"
-      return render json: { client_secret: client_secret }
+    if result[:success]
+      render json: { client_secret: result[:client_secret] }
+    else
+      render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
     end
-
-    # Get the amount from the request
-    amount = params[:amount].to_f
-    currency = params[:currency] || "USD"
-
-    # Stripe deals with amounts in cents
-    amount_in_cents = (amount * 100).to_i
-
-    begin
-      # Create a payment intent with Stripe
-      payment_intent = Stripe::PaymentIntent.create({
-        amount: amount_in_cents,
-        currency: currency.downcase,
-        metadata: {
-          restaurant_id: restaurant.id,
-          test_mode: test_mode
-        },
-        automatic_payment_methods: {
-          enabled: true
-        }
-      })
-
-      render json: {
-        client_secret: payment_intent.client_secret
-      }
     rescue Stripe::StripeError => e
       render json: { error: e.message }, status: :unprocessable_entity
     rescue => e
@@ -98,83 +64,26 @@ class StripeController < ApplicationController
     payload = request.body.read
     signature = request.env["HTTP_STRIPE_SIGNATURE"]
     restaurant_id = params[:restaurant_id]
+    
+    # Find the restaurant for this webhook
+    restaurant = Restaurant.find_by(id: restaurant_id)
+    
+    unless restaurant
+      # If no restaurant is found, use the global webhook handler
+      return global_webhook
+    end
+    
+    # Set the current restaurant context for the tenant service
+    @current_restaurant = restaurant
+    
+    # Process the webhook using the tenant service
+    result = tenant_stripe_service.process_webhook(payload, signature)
 
-    begin
-      event = nil
-
-      # Find the restaurant
-      restaurant = Restaurant.find_by(id: restaurant_id)
-
-      if restaurant
-        # Get the webhook secret from restaurant settings
-        webhook_secret = restaurant.admin_settings&.dig("payment_gateway", "webhook_secret")
-
-        if webhook_secret.present?
-          event = Stripe::Webhook.construct_event(
-            payload, signature, webhook_secret
-          )
-        else
-          # Use default webhook secret from environment or credentials
-          webhook_secret = Rails.configuration.stripe[:webhook_secret]
-          event = Stripe::Webhook.construct_event(
-            payload, signature, webhook_secret
-          )
-        end
+      if result[:success]
+        render json: { received: true }, status: :ok
       else
-        # Use default webhook secret from environment or credentials
-        webhook_secret = Rails.configuration.stripe[:webhook_secret]
-        event = Stripe::Webhook.construct_event(
-          payload, signature, webhook_secret
-        )
+        render json: { error: result[:errors].join(', ') }, status: result[:status] || :bad_request
       end
-
-      # Handle the event
-      case event["type"]
-      when "payment_intent.succeeded"
-        payment_intent = event["data"]["object"]
-
-        # Handle successful payment
-        # Look up the order by payment_id or transaction_id
-        order = Order.find_by(payment_id: payment_intent.id) ||
-                Order.find_by(transaction_id: payment_intent.id)
-
-        if order
-          # Update order payment fields
-          order.update(
-            payment_status: "paid",
-            payment_method: "stripe",
-            payment_id: payment_intent.id, # Ensure payment_id is set
-            payment_amount: payment_intent.amount / 100.0 # Convert from cents to dollars
-          )
-
-          # Create an OrderPayment record if one doesn't exist
-          unless order.order_payments.exists?(payment_type: "initial")
-            payment = order.order_payments.create(
-              payment_type: "initial",
-              amount: payment_intent.amount / 100.0, # Convert from cents to dollars
-              payment_method: "stripe",
-              status: "paid",
-              transaction_id: payment_intent.id,
-              payment_id: payment_intent.id,
-              description: "Initial payment"
-            )
-            Rails.logger.info("Created initial payment record for order #{order.id} from webhook: #{payment.inspect}")
-          end
-        end
-
-      when "payment_intent.payment_failed"
-        payment_intent = event["data"]["object"]
-
-        # Handle failed payment
-        order = Order.find_by(payment_id: payment_intent.id) ||
-                Order.find_by(transaction_id: payment_intent.id)
-        if order
-          order.update(
-            payment_status: "failed",
-            payment_method: "stripe",
-            payment_id: payment_intent.id # Ensure payment_id is set
-          )
-        end
 
       when "payment_intent.requires_action"
         payment_intent = event["data"]["object"]
@@ -692,5 +601,19 @@ class StripeController < ApplicationController
 
   def render_not_found
     render json: { error: "Restaurant not found" }, status: :not_found
+  end
+  
+  def tenant_stripe_service
+    @tenant_stripe_service ||= begin
+      service = TenantStripeService.new(current_restaurant)
+      service.current_user = current_user
+      service
+    end
+  end
+  
+  def ensure_tenant_context
+    unless current_restaurant.present?
+      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+    end
   end
 end

@@ -21,7 +21,21 @@ module ShimizuOrderSuite
     # API-only mode
     config.api_only = true
 
-    # ADD THIS => use Sidekiq for background jobs
+    # Use Sidekiq for background jobs
     config.active_job.queue_adapter = :sidekiq
+    
+    # Preload TenantContext concern for multi-tenant support
+    config.to_prepare do
+      require_dependency Rails.root.join('app', 'models', 'concerns', 'tenant_context.rb')
+    end
+    
+    # Add TenantValidationMiddleware for multi-tenant security
+    config.middleware.use TenantValidationMiddleware, {
+      rate_limit_window: ENV.fetch("TENANT_RATE_LIMIT_WINDOW", 60).to_i,
+      rate_limit_max_requests: ENV.fetch("TENANT_RATE_LIMIT_MAX_REQUESTS", 100).to_i
+    } if defined?(TenantValidationMiddleware)
+    
+    # Add TenantMetricsMiddleware for tenant analytics and monitoring
+    config.middleware.use TenantMetricsMiddleware if defined?(TenantMetricsMiddleware)
   end
 end

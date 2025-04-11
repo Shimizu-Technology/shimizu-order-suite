@@ -1,34 +1,36 @@
 # app/controllers/health_controller.rb
 class HealthController < ApplicationController
-  # No authentication required for health checks
-  # (The application doesn't use before_action :authenticate_request)
+  include TenantIsolation
+  
+  # Override global_access_permitted to allow access without tenant context
+  # Health checks are truly global endpoints that don't require tenant context
+  def global_access_permitted?
+    true
+  end
   
   def index
-    render json: { status: 'ok', timestamp: Time.now.iso8601 }
+    result = health_service.health_status
+    
+    if result[:success]
+      render json: { status: result[:status], timestamp: result[:timestamp] }
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :internal_server_error
+    end
   end
   
   def sidekiq_stats
-    stats = {
-      processed: Sidekiq::Stats.new.processed,
-      failed: Sidekiq::Stats.new.failed,
-      queues: Sidekiq::Stats.new.queues,
-      scheduled_size: Sidekiq::Stats.new.scheduled_size,
-      retry_size: Sidekiq::Stats.new.retry_size,
-      workers: Sidekiq::Workers.new.size,
-      process_count: Sidekiq::ProcessSet.new.size,
-      redis_memory_usage: redis_memory_usage
-    }
+    result = health_service.sidekiq_stats
     
-    render json: stats
+    if result[:success]
+      render json: result[:stats]
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :internal_server_error
+    end
   end
   
   private
   
-  def redis_memory_usage
-    begin
-      Sidekiq.redis { |conn| conn.info('memory')['used_memory_human'] }
-    rescue => e
-      "Error fetching Redis memory: #{e.message}"
-    end
+  def health_service
+    @health_service ||= HealthService.new(current_restaurant, analytics)
   end
 end

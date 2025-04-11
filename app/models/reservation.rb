@@ -1,11 +1,9 @@
 class Reservation < ApplicationRecord
-  # Default scope to current restaurant
-  default_scope { with_restaurant_scope }
+  include TenantScoped
+  
   # Force ActiveRecord to treat them as real columns:
   attribute :seat_preferences, :json, default: []
   attribute :duration_minutes, :integer, default: 60
-
-  belongs_to :restaurant
   has_many :seat_allocations, dependent: :nullify
   has_many :seats, through: :seat_allocations
 

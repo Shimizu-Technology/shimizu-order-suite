@@ -1,7 +1,12 @@
 # db/seeds.rb
+# Main seed file for the Order Suite application
+# This file orchestrates loading all restaurant-specific seed files
 
-require 'active_record'
+puts "== Seeding the database =="
 
+# Optional database cleaning - uncomment if needed for development
+# WARNING: This will delete ALL data in the database
+=begin
 puts "== (Optional) Cleaning references =="
 begin
   # TRUNCATE all the relevant tables we want to clear, then RESTART IDENTITY to reset PKs
@@ -34,6 +39,22 @@ end
 
 # Now reload column info for any models we truncated
 Reservation.reset_column_information
+
+# ------------------------------------------------------------------------------
+# Load all restaurant-specific seed files from db/seeds directory
+# ------------------------------------------------------------------------------
+puts "== Loading restaurant-specific seed files =="
+
+# Get all .rb files in the db/seeds directory
+seed_files = Dir[Rails.root.join('db', 'seeds', '*.rb')]
+
+# Load each seed file
+seed_files.each do |seed_file|
+  puts "Loading seed file: #{File.basename(seed_file)}"
+  load seed_file
+end
+
+puts "== Finished loading restaurant-specific seed files =="
 WaitlistEntry.reset_column_information
 User.reset_column_information
 Restaurant.reset_column_information
@@ -46,15 +67,28 @@ OperatingHour.reset_column_information
 OptionGroup.reset_column_information
 Option.reset_column_information
 Order.reset_column_information
-
-puts "== Seeding the database =="
+=end
 
 # ------------------------------------------------------------------------------
-# Time zone
+# Load all restaurant-specific seed files
 # ------------------------------------------------------------------------------
+puts "== Loading restaurant-specific seed files =="
+
+# Set default time zone
 Time.zone = "Pacific/Guam"
 
+# Load all seed files from the db/seeds directory
+Dir[File.join(Rails.root, 'db', 'seeds', '*.rb')].sort.each do |seed|
+  puts "Loading seed file: #{File.basename(seed)}"
+  load seed
+end
+
+puts "== Seeding completed =="
+
 # ------------------------------------------------------------------------------
+# Legacy seed data - now moved to db/seeds/hafaloha.rb
+# ------------------------------------------------------------------------------
+=begin
 # 1) RESTAURANT
 # ------------------------------------------------------------------------------
 restaurant = Restaurant.find_or_create_by!(name: "Hafaloha") do |r|
@@ -905,3 +939,4 @@ sample_orders_data.each do |order_data|
 end
 
 puts "== Seeding complete! =="
+=end

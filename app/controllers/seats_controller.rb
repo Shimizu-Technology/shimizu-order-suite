@@ -1,61 +1,67 @@
 # app/controllers/seats_controller.rb
 class SeatsController < ApplicationController
+  include TenantIsolation
+  
   before_action :authorize_request
+  before_action :ensure_tenant_context
 
   def index
-    if params[:seat_section_id]
-      seats = Seat.where(seat_section_id: params[:seat_section_id])
-      render json: seats
+    result = seat_service.list_seats(params[:seat_section_id])
+    
+    if result[:success]
+      render json: result[:seats]
     else
-      render json: Seat.all
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :internal_server_error
     end
   end
 
   def show
-    seat = Seat.find_by(id: params[:id])
-    return render json: { error: "Seat not found" }, status: :not_found unless seat
-
-    render json: seat
+    result = seat_service.find_seat(params[:id])
+    
+    if result[:success]
+      render json: result[:seat]
+    else
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :not_found
+    end
   end
 
   def create
     seat_params = params.require(:seat).permit(
       :seat_section_id, :label, :position_x, :position_y, :capacity
-    )
-    seat = Seat.new(seat_params)
-
-    if seat.save
-      render json: seat, status: :created
+    ).to_h
+    
+    result = seat_service.create_seat(seat_params)
+    
+    if result[:success]
+      render json: result[:seat], status: :created
     else
-      Rails.logger.error("Failed to create seat: #{seat.errors.full_messages}")
-      render json: { errors: seat.errors.full_messages }, status: :unprocessable_entity
+      Rails.logger.error("Failed to create seat: #{result[:errors].join(", ")}")
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
 
   def update
-    seat = Seat.find_by(id: params[:id])
-    return render json: { error: "Seat not found" }, status: :not_found unless seat
-
     update_params = params.require(:seat).permit(
-      :label, :position_x, :position_y, :capacity
-    )
-    if seat.update(update_params)
-      render json: seat
+      :label, :position_x, :position_y, :capacity, :seat_section_id
+    ).to_h
+    
+    result = seat_service.update_seat(params[:id], update_params)
+    
+    if result[:success]
+      render json: result[:seat]
     else
-      render json: { errors: seat.errors.full_messages }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
 
   def destroy
-    seat = Seat.find_by(id: params[:id])
-    return head :no_content unless seat
-
-    ActiveRecord::Base.transaction do
-      SeatAllocation.where(seat_id: seat.id).destroy_all
-      seat.destroy
+    result = seat_service.delete_seat(params[:id])
+    
+    if result[:success]
+      head :no_content
+    else
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
     end
-
-    head :no_content
   end
 
   def bulk_update
@@ -63,33 +69,76 @@ class SeatsController < ApplicationController
     seat_params_array = params.require(:seats)
     updated_records = []
     errors = []
-
+    
     ActiveRecord::Base.transaction do
       seat_params_array.each do |seat_data|
-        safe_data = seat_data.permit(:id, :label, :position_x, :position_y, :capacity)
-        seat = Seat.find_by(id: safe_data[:id])
-        unless seat
-          errors << "Seat ID=#{safe_data[:id]} not found"
+        safe_data = seat_data.permit(:id, :label, :position_x, :position_y, :capacity).to_h
+        seat_id = safe_data.delete(:id)
+        
+        if seat_id.blank?
+          errors << "Seat ID is required"
           next
         end
-
-        # remove :id from the actual .update
-        unless seat.update(safe_data.except(:id))
-          seat.errors.full_messages.each do |msg|
-            errors << "Seat ID=#{seat.id} => #{msg}"
-          end
+        
+        # Update the seat using the service
+        result = seat_service.update_seat(seat_id, safe_data)
+        
+        unless result[:success]
+          errors << "Seat ID=#{seat_id} => #{result[:errors].join(", ")}"
         else
-          updated_records << seat
+          updated_records << result[:seat]
         end
       end
-
+      
       raise ActiveRecord::Rollback if errors.any?
     end
-
+    
     if errors.any?
       render json: { errors: errors }, status: :unprocessable_entity
     else
       render json: updated_records, status: :ok
+    end
+  end
+  
+  # POST /seats/:id/allocate
+  def allocate
+    allocation_params = params.require(:allocation).permit(
+      :reservation_id, :waitlist_entry_id
+    ).to_h
+    
+    result = seat_service.allocate_seat(params[:id], allocation_params)
+    
+    if result[:success]
+      render json: result[:allocation], status: :created
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
+    end
+  end
+  
+  # POST /seats/:id/release
+  def release
+    result = seat_service.release_seat(params[:id])
+    
+    if result[:success]
+      head :no_content
+    else
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
+    end
+  end
+  
+  private
+  
+  def seat_service
+    @seat_service ||= begin
+      service = SeatService.new(current_restaurant)
+      service.current_user = current_user
+      service
+    end
+  end
+  
+  def ensure_tenant_context
+    unless current_restaurant.present?
+      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
     end
   end
 end

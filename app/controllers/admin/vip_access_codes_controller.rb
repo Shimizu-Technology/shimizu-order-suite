@@ -1,63 +1,36 @@
 class Admin::VipAccessCodesController < ApplicationController
+  include TenantIsolation
+  
   before_action :authorize_request
   before_action :require_admin
+  before_action :ensure_tenant_context
 
   def index
-    @restaurant = current_user.restaurant
-
-    # Filter by special event if provided
-    if params[:special_event_id].present?
-      @special_event = @restaurant.special_events.find_by(id: params[:special_event_id])
-      @vip_codes = @special_event ? @special_event.vip_access_codes : []
-    else
-      # Otherwise, get all codes for the restaurant
-      @vip_codes = @restaurant.vip_access_codes
-    end
-
-    render json: @vip_codes
+    # Use the VipAccessCodesService to get VIP codes with tenant isolation
+    vip_codes = vip_access_codes_service.list_codes(params)
+    render json: vip_codes
   end
 
   def create
-    @restaurant = current_user.restaurant
-
-    options = {
-      name: params[:name],
-      prefix: params[:prefix],
-      max_uses: params[:max_uses].present? ? params[:max_uses].to_i : nil
-    }
-
-    # Add special event reference if needed
-    if params[:special_event_id].present?
-      @special_event = @restaurant.special_events.find_by(id: params[:special_event_id])
-      options[:special_event_id] = @special_event.id if @special_event
-    end
-
-    if params[:batch]
-      # Generate multiple individual codes
-      count = params[:count].to_i || 1
-      @vip_codes = VipCodeGenerator.generate_codes(@restaurant, count, options)
-      render json: @vip_codes
-    else
-      # Generate a single group code
-      @vip_code = VipCodeGenerator.generate_group_code(@restaurant, options)
-      render json: @vip_code
-    end
+    # Use the VipAccessCodesService to create VIP codes with tenant isolation
+    result = vip_access_codes_service.create_codes(params)
+    render json: result
   end
 
   def update
-    @vip_code = current_user.restaurant.vip_access_codes.find(params[:id])
-
-    if @vip_code.update(vip_code_params)
-      render json: @vip_code
+    # Use the VipAccessCodesService to update a VIP code with tenant isolation
+    result = vip_access_codes_service.update_code(params[:id], vip_code_params)
+    
+    if result[:success]
+      render json: result[:vip_code]
     else
-      render json: { errors: @vip_code.errors.full_messages }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
 
   def destroy
-    @vip_code = current_user.restaurant.vip_access_codes.find(params[:id])
-    @vip_code.update(is_active: false)
-
+    # Use the VipAccessCodesService to deactivate a VIP code with tenant isolation
+    vip_access_codes_service.deactivate_code(params[:id])
     head :no_content
   end
 
@@ -70,6 +43,16 @@ class Admin::VipAccessCodesController < ApplicationController
   def require_admin
     unless current_user&.role.in?(%w[admin super_admin])
       render json: { error: "Forbidden" }, status: :forbidden
+    end
+  end
+  
+  def vip_access_codes_service
+    @vip_access_codes_service ||= VipAccessCodesService.new(current_restaurant)
+  end
+  
+  def ensure_tenant_context
+    unless current_restaurant.present?
+      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
     end
   end
 end

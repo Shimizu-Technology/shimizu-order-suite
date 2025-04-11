@@ -2,7 +2,8 @@
 
 class MenuItem < ApplicationRecord
   include Broadcastable
-  apply_default_scope
+  # We don't include TenantScoped directly because MenuItem has an indirect
+  # relationship to Restaurant through Menu
   
   # Define which attributes should trigger broadcasts
   broadcasts_on :name, :price, :description, :stock_quantity, :damaged_quantity, 
@@ -13,6 +14,9 @@ class MenuItem < ApplicationRecord
   has_many :menu_item_stock_audits, dependent: :destroy
   # Define path to restaurant through associations for tenant isolation
   has_one :restaurant, through: :menu
+  
+  # Apply default scope for tenant isolation
+  default_scope { with_restaurant_scope }
 
   # Callback to reset inventory fields when tracking is disabled
   before_save :reset_inventory_fields_if_tracking_disabled
@@ -33,8 +37,8 @@ class MenuItem < ApplicationRecord
 
   # Override with_restaurant_scope for indirect restaurant association
   def self.with_restaurant_scope
-    if current_restaurant
-      joins(:menu).where(menus: { restaurant_id: current_restaurant.id })
+    if ActiveRecord::Base.current_restaurant
+      joins(:menu).where(menus: { restaurant_id: ActiveRecord::Base.current_restaurant.id })
     else
       all
     end

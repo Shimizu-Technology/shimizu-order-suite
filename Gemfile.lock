@@ -208,6 +208,8 @@ GEM
     pg (1.5.9)
     posthog-ruby (2.7.2)
       concurrent-ruby (~> 1)
+    prometheus-client (4.2.4)
+      base64
     psych (5.2.2)
       date
       stringio
@@ -380,6 +382,7 @@ DEPENDENCIES
   paypal-checkout-sdk
   pg (~> 1.1)
   posthog-ruby
+  prometheus-client
   puma (>= 5.0)
   pundit
   rack-cors

@@ -1,5 +1,6 @@
+# app/controllers/notifications_controller.rb
 class NotificationsController < ApplicationController
-  include RestaurantScope
+  include TenantIsolation
 
   before_action :authorize_request
   before_action :require_admin_or_super_admin
@@ -10,46 +11,39 @@ class NotificationsController < ApplicationController
   #   - type: Filter by notification type (optional)
   #   - hours: Only get notifications from the last X hours (default: 24)
   def unacknowledged
-    hours = params[:hours].present? ? params[:hours].to_i : 24
-    since = hours.hours.ago
-
-    query = Notification.unacknowledged.recent_first.where("created_at > ?", since)
-
-    # Filter by type if specified
-    if params[:type].present?
-      query = query.by_type(params[:type])
+    result = notification_service.unacknowledged_notifications(params, current_user)
+    
+    if result[:success]
+      # Ensure we're returning an array
+      notifications_array = result[:notifications].to_a
+      
+      # Add debug logging
+      Rails.logger.debug("Notifications response - " + {
+        count: notifications_array.length,
+        type: params[:type],
+        hours: params[:hours].present? ? params[:hours].to_i : 24,
+        is_array: notifications_array.is_a?(Array),
+        first_notification: notifications_array.first&.as_json,
+        response_type: 'array'
+      }.to_json)
+      
+      # Explicitly render as array
+      render json: { notifications: notifications_array }
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :internal_server_error
     end
-
-    @notifications = query.all
-
-    # Ensure we're returning an array
-    notifications_array = @notifications.to_a
-
-    # Add debug logging
-    Rails.logger.debug("Notifications response - " + {
-      count: @notifications.length,
-      type: params[:type],
-      hours: hours,
-      is_array: notifications_array.is_a?(Array),
-      first_notification: notifications_array.first&.as_json,
-      response_type: 'array'
-    }.to_json)
-
-    # Explicitly render as array
-    render json: { notifications: notifications_array }
   end
 
   # POST /notifications/:id/acknowledge
   # Acknowledges a single notification
   def acknowledge
-    @notification = Notification.find(params[:id])
-
-    # Make sure notification belongs to the user's restaurant
-    authorize_restaurant!(@notification.restaurant_id)
-
-    @notification.acknowledge!(current_user)
-
-    head :no_content
+    result = notification_service.acknowledge_notification(params[:id], current_user)
+    
+    if result[:success]
+      head :no_content
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
+    end
   end
 
   # POST /notifications/:id/take_action
@@ -58,43 +52,17 @@ class NotificationsController < ApplicationController
   #   - action_type: Type of action to take (e.g., 'restock')
   #   - quantity: For restock actions, the quantity to add
   def take_action
-    @notification = Notification.find(params[:id])
-
-    # Make sure notification belongs to the user's restaurant
-    authorize_restaurant!(@notification.restaurant_id)
-
-    if @notification.notification_type == "low_stock" && params[:action_type] == "restock"
-      # For low stock notifications, handle restock action
-      if @notification.resource_type == "MerchandiseVariant"
-        variant_id = @notification.resource_id
-        variant = MerchandiseVariant.find(variant_id)
-
-        quantity = params[:quantity].to_i
-        if quantity > 0
-          # Add stock and record the reason
-          variant.add_stock!(
-            quantity,
-            "Restocked from notification ##{@notification.id}",
-            current_user
-          )
-
-          # Acknowledge the notification
-          @notification.acknowledge!(current_user)
-
-          render json: {
-            success: true,
-            message: "Successfully added #{quantity} items to inventory",
-            notification: @notification,
-            variant: variant.as_json(include_stock_history: true)
-          }
-        else
-          render json: { error: "Invalid quantity. Must be greater than 0." }, status: :unprocessable_entity
-        end
-      else
-        render json: { error: "Unsupported resource type for restock action" }, status: :unprocessable_entity
-      end
+    result = notification_service.take_action_on_notification(params[:id], params, current_user)
+    
+    if result[:success]
+      render json: {
+        success: true,
+        message: result[:message],
+        notification: result[:notification],
+        variant: result[:variant]
+      }
     else
-      render json: { error: "Unsupported notification type or action" }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
 
@@ -103,35 +71,16 @@ class NotificationsController < ApplicationController
   # Params:
   #   - type: Only acknowledge notifications of this type (optional)
   def acknowledge_all
-    query = Notification.unacknowledged
-
-    # Filter by type if specified
-    if params[:type].present?
-      query = query.by_type(params[:type])
+    result = notification_service.acknowledge_all_notifications(params, current_user)
+    
+    if result[:success]
+      render json: { acknowledged_count: result[:acknowledged_count] }
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
-
-    # Apply restaurant scope
-    query = query.where(restaurant_id: current_user.restaurant_id)
-
-    count = 0
-
-    # Use transaction for bulk acknowledgment
-    Notification.transaction do
-      query.each do |notification|
-        notification.acknowledge!(current_user)
-        count += 1
-      end
-    end
-
-    render json: { acknowledged_count: count }
   end
 
   private
-
-  # Define this endpoint as public for restaurant scope
-  def public_endpoint?
-    true
-  end
 
   def require_admin_or_super_admin
     unless current_user && current_user.role.in?(%w[admin super_admin staff])
@@ -139,11 +88,7 @@ class NotificationsController < ApplicationController
     end
   end
 
-  def authorize_restaurant!(restaurant_id)
-    unless current_user.super_admin? || current_user.restaurant_id == restaurant_id
-      render json: { error: "Not authorized for this restaurant" }, status: :forbidden
-      return false
-    end
-    true
+  def notification_service
+    @notification_service ||= NotificationService.new(current_restaurant, analytics)
   end
 end

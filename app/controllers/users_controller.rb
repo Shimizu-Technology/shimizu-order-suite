@@ -1,63 +1,63 @@
 # app/controllers/users_controller.rb
 class UsersController < ApplicationController
+  include TenantIsolation
+  
   before_action :authorize_request, only: [ :show_profile, :update_profile, :verify_phone, :resend_code, :index, :show ]
   before_action :require_admin_or_staff, only: [ :index, :show ]
-
-  # Mark create, verify_phone, resend_code, show_profile, update_profile, index, and show as public endpoints that don't require restaurant context
-  def public_endpoint?
-    action_name.in?([ "create", "verify_phone", "resend_code", "show_profile", "update_profile", "index", "show" ])
-  end
+  before_action :ensure_tenant_context, except: [:create]
 
   # POST /signup
   def create
-    user = User.new(user_params)
-
+    # Prepare user parameters
+    create_params = user_params
+    
     # Default role to 'customer' if not provided
-    user.role = "customer" if user.role.blank?
-
+    create_params[:role] = "customer" if create_params[:role].blank?
+    
     # Assign a fallback restaurant if none specified
-    unless user.restaurant_id
+    unless create_params[:restaurant_id]
       default_rest = Restaurant.find_by(name: "Hafaloha")
-      user.restaurant_id = default_rest.id if default_rest
+      create_params[:restaurant_id] = default_rest.id if default_rest
     end
-
+    
     # We'll set phone_verified = false initially
-    user.phone_verified = false
-
-    # If user provided a phone, generate a verification code & send an SMS
-    if user.phone.present?
+    create_params[:phone_verified] = false
+    
+    # If user provided a phone, generate a verification code
+    if create_params[:phone].present?
       code = generate_code
-      user.verification_code = code
-      user.verification_code_sent_at = Time.current
+      create_params[:verification_code] = code
+      create_params[:verification_code_sent_at] = Time.current
     end
-
-    if user.save
+    
+    # Set the current_restaurant for the service
+    @current_restaurant = Restaurant.find_by(id: create_params[:restaurant_id])
+    
+    # Create the user using the service
+    result = user_service.create_user(create_params)
+    
+    if result[:success]
+      user = result[:user]
+      
       # If phone present => send the SMS code
       if user.phone.present?
         restaurant = Restaurant.find(user.restaurant_id)
         restaurant_name = restaurant.name
         # Use custom SMS sender ID if set, otherwise use restaurant name
         sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
-
+        
         SendSmsJob.perform_later(
           to:   user.phone,
           body: "Your verification code is #{user.verification_code}",
           from: sms_sender
         )
       end
-
-      # Issue JWT with user_id, restaurant_id, role, and 24-hour expiration
-      token_payload = {
-        user_id: user.id,
-        restaurant_id: user.restaurant_id,
-        role: user.role,
-        exp: 24.hours.from_now.to_i
-      }
-
-      token = JWT.encode(token_payload, Rails.application.secret_key_base)
+      
+      # Generate JWT token using TokenService
+      token = TokenService.generate_token(user)
       render json: { jwt: token, user: user }, status: :created
     else
-      render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
 
@@ -147,70 +147,57 @@ class UsersController < ApplicationController
   # GET /users
   # List users with optional filtering
   def index
-    # Start with users from the current restaurant if available
-    @users = if current_user&.restaurant_id
-               User.where(restaurant_id: current_user.restaurant_id)
-             else
-               User.all
-             end
-
+    # Prepare filters
+    filters = {}
+    
     # Filter by role if specified
-    if params[:role].present?
-      @users = @users.where(role: params[:role])
-    end
+    filters[:role] = params[:role] if params[:role].present?
     
     # Filter by multiple roles if specified
     if params[:roles].present?
       # Convert to array if it's a string
-      roles = params[:roles].is_a?(Array) ? params[:roles] : [params[:roles]]
-      @users = @users.where(role: roles)
+      filters[:role] = params[:roles].is_a?(Array) ? params[:roles] : [params[:roles]]
     end
-
-    # Exclude specific roles if specified
-    if params[:exclude_role].present?
-      @users = @users.where.not(role: params[:exclude_role])
-    end
-
-    # Filter for users not already assigned to staff members
-    if params[:available_for_staff].present? && params[:available_for_staff] == 'true'
-      # Get IDs of users already assigned to staff members
-      assigned_user_ids = StaffMember.where.not(user_id: nil).pluck(:user_id)
-      @users = @users.where.not(id: assigned_user_ids)
-    end
-
-    # Include a specific user ID even if it's already assigned
-    if params[:include_user_id].present?
-      included_user = User.find_by(id: params[:include_user_id])
-      @users = @users.or(User.where(id: included_user.id)) if included_user
-    end
-
-    # Pagination
-    page = (params[:page] || 1).to_i
-    per_page = (params[:per_page] || 20).to_i
-    total_count = @users.count
-
-    @users = @users.order(:first_name, :last_name).offset((page - 1) * per_page).limit(per_page)
-
-    # For the staff filter in OrderManager, we need to return just the array of users
-    if params[:roles].present?
-      render json: @users
+    
+    # Add search filter if specified
+    filters[:search] = params[:search] if params[:search].present?
+    
+    # Add pagination parameters
+    filters[:page] = params[:page] || 1
+    filters[:per_page] = params[:per_page] || 20
+    
+    # Get users from service
+    result = user_service.list_users(filters)
+    
+    if result[:success]
+      # For the staff filter in OrderManager, we need to return just the array of users
+      if params[:roles].present?
+        render json: result[:users]
+      else
+        # For other cases, return the paginated response with metadata
+        render json: {
+          users: result[:users],
+          total_count: result[:meta][:total_count],
+          page: result[:meta][:page],
+          per_page: result[:meta][:per_page],
+          total_pages: result[:meta][:total_pages]
+        }
+      end
     else
-      # For other cases, return the paginated response with metadata
-      render json: {
-        users: @users,
-        total_count: total_count,
-        page: page,
-        per_page: per_page,
-        total_pages: (total_count.to_f / per_page).ceil
-      }
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :internal_server_error
     end
   end
 
   # GET /users/:id
   # Get a specific user
   def show
-    user = User.find(params[:id])
-    render json: user
+    result = user_service.find_user(params[:id])
+    
+    if result[:success]
+      render json: result[:user]
+    else
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :not_found
+    end
   end
 
   private
@@ -233,7 +220,8 @@ class UsersController < ApplicationController
       :phone,
       :email,
       :password,
-      :password_confirmation
+      :password_confirmation,
+      :restaurant_id
     )
 
     # For security, ensure role is always 'customer' for user signup
@@ -245,5 +233,21 @@ class UsersController < ApplicationController
   def generate_code
     # 6-digit random code
     rand(100000..999999).to_s
+  end
+  
+  # Get the user service instance
+  def user_service
+    @user_service ||= begin
+      service = UserService.new(current_restaurant || @current_restaurant)
+      service.current_user = current_user
+      service
+    end
+  end
+  
+  # Ensure we have a tenant context
+  def ensure_tenant_context
+    unless current_restaurant.present? || @current_restaurant.present?
+      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+    end
   end
 end

@@ -1,105 +1,84 @@
 class MerchandiseCollectionsController < ApplicationController
-  before_action :set_merchandise_collection, only: [ :show, :update, :destroy ]
-  before_action :authorize_request, only: [ :set_active ]
-  before_action :optional_authorize, only: [ :index, :show, :update, :create, :destroy, :set_active ]
-
+  include TenantIsolation
+  
+  before_action :authorize_request, only: [:set_active]
+  
   # GET /merchandise_collections
   def index
-    if params[:restaurant_id].present?
-      @collections = MerchandiseCollection.where(restaurant_id: params[:restaurant_id]).order(created_at: :asc)
+    result = merchandise_collection_service.list_collections(params)
+    
+    if result[:success]
+      render json: result[:collections]
     else
-      @collections = MerchandiseCollection.all.order(created_at: :asc)
+      render json: { errors: result[:errors] }, status: result[:status] || :internal_server_error
     end
-
-    render json: @collections
   end
-
+  
   # GET /merchandise_collections/1
   def show
-    render json: @merchandise_collection, include_items: true
+    result = merchandise_collection_service.get_collection(params[:id])
+    
+    if result[:success]
+      render json: result[:collection], include_items: true
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :not_found
+    end
   end
-
+  
   # POST /merchandise_collections
   def create
-    @merchandise_collection = MerchandiseCollection.new(merchandise_collection_params)
-
-    if @merchandise_collection.save
-      render json: @merchandise_collection, status: :created
+    result = merchandise_collection_service.create_collection(merchandise_collection_params, current_user)
+    
+    if result[:success]
+      render json: result[:collection], status: :created
     else
-      render json: { errors: @merchandise_collection.errors }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
-
+  
   # PATCH/PUT /merchandise_collections/1
   def update
-    if @merchandise_collection.update(merchandise_collection_params)
-      render json: @merchandise_collection
+    result = merchandise_collection_service.update_collection(params[:id], merchandise_collection_params, current_user)
+    
+    if result[:success]
+      render json: result[:collection]
     else
-      render json: { errors: @merchandise_collection.errors }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
-
+  
   # DELETE /merchandise_collections/1
   def destroy
-    # Check if this is the active collection
-    if @merchandise_collection.restaurant&.current_merchandise_collection_id == @merchandise_collection.id
-      render json: { error: "Cannot delete the active collection. Please set another collection as active first." }, status: :unprocessable_entity
-      return
+    result = merchandise_collection_service.delete_collection(params[:id], current_user)
+    
+    if result[:success]
+      head :no_content
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
-
-    @merchandise_collection.destroy
-    head :no_content
   end
-
+  
   # POST /merchandise_collections/:id/set_active
   def set_active
-    return render json: { error: "Forbidden" }, status: :forbidden unless is_admin?
-
-    collection = MerchandiseCollection.find(params[:id])
-    restaurant = current_user.restaurant
-
-    if restaurant.nil?
-      return render json: { error: "User is not associated with a restaurant" }, status: :unprocessable_entity
+    result = merchandise_collection_service.set_active_collection(params[:id], current_user)
+    
+    if result[:success]
+      render json: {
+        message: result[:message],
+        current_merchandise_collection_id: result[:current_merchandise_collection_id]
+      }
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
-
-    if collection.restaurant_id != restaurant.id
-      return render json: { error: "Collection does not belong to this restaurant" }, status: :unprocessable_entity
-    end
-
-    # Start a transaction to ensure all updates happen together
-    ActiveRecord::Base.transaction do
-      # Set all collections for this restaurant to inactive
-      restaurant.merchandise_collections.update_all(active: false)
-
-      # Set the selected collection to active
-      collection.update!(active: true)
-
-      # Update the restaurant's current_merchandise_collection_id
-      restaurant.update!(current_merchandise_collection_id: collection.id)
-    end
-
-    render json: {
-      message: "Collection set as active successfully",
-      current_merchandise_collection_id: restaurant.current_merchandise_collection_id
-    }
   end
-
+  
   private
-
-  def set_merchandise_collection
-    @merchandise_collection = MerchandiseCollection.find(params[:id])
-  end
-
+  
   def merchandise_collection_params
-    params.require(:merchandise_collection).permit(:name, :description, :active, :restaurant_id)
+    params.require(:merchandise_collection).permit(:name, :description, :active)
   end
-
-  def is_admin?
-    current_user && current_user.role.in?(%w[admin super_admin])
-  end
-
-  # Override the public_endpoint? method from RestaurantScope concern
-  def public_endpoint?
-    action_name.in?([ "index", "set_active", "update", "show", "create", "destroy" ])
+  
+  def merchandise_collection_service
+    @merchandise_collection_service ||= MerchandiseCollectionService.new(current_restaurant, analytics)
   end
 end

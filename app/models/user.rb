@@ -4,7 +4,28 @@ require "securerandom"
 require "digest"
 
 class User < ApplicationRecord
+  # The User model is special in multi-tenant context
+  # Super admin users might not be associated with a specific restaurant
+  # So we keep the restaurant association optional but add validation in a custom method
   belongs_to :restaurant, optional: true
+  
+  # Custom validation for restaurant_id based on role
+  validate :validate_restaurant_association
+  
+  # Override default scope to handle super_admin users without restaurant context
+  default_scope { with_restaurant_scope }
+  
+  # Method to scope by current restaurant if applicable, with special handling for super_admin
+  def self.with_restaurant_scope
+    if ApplicationRecord.current_restaurant && column_names.include?("restaurant_id")
+      # For queries, we want to include both users from the current restaurant
+      # and super_admin users that might not have a restaurant_id
+      where("restaurant_id = ? OR (role = 'super_admin' AND restaurant_id IS NULL)", 
+            ApplicationRecord.current_restaurant.id)
+    else
+      all
+    end
+  end
 
   # Add associations for order acknowledgments
   has_many :order_acknowledgments, dependent: :destroy
@@ -100,5 +121,14 @@ class User < ApplicationRecord
 
   def downcase_email
     self.email = email.downcase
+  end
+  
+  # Validate restaurant association based on role
+  def validate_restaurant_association
+    # Super admin users can exist without a restaurant association
+    # All other user types must be associated with a restaurant
+    if role != 'super_admin' && restaurant_id.blank?
+      errors.add(:restaurant_id, "must be present for non-super_admin users")
+    end
   end
 end

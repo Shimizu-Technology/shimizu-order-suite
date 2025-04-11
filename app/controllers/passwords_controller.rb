@@ -1,63 +1,53 @@
 # app/controllers/passwords_controller.rb
 
 class PasswordsController < ApplicationController
-  # Mark forgot and reset as public endpoints that don't require restaurant context
-  def public_endpoint?
+  include TenantIsolation
+  
+  # Override global_access_permitted to allow password reset endpoints to work without a tenant context
+  def global_access_permitted?
     action_name.in?([ "forgot", "reset" ])
   end
+  
+  # Skip ensure_tenant_context for password reset actions
+  skip_before_action :set_current_tenant, only: [:forgot, :reset]
 
   # POST /password/forgot
   def forgot
-    user = User.find_by(email: params[:email].to_s.downcase)
-    if user
-      # 1) Generate the reset token
-      raw_token = user.generate_reset_password_token!
-
-      # 2) Send the email with the raw token
-      PasswordMailer.reset_password(user, raw_token).deliver_later
+    # Use the PasswordService to handle the forgot password request
+    result = password_service.forgot_password(params[:email])
+    
+    if result[:success]
+      render json: { message: result[:message] }
+    else
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :internal_server_error
     end
-
-    # Return a generic message to avoid email enumeration
-    render json: { message: "If that email exists, a reset link has been sent." }
   end
 
   # PATCH /password/reset
   def reset
-    # Because we encoded email, Rails automatically decodes it here.
-    user = User.find_by(email: params[:email].to_s.downcase)
-    unless user
-      return render json: { error: "Invalid link or user not found" }, status: :unprocessable_entity
-    end
-
-    # Check if the token is valid & not expired
-    unless user.reset_token_valid?(params[:token])
-      return render json: { error: "Invalid or expired token" }, status: :unprocessable_entity
-    end
-
-    # Update the user’s password
-    user.password = params[:new_password]
-    user.password_confirmation = params[:new_password_confirmation]
-
-    if user.save
-      # Clear token so it can’t be reused
-      user.clear_reset_password_token!
-
-      # Generate a new JWT so the user can be auto-logged in
-      jwt = JWT.encode({ 
-        user_id: user.id,
-        restaurant_id: user.restaurant_id,
-        role: user.role,
-        exp: 24.hours.from_now.to_i
-      }, Rails.application.secret_key_base)
-
-      # Return both the token and the user object => front end can store them
+    # Use the PasswordService to handle the password reset
+    result = password_service.reset_password(
+      params[:email],
+      params[:token],
+      params[:new_password],
+      params[:new_password_confirmation]
+    )
+    
+    if result[:success]
       render json: {
-        message: "Password updated successfully.",
-        jwt: jwt,
-        user: user
+        message: result[:message],
+        jwt: result[:token],
+        user: result[:user]
       }, status: :ok
     else
-      render json: { errors: user.errors.full_messages }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
+  end
+  
+  private
+  
+  # Get the password service instance
+  def password_service
+    @password_service ||= PasswordService.new(analytics)
   end
 end

@@ -1,24 +1,24 @@
+# app/controllers/push_subscriptions_controller.rb
 class PushSubscriptionsController < ApplicationController
+  include TenantIsolation
+  
   before_action :authenticate_user!, only: [:index, :destroy]
-  before_action :set_restaurant
+  
+  # Override global_access_permitted to allow certain actions without tenant context
+  def global_access_permitted?
+    action_name.in?(["vapid_public_key", "create", "unsubscribe"])
+  end
   
   # GET /api/push_subscriptions
   # List all push subscriptions for the current restaurant (admin only)
   def index
-    authorize! :manage, @restaurant
+    result = push_subscription_service.list_subscriptions(current_user)
     
-    subscriptions = @restaurant.push_subscriptions.active
-    
-    render json: {
-      subscriptions: subscriptions.map { |sub| 
-        {
-          id: sub.id,
-          endpoint: sub.endpoint,
-          user_agent: sub.user_agent,
-          created_at: sub.created_at
-        }
-      }
-    }
+    if result[:success]
+      render json: { subscriptions: result[:subscriptions] }
+    else
+      render json: { error: result[:errors].first }, status: result[:status] || :internal_server_error
+    end
   end
   
   # POST /api/push_subscriptions
@@ -30,45 +30,29 @@ class PushSubscriptionsController < ApplicationController
     # Extract restaurant_id from params
     restaurant_id = params[:restaurant_id]
     
-    # Find the restaurant
-    restaurant = if restaurant_id.present?
-                   Restaurant.find_by(id: restaurant_id)
-                 else
-                   @restaurant
-                 end
-    
-    # Return error if restaurant not found
-    unless restaurant
-      render json: { error: "Restaurant not found" }, status: :not_found
-      return
-    end
-    
-    # Create or update the subscription
-    subscription = restaurant.push_subscriptions.find_or_initialize_by(
-      endpoint: subscription_params[:endpoint]
+    result = push_subscription_service.create_subscription(
+      subscription_params,
+      request.user_agent,
+      restaurant_id
     )
     
-    subscription.p256dh_key = subscription_params[:keys][:p256dh]
-    subscription.auth_key = subscription_params[:keys][:auth]
-    subscription.user_agent = request.user_agent
-    subscription.active = true
-    
-    if subscription.save
-      render json: { status: 'success', id: subscription.id }
+    if result[:success]
+      render json: { status: 'success', id: result[:id] }
     else
-      render json: { status: 'error', errors: subscription.errors.full_messages }, status: :unprocessable_entity
+      render json: { status: 'error', errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
   
   # DELETE /api/push_subscriptions/:id
   # Delete a push subscription (admin only)
   def destroy
-    authorize! :manage, @restaurant
+    result = push_subscription_service.delete_subscription(params[:id], current_user)
     
-    subscription = @restaurant.push_subscriptions.find(params[:id])
-    subscription.deactivate!
-    
-    render json: { status: 'success' }
+    if result[:success]
+      render json: { status: 'success' }
+    else
+      render json: { error: result[:errors].first }, status: result[:status] || :internal_server_error
+    end
   end
   
   # POST /api/push_subscriptions/unsubscribe
@@ -79,111 +63,40 @@ class PushSubscriptionsController < ApplicationController
     # Extract restaurant_id from params
     restaurant_id = params[:restaurant_id]
     
-    # Find the restaurant
-    restaurant = if restaurant_id.present?
-                   Restaurant.find_by(id: restaurant_id)
-                 else
-                   @restaurant
-                 end
+    result = push_subscription_service.unsubscribe(subscription_params, restaurant_id)
     
-    # Return error if restaurant not found
-    unless restaurant
-      render json: { error: "Restaurant not found" }, status: :not_found
-      return
-    end
-    
-    subscription = restaurant.push_subscriptions.find_by(
-      endpoint: subscription_params[:endpoint]
-    )
-    
-    if subscription
-      subscription.deactivate!
+    if result[:success]
       render json: { status: 'success' }
     else
-      render json: { status: 'error', message: 'Subscription not found' }, status: :not_found
+      render json: { status: 'error', message: result[:errors].first }, status: result[:status] || :internal_server_error
     end
   end
   
   # GET /api/push_subscriptions/vapid_public_key
   # Get the VAPID public key for the current restaurant
   def vapid_public_key
-    # Extract restaurant_id from params or subdomain
+    # Extract restaurant_id from params
     restaurant_id = params[:restaurant_id]
     
-    # Find the restaurant
-    restaurant = if restaurant_id.present?
-                   Restaurant.find_by(id: restaurant_id)
-                 else
-                   @restaurant
-                 end
+    result = push_subscription_service.get_vapid_public_key(restaurant_id)
     
-    # Return error if restaurant not found
-    unless restaurant
-      render json: { error: "Restaurant not found" }, status: :not_found
-      return
-    end
-    
-    # Check if web push is enabled for the restaurant
-    if restaurant.web_push_enabled?
-      Rails.logger.info("Web push is enabled for restaurant #{restaurant.id}")
-      Rails.logger.info("VAPID public key: #{restaurant.web_push_vapid_keys[:public_key]}")
-      
-      render json: { 
-        vapid_public_key: restaurant.web_push_vapid_keys[:public_key],
-        enabled: true
-      }
-    else
-      Rails.logger.info("Web push is not enabled for restaurant #{restaurant.id}")
-      
-      # Check if notification channels are configured
-      if restaurant.admin_settings&.dig("notification_channels", "orders", "web_push") == true
-        Rails.logger.info("Web push is enabled in notification channels but VAPID keys are missing")
-      else
-        Rails.logger.info("Web push is not enabled in notification channels")
-      end
-      
-      # Check if VAPID keys are present
-      if restaurant.admin_settings&.dig("web_push", "vapid_public_key").present?
-        Rails.logger.info("VAPID public key is present")
-      else
-        Rails.logger.info("VAPID public key is missing")
-      end
-      
-      if restaurant.admin_settings&.dig("web_push", "vapid_private_key").present?
-        Rails.logger.info("VAPID private key is present")
-      else
-        Rails.logger.info("VAPID private key is missing")
-      end
-      
-      # Return the public key even if web push is not enabled
-      # This allows the frontend to subscribe to push notifications
-      # even if the restaurant hasn't enabled them yet
-      if restaurant.admin_settings&.dig("web_push", "vapid_public_key").present?
+    if result[:success]
+      if result[:vapid_public_key].present?
         render json: { 
-          vapid_public_key: restaurant.admin_settings.dig("web_push", "vapid_public_key"),
-          enabled: false
+          vapid_public_key: result[:vapid_public_key],
+          enabled: result[:enabled]
         }
       else
         render json: { enabled: false }
       end
+    else
+      render json: { error: result[:errors].first }, status: result[:status] || :internal_server_error
     end
   end
   
   private
   
-  def set_restaurant
-    # For public endpoints, we don't need to set the restaurant
-    # It will be extracted from params in the action methods
-    if public_endpoint?
-      @restaurant = nil
-    else
-      # For authenticated endpoints, get the restaurant from the current user
-      @restaurant = current_user&.restaurant
-    end
-  end
-  
-  # Override public_endpoint? to allow vapid_public_key to be accessed without restaurant context
-  def public_endpoint?
-    action_name == 'vapid_public_key' || action_name == 'create' || action_name == 'unsubscribe'
+  def push_subscription_service
+    @push_subscription_service ||= PushSubscriptionService.new(current_restaurant, analytics)
   end
 end

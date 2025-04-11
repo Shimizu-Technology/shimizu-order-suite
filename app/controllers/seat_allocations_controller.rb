@@ -1,86 +1,82 @@
 # app/controllers/seat_allocations_controller.rb
 
 class SeatAllocationsController < ApplicationController
-  before_action :authorize_request
+  include TenantIsolation
   
-  # Allow access to seat allocations for authenticated users
-  def public_endpoint?
-    true
-  end
+  before_action :authorize_request
+  before_action :ensure_tenant_context
 
   # GET /seat_allocations?date=YYYY-MM-DD
   def index
     Rails.logger.debug "[SeatAllocationsController#index] params=#{params.inspect}"
 
-    base = SeatAllocation.includes(:seat, :reservation, :waitlist_entry)
-                         .where(released_at: nil)
-
+    filters = {}
+    filters[:active] = true # Only get active (unreleased) allocations by default
+    
     if params[:date].present?
       begin
         # Handle both simple string and nested parameter formats
         date_param = params[:date].is_a?(ActionController::Parameters) ? params[:date][:date] : params[:date]
-        date_filter = Date.parse(date_param)
-
-        # For a staff user:
-        restaurant = Restaurant.find(current_user.restaurant_id)
-        tz = restaurant.time_zone.presence || "Pacific/Guam"
-
-        start_local = Time.use_zone(tz) do
-          Time.zone.local(date_filter.year, date_filter.month, date_filter.day, 0, 0, 0)
-        end
-        end_local = start_local.end_of_day
-
-        start_utc = start_local.utc
-        end_utc   = end_local.utc
-
-        base = base.where("start_time >= ? AND start_time < ?", start_utc, end_utc)
+        filters[:start_date] = date_param
+        filters[:end_date] = date_param
       rescue ArgumentError
         Rails.logger.warn "[SeatAllocationsController#index] invalid date param=#{params[:date]}"
+        return render json: { error: "Invalid date format" }, status: :unprocessable_entity
       end
     end
+    
+    # Add any other filters from params
+    filters[:seat_id] = params[:seat_id] if params[:seat_id].present?
+    filters[:reservation_id] = params[:reservation_id] if params[:reservation_id].present?
+    filters[:waitlist_entry_id] = params[:waitlist_entry_id] if params[:waitlist_entry_id].present?
+    
+    result = seat_allocation_service.list_allocations(filters)
+    
+    if result[:success]
+      # Format the allocations for the response
+      formatted_allocations = result[:allocations].map do |alloc|
+        occupant_type = if alloc.reservation_id.present?
+                          "reservation"
+        elsif alloc.waitlist_entry_id.present?
+                          "waitlist"
+        end
 
-    seat_allocations = base.all
+        occupant_id         = nil
+        occupant_name       = nil
+        occupant_party_size = nil
+        occupant_status     = nil
 
-    results = seat_allocations.map do |alloc|
-      occupant_type = if alloc.reservation_id.present?
-                        "reservation"
-      elsif alloc.waitlist_entry_id.present?
-                        "waitlist"
+        if occupant_type == "reservation" && alloc.reservation
+          occupant_id         = alloc.reservation.id
+          occupant_name       = alloc.reservation.contact_name
+          occupant_party_size = alloc.reservation.party_size
+          occupant_status     = alloc.reservation.status
+        elsif occupant_type == "waitlist" && alloc.waitlist_entry
+          occupant_id         = alloc.waitlist_entry.id
+          occupant_name       = alloc.waitlist_entry.contact_name
+          occupant_party_size = alloc.waitlist_entry.party_size
+          occupant_status     = alloc.waitlist_entry.status
+        end
+
+        {
+          id:                  alloc.id,
+          seat_id:             alloc.seat_id,
+          seat_label:          alloc.seat&.label,
+          occupant_type:       occupant_type,
+          occupant_id:         occupant_id,
+          occupant_name:       occupant_name,
+          occupant_party_size: occupant_party_size,
+          occupant_status:     occupant_status,
+          start_time:          alloc.allocated_at,
+          end_time:            alloc.released_at,
+          released_at:         alloc.released_at
+        }
       end
-
-      occupant_id         = nil
-      occupant_name       = nil
-      occupant_party_size = nil
-      occupant_status     = nil
-
-      if occupant_type == "reservation" && alloc.reservation
-        occupant_id         = alloc.reservation.id
-        occupant_name       = alloc.reservation.contact_name
-        occupant_party_size = alloc.reservation.party_size
-        occupant_status     = alloc.reservation.status
-      elsif occupant_type == "waitlist" && alloc.waitlist_entry
-        occupant_id         = alloc.waitlist_entry.id
-        occupant_name       = alloc.waitlist_entry.contact_name
-        occupant_party_size = alloc.waitlist_entry.party_size
-        occupant_status     = alloc.waitlist_entry.status
-      end
-
-      {
-        id:                  alloc.id,
-        seat_id:             alloc.seat_id,
-        seat_label:          alloc.seat&.label,
-        occupant_type:       occupant_type,
-        occupant_id:         occupant_id,
-        occupant_name:       occupant_name,
-        occupant_party_size: occupant_party_size,
-        occupant_status:     occupant_status,
-        start_time:          alloc.start_time,
-        end_time:            alloc.end_time,
-        released_at:         alloc.released_at
-      }
+      
+      render json: formatted_allocations
+    else
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :internal_server_error
     end
-
-    render json: results
   end
 
   # POST /seat_allocations/multi_create
@@ -90,49 +86,45 @@ class SeatAllocationsController < ApplicationController
     occupant_type = sa_params[:occupant_type]
     occupant_id   = sa_params[:occupant_id]
     seat_ids      = sa_params[:seat_ids] || []
-    st = parse_time(sa_params[:start_time]) || Time.current
-    en = parse_time(sa_params[:end_time])
-
-    if occupant_type.blank? || occupant_id.blank? || seat_ids.empty?
-      return render json: { error: "Must provide occupant_type, occupant_id, seat_ids" }, status: :unprocessable_entity
+    
+    # Prepare bulk allocation parameters
+    bulk_params = {
+      seat_ids: seat_ids,
+      allocated_at: parse_time(sa_params[:start_time]) || Time.current
+    }
+    
+    # Set the appropriate occupant ID based on type
+    if occupant_type == "reservation"
+      bulk_params[:reservation_id] = occupant_id
+    elsif occupant_type == "waitlist"
+      bulk_params[:waitlist_entry_id] = occupant_id
+    else
+      return render json: { error: "Invalid occupant_type. Must be 'reservation' or 'waitlist'" }, status: :unprocessable_entity
     end
-
-    occupant = find_occupant(occupant_type, occupant_id)
-    return unless occupant
-
-    en ||= default_end_time(occupant, st)
-    if st >= en
-      return render json: { error: "start_time must be before end_time" }, status: :unprocessable_entity
-    end
-
-    ActiveRecord::Base.transaction do
-      # occupant => "seated" unless it’s already finished, canceled, etc.
-      occupant.update!(status: "seated") unless %w[seated finished canceled no_show removed].include?(occupant.status)
-
-      seat_ids.each do |sid|
-        seat = Seat.find_by(id: sid) or raise ActiveRecord::RecordNotFound, "Seat #{sid} not found"
-
-        # *** Overlap check ***
-        conflict = SeatAllocation.where(seat_id: sid, released_at: nil)
-                                 .where("start_time < ? AND end_time > ?", en, st).exists?
-        raise StandardError, "Seat #{sid} is not free" if conflict
-
-        SeatAllocation.create!(
-          seat_id:           seat.id,
-          reservation_id:    occupant.is_a?(Reservation) ? occupant.id : nil,
-          waitlist_entry_id: occupant.is_a?(WaitlistEntry) ? occupant.id : nil,
-          start_time:        st,
-          end_time:          en,
-          released_at:       nil
-        )
+    
+    # Call the service to perform the bulk allocation
+    result = seat_allocation_service.bulk_allocate(bulk_params)
+    
+    if result[:success]
+      # Update the occupant status to "seated"
+      if occupant_type == "reservation"
+        reservation = scope_query(Reservation).find_by(id: occupant_id)
+        if reservation && !%w[seated finished canceled no_show removed].include?(reservation.status)
+          reservation.update(status: "seated")
+        end
+      elsif occupant_type == "waitlist"
+        waitlist_entry = scope_query(WaitlistEntry).find_by(id: occupant_id)
+        if waitlist_entry && !%w[seated finished canceled no_show removed].include?(waitlist_entry.status)
+          waitlist_entry.update(status: "seated")
+        end
       end
+      
+      start_time = result[:allocations].first&.allocated_at || Time.current
+      msg = "Seats allocated (seated) from #{start_time.strftime('%H:%M')} for occupant #{occupant_id}"
+      render json: { message: msg, allocations: result[:allocations] }, status: :created
+    else
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
     end
-
-    msg = "Seats allocated (seated) from #{st.strftime('%H:%M')} to #{en.strftime('%H:%M')} for occupant #{occupant.id}"
-    render json: { message: msg }, status: :created
-
-  rescue ActiveRecord::RecordNotFound, StandardError => e
-    render json: { error: e.message }, status: :unprocessable_entity
   end
 
   # POST /seat_allocations/reserve
@@ -144,49 +136,53 @@ class SeatAllocationsController < ApplicationController
     seat_ids      = ra_params[:seat_ids] || []
     seat_labels   = ra_params[:seat_labels] || []
 
-    st = parse_time(ra_params[:start_time]) || Time.current
-    en = parse_time(ra_params[:end_time])
-
     # Convert seat_labels -> seat_ids if seat_ids is empty
     if seat_ids.empty? && seat_labels.any?
-      seat_ids = seat_labels.map { |lbl| Seat.find_by(label: lbl)&.id }.compact
+      seat_ids = scope_query(Seat).where(label: seat_labels).pluck(:id)
     end
 
     if occupant_type.blank? || occupant_id.blank? || seat_ids.empty?
       return render json: { error: "Must provide occupant_type, occupant_id, and at least one seat" }, status: :unprocessable_entity
     end
-
-    occupant = find_occupant(occupant_type, occupant_id) or return
-    en ||= default_end_time(occupant, st)
-    return render json: { error: "start_time must be before end_time" }, status: :unprocessable_entity if st >= en
-
-    ActiveRecord::Base.transaction do
-      # occupant => "reserved" unless it’s already seated, finished, etc.
-      occupant.update!(status: "reserved") unless %w[seated finished canceled no_show removed].include?(occupant.status)
-
-      seat_ids.each do |sid|
-        seat = Seat.find_by(id: sid) or raise ActiveRecord::RecordNotFound, "Seat #{sid} not found"
-
-        conflict = SeatAllocation.where(seat_id: sid, released_at: nil)
-                                 .where("start_time < ? AND end_time > ?", en, st).exists?
-        raise StandardError, "Seat #{sid} not free" if conflict
-
-        SeatAllocation.create!(
-          seat_id:           seat.id,
-          reservation_id:    occupant.is_a?(Reservation) ? occupant.id : nil,
-          waitlist_entry_id: occupant.is_a?(WaitlistEntry) ? occupant.id : nil,
-          start_time:        st,
-          end_time:          en,
-          released_at:       nil
-        )
-      end
+    
+    # Prepare bulk allocation parameters
+    bulk_params = {
+      seat_ids: seat_ids,
+      allocated_at: parse_time(ra_params[:start_time]) || Time.current
+    }
+    
+    # Set the appropriate occupant ID based on type
+    if occupant_type == "reservation"
+      bulk_params[:reservation_id] = occupant_id
+    elsif occupant_type == "waitlist"
+      bulk_params[:waitlist_entry_id] = occupant_id
+    else
+      return render json: { error: "Invalid occupant_type. Must be 'reservation' or 'waitlist'" }, status: :unprocessable_entity
     end
-
-    msg = "Seats reserved from #{st.strftime('%H:%M')} to #{en.strftime('%H:%M')}."
-    render json: { message: msg }, status: :created
-
-  rescue ActiveRecord::RecordNotFound, StandardError => e
-    render json: { error: e.message }, status: :unprocessable_entity
+    
+    # Call the service to perform the bulk allocation
+    result = seat_allocation_service.bulk_allocate(bulk_params)
+    
+    if result[:success]
+      # Update the occupant status to "reserved"
+      if occupant_type == "reservation"
+        reservation = scope_query(Reservation).find_by(id: occupant_id)
+        if reservation && !%w[seated finished canceled no_show removed].include?(reservation.status)
+          reservation.update(status: "reserved")
+        end
+      elsif occupant_type == "waitlist"
+        waitlist_entry = scope_query(WaitlistEntry).find_by(id: occupant_id)
+        if waitlist_entry && !%w[seated finished canceled no_show removed].include?(waitlist_entry.status)
+          waitlist_entry.update(status: "reserved")
+        end
+      end
+      
+      start_time = result[:allocations].first&.allocated_at || Time.current
+      msg = "Seats reserved from #{start_time.strftime('%H:%M')}."
+      render json: { message: msg, allocations: result[:allocations] }, status: :created
+    else
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
+    end
   end
 
   # POST /seat_allocations/arrive
@@ -200,23 +196,45 @@ class SeatAllocationsController < ApplicationController
       return render json: { error: "Must provide occupant_type, occupant_id" },
                     status: :unprocessable_entity
     end
-
-    occupant = find_occupant(occupant_type, occupant_id)
-    return unless occupant
-
-    ActiveRecord::Base.transaction do
-      if occupant.is_a?(Reservation)
-        raise StandardError, "Not in reserved/booked" unless %w[reserved booked].include?(occupant.status)
-      else
-        raise StandardError, "Not in waiting/reserved" unless %w[waiting reserved].include?(occupant.status)
+    
+    # Verify the occupant exists and belongs to this restaurant
+    if occupant_type == "reservation"
+      occupant = scope_query(Reservation).find_by(id: occupant_id)
+      if occupant.nil?
+        return render json: { error: "Reservation not found" }, status: :not_found
       end
-      occupant.update!(status: "seated")
+      
+      # Validate status
+      unless %w[reserved booked].include?(occupant.status)
+        return render json: { error: "Reservation is not in reserved/booked status" }, status: :unprocessable_entity
+      end
+      
+      # Update status
+      if occupant.update(status: "seated")
+        render json: { message: "Arrived => occupant is now 'seated'" }, status: :ok
+      else
+        render json: { error: "Failed to update reservation status" }, status: :unprocessable_entity
+      end
+    elsif occupant_type == "waitlist"
+      occupant = scope_query(WaitlistEntry).find_by(id: occupant_id)
+      if occupant.nil?
+        return render json: { error: "Waitlist entry not found" }, status: :not_found
+      end
+      
+      # Validate status
+      unless %w[waiting reserved].include?(occupant.status)
+        return render json: { error: "Waitlist entry is not in waiting/reserved status" }, status: :unprocessable_entity
+      end
+      
+      # Update status
+      if occupant.update(status: "seated")
+        render json: { message: "Arrived => occupant is now 'seated'" }, status: :ok
+      else
+        render json: { error: "Failed to update waitlist entry status" }, status: :unprocessable_entity
+      end
+    else
+      render json: { error: "Invalid occupant_type. Must be 'reservation' or 'waitlist'" }, status: :unprocessable_entity
     end
-
-    render json: { message: "Arrived => occupant is now 'seated'" }, status: :ok
-
-  rescue StandardError => e
-    render json: { error: e.message }, status: :unprocessable_entity
   end
 
   # POST /seat_allocations/no_show
@@ -229,18 +247,58 @@ class SeatAllocationsController < ApplicationController
       return render json: { error: "Must provide occupant_type, occupant_id" },
                     status: :unprocessable_entity
     end
-
-    occupant = find_occupant(occupant_type, occupant_id)
-    return unless occupant
-
-    ActiveRecord::Base.transaction do
-      occupant_allocs = active_allocations_for(occupant_type, occupant.id)
-      occupant_allocs.each { |alloc| alloc.update!(released_at: Time.current) }
-
-      occupant.update!(status: "no_show")
+    
+    # Verify the occupant exists and belongs to this restaurant
+    if occupant_type == "reservation"
+      occupant = scope_query(Reservation).find_by(id: occupant_id)
+      if occupant.nil?
+        return render json: { error: "Reservation not found" }, status: :not_found
+      end
+    elsif occupant_type == "waitlist"
+      occupant = scope_query(WaitlistEntry).find_by(id: occupant_id)
+      if occupant.nil?
+        return render json: { error: "Waitlist entry not found" }, status: :not_found
+      end
+    else
+      return render json: { error: "Invalid occupant_type. Must be 'reservation' or 'waitlist'" }, status: :unprocessable_entity
     end
-
-    render json: { message: "Marked occupant as no_show; seat_allocations released" }, status: :ok
+    
+    # Find all active allocations for this occupant
+    filters = {}
+    filters["#{occupant_type}_id".to_sym] = occupant_id
+    filters[:active] = true
+    
+    # Get the seat IDs for these allocations
+    allocations_result = seat_allocation_service.list_allocations(filters)
+    
+    if !allocations_result[:success]
+      return render json: { error: allocations_result[:errors].join(", ") }, status: allocations_result[:status] || :internal_server_error
+    end
+    
+    seat_ids = allocations_result[:allocations].map(&:seat_id)
+    
+    if seat_ids.empty?
+      # If no active allocations, just update the occupant status
+      if occupant.update(status: "no_show")
+        render json: { message: "Marked occupant as no_show" }, status: :ok
+      else
+        render json: { error: "Failed to update occupant status" }, status: :unprocessable_entity
+      end
+    else
+      # Release all active allocations
+      release_result = seat_allocation_service.bulk_release(seat_ids)
+      
+      if release_result[:success]
+        # Update occupant status
+        if occupant.update(status: "no_show")
+          render json: { message: "Marked occupant as no_show; seat_allocations released" }, status: :ok
+        else
+          render json: { error: "Failed to update occupant status" }, status: :unprocessable_entity
+        end
+      else
+        render json: { error: release_result[:errors].join(", ") }, status: release_result[:status] || :internal_server_error
+      end
+    end
   end
 
   # POST /seat_allocations/cancel
@@ -253,36 +311,102 @@ class SeatAllocationsController < ApplicationController
       return render json: { error: "Must provide occupant_type, occupant_id" },
                     status: :unprocessable_entity
     end
-
-    occupant = find_occupant(occupant_type, occupant_id)
-    return unless occupant
-
-    ActiveRecord::Base.transaction do
-      occupant_allocs = active_allocations_for(occupant_type, occupant.id)
-      occupant_allocs.each { |alloc| alloc.update!(released_at: Time.current) }
-
-      occupant.update!(status: "canceled")
+    
+    # Verify the occupant exists and belongs to this restaurant
+    if occupant_type == "reservation"
+      occupant = scope_query(Reservation).find_by(id: occupant_id)
+      if occupant.nil?
+        return render json: { error: "Reservation not found" }, status: :not_found
+      end
+    elsif occupant_type == "waitlist"
+      occupant = scope_query(WaitlistEntry).find_by(id: occupant_id)
+      if occupant.nil?
+        return render json: { error: "Waitlist entry not found" }, status: :not_found
+      end
+    else
+      return render json: { error: "Invalid occupant_type. Must be 'reservation' or 'waitlist'" }, status: :unprocessable_entity
     end
-
-    render json: { message: "Canceled occupant & freed seats" }, status: :ok
+    
+    # Find all active allocations for this occupant
+    filters = {}
+    filters["#{occupant_type}_id".to_sym] = occupant_id
+    filters[:active] = true
+    
+    # Get the seat IDs for these allocations
+    allocations_result = seat_allocation_service.list_allocations(filters)
+    
+    if !allocations_result[:success]
+      return render json: { error: allocations_result[:errors].join(", ") }, status: allocations_result[:status] || :internal_server_error
+    end
+    
+    seat_ids = allocations_result[:allocations].map(&:seat_id)
+    
+    if seat_ids.empty?
+      # If no active allocations, just update the occupant status
+      if occupant.update(status: "canceled")
+        render json: { message: "Canceled occupant" }, status: :ok
+      else
+        render json: { error: "Failed to update occupant status" }, status: :unprocessable_entity
+      end
+    else
+      # Release all active allocations
+      release_result = seat_allocation_service.bulk_release(seat_ids)
+      
+      if release_result[:success]
+        # Update occupant status
+        if occupant.update(status: "canceled")
+          render json: { message: "Canceled occupant & freed seats" }, status: :ok
+        else
+          render json: { error: "Failed to update occupant status" }, status: :unprocessable_entity
+        end
+      else
+        render json: { error: release_result[:errors].join(", ") }, status: release_result[:status] || :internal_server_error
+      end
+    end
   end
 
   # DELETE /seat_allocations/:id
   def destroy
-    seat_allocation = SeatAllocation.find(params[:id])
-    occupant = seat_allocation.reservation || seat_allocation.waitlist_entry
-    occupant_type = seat_allocation.reservation_id.present? ? "reservation" : "waitlist"
-
-    ActiveRecord::Base.transaction do
-      seat_allocation.update!(released_at: Time.current)
-
-      active_allocs = active_allocations_for(occupant_type, occupant.id)
-      if active_allocs.none?
-        occupant.update!(status: occupant_type == "reservation" ? "finished" : "removed")
+    result = seat_allocation_service.release_allocation(params[:id])
+    
+    if result[:success]
+      # Check if this was the last active allocation for the occupant
+      allocation = result[:allocation]
+      
+      if allocation.reservation_id.present?
+        # Check for any remaining active allocations for this reservation
+        filters = {
+          reservation_id: allocation.reservation_id,
+          active: true
+        }
+        
+        remaining_allocations = seat_allocation_service.list_allocations(filters)
+        
+        if remaining_allocations[:success] && remaining_allocations[:allocations].empty?
+          # This was the last allocation, update reservation status to finished
+          reservation = scope_query(Reservation).find_by(id: allocation.reservation_id)
+          reservation&.update(status: "finished")
+        end
+      elsif allocation.waitlist_entry_id.present?
+        # Check for any remaining active allocations for this waitlist entry
+        filters = {
+          waitlist_entry_id: allocation.waitlist_entry_id,
+          active: true
+        }
+        
+        remaining_allocations = seat_allocation_service.list_allocations(filters)
+        
+        if remaining_allocations[:success] && remaining_allocations[:allocations].empty?
+          # This was the last allocation, update waitlist entry status to removed
+          waitlist_entry = scope_query(WaitlistEntry).find_by(id: allocation.waitlist_entry_id)
+          waitlist_entry&.update(status: "removed")
+        end
       end
+      
+      head :no_content
+    else
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
     end
-
-    head :no_content
   end
 
   # POST /seat_allocations/finish
@@ -295,19 +419,60 @@ class SeatAllocationsController < ApplicationController
       return render json: { error: "Must provide occupant_type, occupant_id" },
                     status: :unprocessable_entity
     end
-
-    occupant = find_occupant(occupant_type, occupant_id)
-    return unless occupant
-
-    ActiveRecord::Base.transaction do
-      occupant_allocs = active_allocations_for(occupant_type, occupant.id)
-      occupant_allocs.each { |alloc| alloc.update!(released_at: Time.current) }
-
-      new_status = occupant_type == "reservation" ? "finished" : "removed"
-      occupant.update!(status: new_status)
+    
+    # Verify the occupant exists and belongs to this restaurant
+    if occupant_type == "reservation"
+      occupant = scope_query(Reservation).find_by(id: occupant_id)
+      if occupant.nil?
+        return render json: { error: "Reservation not found" }, status: :not_found
+      end
+      new_status = "finished"
+    elsif occupant_type == "waitlist"
+      occupant = scope_query(WaitlistEntry).find_by(id: occupant_id)
+      if occupant.nil?
+        return render json: { error: "Waitlist entry not found" }, status: :not_found
+      end
+      new_status = "removed"
+    else
+      return render json: { error: "Invalid occupant_type. Must be 'reservation' or 'waitlist'" }, status: :unprocessable_entity
     end
-
-    render json: { message: "Occupant => #{occupant.status}; seats freed" }, status: :ok
+    
+    # Find all active allocations for this occupant
+    filters = {}
+    filters["#{occupant_type}_id".to_sym] = occupant_id
+    filters[:active] = true
+    
+    # Get the seat IDs for these allocations
+    allocations_result = seat_allocation_service.list_allocations(filters)
+    
+    if !allocations_result[:success]
+      return render json: { error: allocations_result[:errors].join(", ") }, status: allocations_result[:status] || :internal_server_error
+    end
+    
+    seat_ids = allocations_result[:allocations].map(&:seat_id)
+    
+    if seat_ids.empty?
+      # If no active allocations, just update the occupant status
+      if occupant.update(status: new_status)
+        render json: { message: "Occupant => #{occupant.status}" }, status: :ok
+      else
+        render json: { error: "Failed to update occupant status" }, status: :unprocessable_entity
+      end
+    else
+      # Release all active allocations
+      release_result = seat_allocation_service.bulk_release(seat_ids)
+      
+      if release_result[:success]
+        # Update occupant status
+        if occupant.update(status: new_status)
+          render json: { message: "Occupant => #{occupant.status}; seats freed" }, status: :ok
+        else
+          render json: { error: "Failed to update occupant status" }, status: :unprocessable_entity
+        end
+      else
+        render json: { error: release_result[:errors].join(", ") }, status: release_result[:status] || :internal_server_error
+      end
+    end
   end
 
   private
@@ -316,30 +481,25 @@ class SeatAllocationsController < ApplicationController
     return nil unless time_str.present?
     Time.zone.parse(time_str) rescue nil
   end
-
-  def find_occupant(occupant_type, occupant_id)
-    occupant = case occupant_type
-    when "reservation" then Reservation.find_by(id: occupant_id)
-    when "waitlist"    then WaitlistEntry.find_by(id: occupant_id)
-    else nil
-    end
-    render(json: { error: "Could not find occupant" }, status: :not_found) unless occupant
-    occupant
+  
+  # Helper method to scope queries to the current restaurant
+  def scope_query(model_class)
+    model_class.where(restaurant_id: current_restaurant.id)
   end
-
-  def default_end_time(occupant, start_time)
-    if occupant.is_a?(Reservation)
-      (start_time || Time.current) + 60.minutes
-    else
-      (start_time || Time.current) + 45.minutes
+  
+  # Get the seat allocation service instance
+  def seat_allocation_service
+    @seat_allocation_service ||= begin
+      service = SeatAllocationService.new(current_restaurant)
+      service.current_user = current_user
+      service
     end
   end
-
-  def active_allocations_for(occupant_type, occupant_id)
-    if occupant_type == "reservation"
-      SeatAllocation.where(reservation_id: occupant_id, released_at: nil)
-    else
-      SeatAllocation.where(waitlist_entry_id: occupant_id, released_at: nil)
+  
+  # Ensure we have a tenant context
+  def ensure_tenant_context
+    unless current_restaurant.present?
+      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
     end
   end
 end

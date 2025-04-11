@@ -1,49 +1,48 @@
 # app/controllers/reservations_controller.rb
 
 class ReservationsController < ApplicationController
+  include TenantIsolation
+  
   # Only staff/admin can do index/show/update/destroy
   # but 'create' is public (no login required).
-  before_action :authorize_request, except: [ :create ]
+  before_action :authorize_request, except: [:create]
+  before_action :ensure_tenant_context
 
   def index
     unless current_user && %w[admin staff super_admin].include?(current_user.role)
       return render json: { error: "Forbidden: staff/admin only" }, status: :forbidden
     end
 
-    scope = Reservation.where(restaurant_id: current_user.restaurant_id)
-
-    # Date filter...
+    # Prepare filter parameters
+    filter_params = {}
+    
     if params[:date].present?
-      begin
-        # Handle both simple string and nested parameter formats
-        date_param = params[:date].is_a?(ActionController::Parameters) ? params[:date][:date] : params[:date]
-        date_filter = Date.parse(date_param)
-        restaurant = Restaurant.find(current_user.restaurant_id)
-        tz = restaurant.time_zone.presence || "Pacific/Guam"
-
-        start_local = Time.use_zone(tz) { Time.zone.local(date_filter.year, date_filter.month, date_filter.day, 0, 0, 0) }
-        end_local   = start_local.end_of_day
-
-        start_utc = start_local.utc
-        end_utc   = end_local.utc
-        scope = scope.where("start_time >= ? AND start_time < ?", start_utc, end_utc)
-      rescue ArgumentError
-        Rails.logger.warn "[ReservationsController#index] invalid date param=#{params[:date]}"
-      end
+      # Handle both simple string and nested parameter formats
+      date_param = params[:date].is_a?(ActionController::Parameters) ? params[:date][:date] : params[:date]
+      filter_params[:date] = date_param
     end
-
-    reservations = scope.all
-
-    render json: reservations.as_json(
-      only: [
-        :id, :restaurant_id, :start_time, :end_time, :party_size,
-        :contact_name, :contact_phone, :contact_email,
-        :deposit_amount, :reservation_source, :special_requests,
-        :status, :created_at, :updated_at, :duration_minutes,
-        :seat_preferences
-      ],
-      methods: :seat_labels
-    )
+    
+    # Add other filters if present
+    [:status, :customer_name, :phone, :email, :page, :per_page].each do |param|
+      filter_params[param] = params[param] if params[param].present?
+    end
+    
+    result = reservation_service.list_reservations(filter_params)
+    
+    if result[:success]
+      render json: result[:reservations].as_json(
+        only: [
+          :id, :restaurant_id, :start_time, :end_time, :party_size,
+          :contact_name, :contact_phone, :contact_email,
+          :deposit_amount, :reservation_source, :special_requests,
+          :status, :created_at, :updated_at, :duration_minutes,
+          :seat_preferences
+        ],
+        methods: :seat_labels
+      )
+    else
+      render json: { error: result[:errors].join(', ') }, status: result[:status] || :internal_server_error
+    end
   end
 
   def show
@@ -51,18 +50,22 @@ class ReservationsController < ApplicationController
       return render json: { error: "Forbidden: staff/admin only" }, status: :forbidden
     end
 
-    reservation = Reservation.find(params[:id])
-
-    render json: reservation.as_json(
-      only: [
-        :id, :restaurant_id, :start_time, :end_time, :party_size,
-        :contact_name, :contact_phone, :contact_email,
-        :deposit_amount, :reservation_source, :special_requests,
-        :status, :created_at, :updated_at, :duration_minutes,
-        :seat_preferences
-      ],
-      methods: :seat_labels
-    )
+    result = reservation_service.find_reservation(params[:id])
+    
+    if result[:success]
+      render json: result[:reservation].as_json(
+        only: [
+          :id, :restaurant_id, :start_time, :end_time, :party_size,
+          :contact_name, :contact_phone, :contact_email,
+          :deposit_amount, :reservation_source, :special_requests,
+          :status, :created_at, :updated_at, :duration_minutes,
+          :seat_preferences
+        ],
+        methods: :seat_labels
+      )
+    else
+      render json: { error: result[:errors].join(', ') }, status: result[:status] || :not_found
+    end
   end
 
   # Public create
@@ -248,5 +251,19 @@ class ReservationsController < ApplicationController
 
     already_booked = overlapping.sum(:party_size)
     (already_booked + new_party_size) > total_seats
+  end
+  
+  def reservation_service
+    @reservation_service ||= begin
+      service = ReservationService.new(current_restaurant)
+      service.current_user = current_user
+      service
+    end
+  end
+  
+  def ensure_tenant_context
+    unless current_restaurant.present?
+      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+    end
   end
 end

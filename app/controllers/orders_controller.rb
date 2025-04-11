@@ -1,17 +1,10 @@
 # app/controllers/orders_controller.rb
 
 class OrdersController < ApplicationController
+  include TenantIsolation
+  
   before_action :authorize_request, except: [ :create, :show ]
-
-  # Mark create, show, new_since, index, update, destroy, staff_orders, and order_creators as public endpoints
-  # that don't require restaurant context
-  def public_endpoint?
-    action_name.in?([
-      "create", "show", "new_since", "index",
-      "update", "destroy", "acknowledge", "unacknowledged",
-      "staff_orders", "order_creators" # Added staff_orders and order_creators to the list of public endpoints
-    ])
-  end
+  before_action :ensure_tenant_context
 
   # GET /orders
   def index
@@ -450,109 +443,45 @@ class OrdersController < ApplicationController
       return render json: { error: "Payment required before creating order" }, status: :unprocessable_entity
     end
 
-    new_params = order_params_admin # Since create does not forcibly restrict user fields
+    # Get permitted parameters through strong parameters
+    new_params = order_params_admin
+    
+    # Set essential attributes that might not be in the params
     new_params[:restaurant_id] ||= params[:restaurant_id] || 1
-    
-    # For regular orders, use the current user's ID
-    # For staff orders, the user_id will be set to the staff member's user_id if available
     new_params[:user_id] = @current_user&.id
-    
-    # Set created_by_user_id to the current user's ID if authenticated
-    # This tracks which user (employee) created the order
     new_params[:created_by_user_id] = @current_user&.id if @current_user
-
+    
+    # Set payment status and amount
+    new_params[:payment_status] = "completed"
+    new_params[:payment_amount] = new_params[:total]
+    
     # Set VIP access code if found
     if defined?(vip_access_code) && vip_access_code
       new_params[:vip_access_code_id] = vip_access_code.id
     end
     
-    # Handle staff order parameters
-    if params[:order][:is_staff_order].present? && params[:order][:is_staff_order] == true
-      # Set staff order fields
-      new_params[:is_staff_order] = true
-      new_params[:staff_member_id] = params[:order][:staff_member_id]
-      new_params[:staff_on_duty] = params[:order][:staff_on_duty] || false
-      new_params[:use_house_account] = params[:order][:use_house_account] || false
+    # Handle staff-specific logic if needed
+    if new_params[:is_staff_order] == true
+      # IMPORTANT: Always use the pre_discount_total from the frontend parameters
+      # Only fall back to total if pre_discount_total is not provided
+      if new_params[:pre_discount_total].present?
+        Rails.logger.info("Using pre_discount_total from frontend: #{new_params[:pre_discount_total]}")
+      elsif new_params[:total].present?
+        Rails.logger.info("No pre_discount_total provided, using total: #{new_params[:total]}")
+        new_params[:pre_discount_total] = new_params[:total]
+      end
       
-      # Check if created_by_staff_id was provided in the request parameters
-      if params[:order][:created_by_staff_id].present?
-        # Use the provided created_by_staff_id from the frontend
-        new_params[:created_by_staff_id] = params[:order][:created_by_staff_id]
-        Rails.logger.info("Using provided created_by_staff_id: #{params[:order][:created_by_staff_id]} from request")
-      elsif params[:order][:payment_details].present? && 
-            params[:order][:payment_details][:staffOrderParams].present? && 
-            params[:order][:payment_details][:staffOrderParams][:created_by_staff_id].present?
-        # Extract from staffOrderParams if available
-        new_params[:created_by_staff_id] = params[:order][:payment_details][:staffOrderParams][:created_by_staff_id]
-        Rails.logger.info("Using created_by_staff_id: #{new_params[:created_by_staff_id]} from staffOrderParams")
-      elsif @current_user&.staff_member.present?
-        # Fallback to current user's staff record if no explicit ID was provided
+      # If no created_by_staff_id was provided but the user has a staff record, use that
+      if new_params[:created_by_staff_id].blank? && @current_user&.staff_member.present?
         new_params[:created_by_staff_id] = @current_user.staff_member.id
         Rails.logger.info("Fallback: Setting created_by_staff_id to #{@current_user.staff_member.id} for user #{@current_user.id}")
-      else
-        Rails.logger.info("Current user #{@current_user&.id} does not have an associated staff record")
-      end
-      
-      # Store the pre-discount total for reporting
-      new_params[:pre_discount_total] = new_params[:total]
-      
-      # If payment_details is present, ensure staffOrderParams is properly formatted
-      if new_params[:payment_details].present? && new_params[:payment_details]['staffOrderParams'].present?
-        staff_params = new_params[:payment_details]['staffOrderParams']
-        
-        # Convert staff params to string representation
-        formatted_staff_params = {
-          'is_staff_order' => staff_params['is_staff_order'] ? 'true' : 'false',
-          'staff_member_id' => staff_params['staff_member_id'].to_s,
-          'staff_on_duty' => staff_params['staff_on_duty'] ? 'true' : 'false',
-          'use_house_account' => staff_params['use_house_account'] ? 'true' : 'false',
-          'created_by_staff_id' => staff_params['created_by_staff_id'].to_s,
-          'pre_discount_total' => staff_params['pre_discount_total'].to_s
-        }
-        
-        # Replace the object with the formatted version
-        new_params[:payment_details]['staffOrderParams'] = formatted_staff_params
-      end
-    end
-
-    # Set payment fields
-    new_params[:payment_status] = "completed"
-    new_params[:payment_amount] = new_params[:total]
-    
-    # Set payment details if provided
-    if params[:order][:payment_details].present?
-      new_params[:payment_details] = params[:order][:payment_details]
-      
-      # Extract staff order parameters if present
-      if params[:order][:payment_details][:staffOrderParams].present?
-        staff_params = params[:order][:payment_details][:staffOrderParams]
-        
-        # Set staff order attributes directly on the order
-        new_params[:is_staff_order] = staff_params[:is_staff_order] if staff_params[:is_staff_order].present?
-        new_params[:staff_member_id] = staff_params[:staff_member_id] if staff_params[:staff_member_id].present?
-        new_params[:staff_on_duty] = staff_params[:staff_on_duty] if staff_params[:staff_on_duty].present?
-        new_params[:use_house_account] = staff_params[:use_house_account] if staff_params[:use_house_account].present?
-        new_params[:created_by_staff_id] = staff_params[:created_by_staff_id] if staff_params[:created_by_staff_id].present?
-        new_params[:pre_discount_total] = staff_params[:pre_discount_total] if staff_params[:pre_discount_total].present?
-        
-        # Format staff order params for display
-        formatted_staff_params = {
-          'is_staff_order' => staff_params[:is_staff_order] ? 'true' : 'false',
-          'staff_member_id' => staff_params[:staff_member_id].to_s,
-          'staff_on_duty' => staff_params[:staff_on_duty] ? 'true' : 'false',
-          'use_house_account' => staff_params[:use_house_account] ? 'true' : 'false',
-          'created_by_staff_id' => staff_params[:created_by_staff_id].to_s,
-          'pre_discount_total' => staff_params[:pre_discount_total].to_s
-        }
-        
-        # Replace the object with the formatted version in payment_details
-        new_params[:payment_details][:staffOrderParams] = formatted_staff_params
       end
     end
 
     @order = Order.new(new_params)
     @order.status = "pending"
-    @order.staff_created = params[:order][:staff_modal] == true
+    # The staff_created flag will be set automatically by the before_create callback
+    # based on the staff_modal virtual attribute
 
     # Single-query for MenuItems => avoids N+1
     if @order.items.present?
@@ -631,17 +560,52 @@ class OrdersController < ApplicationController
           staff_params = payment_details['staffOrderParams']
           
           # Convert staff params to string representation
+          # Use the order's actual is_staff_order value to ensure consistency
           formatted_staff_params = {
-            'is_staff_order' => staff_params['is_staff_order'].to_s == 'true' || staff_params['is_staff_order'] == true ? 'true' : 'false',
-            'staff_member_id' => staff_params['staff_member_id'].to_s,
-            'staff_on_duty' => staff_params['staff_on_duty'].to_s == 'true' || staff_params['staff_on_duty'] == true ? 'true' : 'false',
-            'use_house_account' => staff_params['use_house_account'].to_s == 'true' || staff_params['use_house_account'] == true ? 'true' : 'false',
-            'created_by_staff_id' => staff_params['created_by_staff_id'].to_s,
-            'pre_discount_total' => staff_params['pre_discount_total'].to_s
+            'is_staff_order' => @order.is_staff_order ? 'true' : 'false',
+            'staff_member_id' => @order.staff_member_id.to_s,
+            'staff_on_duty' => @order.staff_on_duty ? 'true' : 'false',
+            'use_house_account' => @order.use_house_account ? 'true' : 'false',
+            'created_by_staff_id' => @order.created_by_staff_id.to_s,
+            'pre_discount_total' => @order.pre_discount_total.to_s
           }
           
           # Replace the object with the formatted version
           payment_details['staffOrderParams'] = formatted_staff_params
+        # If staffOrderParams is not present but this is a staff order, add it
+        elsif @order.is_staff_order
+          payment_details ||= {}
+          
+          # Get the original pre_discount_total from different possible locations
+          original_pre_discount_total = if params.dig(:order, :pre_discount_total).present?
+            params.dig(:order, :pre_discount_total)
+          elsif params.dig(:order, :payment_details, :staffOrderParams, :pre_discount_total).present?
+            params.dig(:order, :payment_details, :staffOrderParams, :pre_discount_total)
+          else
+            nil
+          end
+          
+          # Always use the original pre_discount_total from params if available
+          # This is critical for staff orders to ensure correct discount calculation
+          pre_discount_value = if original_pre_discount_total.present?
+            original_pre_discount_total.to_s
+          else
+            # If no original value is available, use the order's current pre_discount_total
+            # This is a fallback and should be avoided if possible
+            @order.pre_discount_total.to_s
+          end
+          
+          # Log the values for debugging
+          Rails.logger.info("OrderPayment staffOrderParams: Using pre_discount_total #{pre_discount_value} (from params: #{original_pre_discount_total}, from order: #{@order.pre_discount_total})")
+          
+          payment_details['staffOrderParams'] = {
+            'is_staff_order' => 'true',
+            'staff_member_id' => @order.staff_member_id.to_s,
+            'staff_on_duty' => @order.staff_on_duty ? 'true' : 'false',
+            'use_house_account' => @order.use_house_account ? 'true' : 'false',
+            'created_by_staff_id' => @order.created_by_staff_id.to_s,
+            'pre_discount_total' => pre_discount_value
+          }
         end
         
         payment = @order.order_payments.create(
@@ -956,77 +920,34 @@ class OrdersController < ApplicationController
     current_user && order.user_id == current_user.id
   end
 
-  # For admins: allow editing everything with custom handling for customizations
+  # For admins: allow editing everything with proper handling for nested attributes
   def order_params_admin
-    # First permit the items parameter at the top level to avoid "unpermitted parameter: :items" error
-    params.require(:order).permit![:items] if params[:order][:items].present?
+    # Use Rails' strong parameters with proper nesting
+    permitted_params = params.require(:order).permit(
+      :id, :restaurant_id, :user_id, :status, :total, :subtotal, :tax, 
+      :tip, :service_fee, :transaction_id, :payment_id, :payment_method, 
+      :payment_status, :payment_amount, :contact_name, :contact_email, 
+      :contact_phone, :special_instructions, :estimated_pickup_time, 
+      :pickup_time, :is_staff_order, :staff_member_id, :staff_on_duty, 
+      :use_house_account, :created_by_staff_id, :created_by_user_id, 
+      :pre_discount_total, :vip_code, :vip_access_code_id, :staff_modal,
+      # Handle nested attributes properly
+      items: [:id, :name, :price, :quantity, :notes, :customizations, :menu_id, :category_id],
+      merchandise_items: [:id, :name, :price, :quantity, :merchandise_variant_id, :notes],
+      # Allow all payment details attributes to be passed through
+      payment_details: {})
     
-    # Then get all the standard permitted parameters
-    sanitized = params.require(:order).permit(
-      :id,
-      :restaurant_id,
-      :user_id,
-      :status,
-      :total,
-      :promo_code,
-      :special_instructions,
-      :estimated_pickup_time,
-      :contact_name,
-      :contact_phone,
-      :contact_email,
-      :payment_method,
-      :transaction_id,
-      :payment_status,
-      :payment_amount,
-      :vip_code,
-      :payment_details,
-      :items, # Permit items as a whole first
-      # Staff order parameters
-      :is_staff_order,
-      :staff_member_id,
-      :staff_on_duty,
-      :use_house_account,
-      :created_by_staff_id,
-      :created_by_user_id,
-      :pre_discount_total,
-      merchandise_items: [
-        :id,
-        :merchandise_variant_id,
-        :name,
-        :size,
-        :color,
-        :price,
-        :quantity,
-        :image_url
-      ]
-    )
-    
-    # Then handle items with customizations separately
-    if params[:order][:items].present?
-      sanitized[:items] = params[:order][:items].map do |item|
-        item_params = {}
-        
-        # Copy permitted scalar values
-        [:id, :name, :price, :quantity, :notes, :enable_stock_tracking, 
-         :stock_quantity, :damaged_quantity, :low_stock_threshold].each do |key|
-          item_params[key] = item[key] if item.key?(key)
-        end
-        
-        # Copy customizations as-is
-        item_params[:customizations] = item[:customizations] if item[:customizations].present?
-        
-        # Copy array-style customizations if present
-        if item[:customizations].is_a?(Array)
-          item_params[:customizations] = item[:customizations].map do |c|
-            c.permit(:option_id, :option_name, :option_group_id, :option_group_name, :price)
-          end
-        end
-        
-        item_params
-      end
+    # Convert payment_details to a hash if it's present
+    if permitted_params[:payment_details].present?
+      # Ensure payment_details is a hash
+      permitted_params[:payment_details] = permitted_params[:payment_details].to_h
     end
     
-    sanitized
+    # Log what we're doing for debugging
+    Rails.logger.info("Using strong parameters for order with staff_modal=#{permitted_params[:staff_modal]}")
+    
+    # Return the permitted parameters
+    permitted_params
   end
 
   # For normal customers: allow only certain fields

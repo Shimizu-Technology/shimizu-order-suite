@@ -186,6 +186,41 @@ Rails.application.routes.draw do
     
     # Restaurant list for admin dashboard
     get "restaurants", to: "restaurant#index"
+    
+    # Feature Flags management
+    resources :feature_flags do
+      collection do
+        post :enable_for_tenant
+        post :disable_for_tenant
+        post :enable_globally
+        post :disable_globally
+      end
+    end
+    
+    # Tenant Metrics and Analytics
+    resources :tenant_metrics, only: [:index, :show] do
+      member do
+        get :usage_stats
+        get :health_metrics
+        get :events
+      end
+      collection do
+        get :all_tenants
+        get :tenant_comparison
+      end
+    end
+    
+    # Tenant Backup and Disaster Recovery
+    namespace :tenant_backup do
+      get 'backups', to: 'tenant_backup#backups'
+      post 'export_tenant/:id', to: 'tenant_backup#export_tenant'
+      post 'import_tenant', to: 'tenant_backup#import_tenant'
+      post 'clone_tenant', to: 'tenant_backup#clone_tenant'
+      post 'migrate_tenant', to: 'tenant_backup#migrate_tenant'
+      delete 'delete_backup/:id', to: 'tenant_backup#delete_backup'
+      get 'validate_backup/:id', to: 'tenant_backup#validate_backup'
+      get 'backup_status/:job_id', to: 'tenant_backup#backup_status'
+    end
 
     # Admin users => create/edit/delete + resend_invite + reset password
     resources :users, only: [ :index, :create, :update, :destroy ] do
