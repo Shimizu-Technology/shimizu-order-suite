@@ -101,8 +101,8 @@ unless Restaurant.exists?(name: "Shimizu Technology")
     menu_id: main_menu.id
   )
 
-  # Create a sample menu item for Shimizu Technology
-  menu_item = MenuItem.create!(
+  # Create a sample menu item for Shimizu Technology and associate it with the category
+  menu_item = MenuItem.new(
     menu_id: main_menu.id,
     name: "Order Suite",
     description: "Offer a branded online ordering portal to reduce phone traffic and errors—fully set up for you. Manage all orders, online and in-person, from one central system, with table-side ordering coming soon. Access powerful analytics (coming soon) to track sales, menu performance, and customer behavior across locations. Enhance service with integrated tools for VIP programs, merchandise, discounts, and house accounts.",
@@ -113,12 +113,10 @@ unless Restaurant.exists?(name: "Shimizu Technology")
     featured: true,
     stock_status: "in_stock"
   )
-
-  # Associate the menu item with the category using the join table
-  MenuItemCategory.create!(
-    menu_item_id: menu_item.id,
-    category_id: category.id
-  )
+  
+  # Save the menu item with categories
+  menu_item.category_ids = [category.id]
+  menu_item.save!
 
   puts "Created main menu with sample item and category"
 end
