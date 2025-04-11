@@ -17,38 +17,38 @@ if Rails.env.production? || Rails.env.staging?
   
   # Counter for cross-tenant access attempts
   CROSS_TENANT_ACCESS_COUNTER = TENANT_METRICS.counter(
-    :shimizu_cross_tenant_access_attempts_total,
-    'Total number of cross-tenant access attempts',
-    { restaurant_id: nil, user_id: nil }
+    name: :shimizu_cross_tenant_access_attempts_total,
+    docstring: 'Total number of cross-tenant access attempts',
+    labels: [:restaurant_id, :user_id]
   )
   
   # Counter for tenant access (normal operations)
   TENANT_ACCESS_COUNTER = TENANT_METRICS.counter(
-    :shimizu_tenant_access_total,
-    'Total number of tenant access operations',
-    { restaurant_id: nil }
+    name: :shimizu_tenant_access_total,
+    docstring: 'Total number of tenant access operations',
+    labels: [:restaurant_id]
   )
   
   # Histogram for tenant request latency
   TENANT_REQUEST_LATENCY = TENANT_METRICS.histogram(
-    :shimizu_tenant_request_latency_seconds,
-    'Request latency by tenant',
-    { restaurant_id: nil, controller: nil, action: nil },
-    [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]
+    name: :shimizu_tenant_request_latency_seconds,
+    docstring: 'Request latency by tenant',
+    labels: [:restaurant_id, :controller, :action],
+    buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5, 10]
   )
   
   # Gauge for active tenant sessions
   ACTIVE_TENANT_SESSIONS = TENANT_METRICS.gauge(
-    :shimizu_active_tenant_sessions,
-    'Number of active sessions by tenant',
-    { restaurant_id: nil }
+    name: :shimizu_active_tenant_sessions,
+    docstring: 'Number of active sessions by tenant',
+    labels: [:restaurant_id]
   )
   
   # Counter for rate limit exceeded events
   RATE_LIMIT_EXCEEDED_COUNTER = TENANT_METRICS.counter(
-    :shimizu_rate_limit_exceeded_total,
-    'Total number of rate limit exceeded events',
-    { restaurant_id: nil }
+    name: :shimizu_rate_limit_exceeded_total,
+    docstring: 'Total number of rate limit exceeded events',
+    labels: [:restaurant_id]
   )
   
   # Subscribe to relevant ActiveSupport notifications
