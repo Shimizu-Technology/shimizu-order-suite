@@ -21,26 +21,26 @@ unless Restaurant.exists?(name: "Hafaloha")
     twitter_url: nil,
     admin_settings: {
       "pushover" => {
-        "user_key" => "u75y2asuw5wk6vsbsueeam35obpwjp",
-        "app_token" => "agps7bb3ikj9g1f9gr1jybqwa2925u",
-        "group_key" => "g5w7zf45hg1dmx4dyjmzduxvp1esf9"
+        "user_key" => ENV.fetch('SEED_PUSHOVER_USER_KEY', 'placeholder_user_key'),
+        "app_token" => ENV.fetch('SEED_PUSHOVER_APP_TOKEN', 'placeholder_app_token'),
+        "group_key" => ENV.fetch('SEED_PUSHOVER_GROUP_KEY', 'placeholder_group_key')
       },
       "web_push" => {
-        "vapid_public_key" => "BN70tb6Q7DpgSx2kNvseGfZa_-wqTm0JE6y4--kTT24uzLF-BpO1cL8S71YE5YDyNLAvTczWpPNusoA684ze0V0=",
-        "vapid_private_key" => "qST2OFRIwzbuKcH2y6f7Vf2dhtSfeetF7cnMuZbLmAE="
+        "vapid_public_key" => ENV.fetch('SEED_VAPID_PUBLIC_KEY', 'placeholder_public_key'),
+        "vapid_private_key" => ENV.fetch('SEED_VAPID_PRIVATE_KEY', 'placeholder_private_key')
       },
-      "sms_sender_id" => "6716877162",
+      "sms_sender_id" => ENV.fetch('SEED_SMS_SENDER_ID', '1234567890'),
       "deposit_amount" => 0,
       "hero_image_url" => "https://hafaloha.s3.ap-southeast-2.amazonaws.com/hero_1_1742777620.webp",
       "payment_gateway" => {
-        "client_id" => "AQKVPV4kvmmOQVy_4Ypsrp6MAVgKIEhbJWQjiVqVLlLMQQ8FeheMhAApG-cWsBbxoCdHZhiK0IsZaQSf",
+        "client_id" => ENV.fetch('SEED_PAYMENT_CLIENT_ID', 'placeholder_client_id'),
         "test_mode" => true,
         "environment" => "sandbox",
         "payment_processor" => "stripe",
-        "webhook_secret" => "whsec_qrbMPAqebzECBXmTl7xd1NfEr4oAOOgL",
-        "publishable_key" => "pk_live_51R3q0bAl8GLLNpHbC1ffajndnqbPxZ7flYIPmwherMVrbUagJm72wT4bLEcu4zDC6Z6FPnUiEF0lQSmCH0BaTtIE00PiqRmRSM",
-        "paypal_webhook_id" => "7EH30924FX663913D",
-        "paypal_webhook_secret" => ""
+        "webhook_secret" => ENV.fetch('SEED_PAYMENT_WEBHOOK_SECRET', 'placeholder_webhook_secret'),
+        "publishable_key" => ENV.fetch('SEED_PAYMENT_PUBLISHABLE_KEY', 'placeholder_publishable_key'),
+        "paypal_webhook_id" => ENV.fetch('SEED_PAYPAL_WEBHOOK_ID', 'placeholder_paypal_webhook_id'),
+        "paypal_webhook_secret" => ENV.fetch('SEED_PAYPAL_WEBHOOK_SECRET', '')
       },
       "require_deposit" => false,
       "spinner_image_url" => "https://hafaloha.s3.ap-southeast-2.amazonaws.com/spinner_1_1742509156.png",
@@ -122,36 +122,36 @@ unless Restaurant.exists?(name: "Hafaloha")
   )
 
   admin3 = User.create!(
-    email: "tara@hafaloha.com",
-    password: "password123",
-    password_confirmation: "password123",
+    email: "admin3@example.com",
+    password: ENV.fetch('SEED_ADMIN_PASSWORD', 'password123'),
+    password_confirmation: ENV.fetch('SEED_ADMIN_PASSWORD', 'password123'),
     role: "admin",
     restaurant_id: restaurant.id,
-    first_name: "Tara",
-    last_name: "Kaae",
-    phone: "+16716877322"
+    first_name: "Admin",
+    last_name: "Three",
+    phone: "+11234567892"
   )
   
   admin4 = User.create!(
-    email: "tasirose@hafaloha.com",
-    password: "password123",
-    password_confirmation: "password123",
+    email: "admin4@example.com",
+    password: ENV.fetch('SEED_ADMIN_PASSWORD', 'password123'),
+    password_confirmation: ENV.fetch('SEED_ADMIN_PASSWORD', 'password123'),
     role: "admin",
     restaurant_id: restaurant.id,
-    first_name: "Tasi-Rose",
-    last_name: "Camacho",
-    phone: "+16716862506"
+    first_name: "Admin",
+    last_name: "Four",
+    phone: "+11234567893"
   )
   
   admin5 = User.create!(
-    email: "rheada@hafaloha.com",
-    password: "password123",
-    password_confirmation: "password123",
+    email: "admin5@example.com",
+    password: ENV.fetch('SEED_ADMIN_PASSWORD', 'password123'),
+    password_confirmation: ENV.fetch('SEED_ADMIN_PASSWORD', 'password123'),
     role: "admin",
     restaurant_id: restaurant.id,
-    first_name: "Rhea'da",
-    last_name: "Macaraeg",
-    phone: "+18085542317"
+    first_name: "Admin",
+    last_name: "Five",
+    phone: "+11234567894"
   )
 
   puts "Created admin users"
@@ -545,7 +545,7 @@ unless Restaurant.exists?(name: "Hafaloha")
       width: 80,
       height: 80
     )
-  }
+  end
 
   # Outside section seats
   (1..4).each do |i|
@@ -559,7 +559,7 @@ unless Restaurant.exists?(name: "Hafaloha")
       width: 80,
       height: 80
     )
-  }
+  end
 
   # Bar seats
   (1..8).each do |i|
@@ -573,7 +573,7 @@ unless Restaurant.exists?(name: "Hafaloha")
       width: 40,
       height: 40
     )
-  }
+  end
 
   # Private room seats
   (1..3).each do |i|
@@ -587,7 +587,7 @@ unless Restaurant.exists?(name: "Hafaloha")
       width: 100,
       height: 60
     )
-  }
+  end
 
   puts "Created layout, seat sections, and seats"
 
@@ -708,7 +708,7 @@ unless Restaurant.exists?(name: "Hafaloha")
   [
     {action: "restaurant.created", actor_id: admin1.id, actor_type: "User", target_id: restaurant.id, target_type: "Restaurant", changes: {name: [nil, "Hafaloha"], address: [nil, "955 Pale San Vitores Rd, Tamuning, Guam 96913"]}},
     {action: "menu.created", actor_id: admin1.id, actor_type: "User", target_id: main_menu.id, target_type: "Menu", changes: {name: [nil, "Main Menu"], active: [nil, true]}},
-    {action: "user.created", actor_id: admin1.id, actor_type: "User", target_id: admin2.id, target_type: "User", changes: {email: [nil, "sales@hafaloha.com"], role: [nil, "admin"]}},
+    {action: "user.created", actor_id: admin1.id, actor_type: "User", target_id: admin2.id, target_type: "User", changes: {email: [nil, "admin2@example.com"], role: [nil, "admin"]}},
     {action: "menu_item.created", actor_id: admin2.id, actor_type: "User", target_id: build_a_bowl.id, target_type: "MenuItem", changes: {name: [nil, "Build-A-Bowl"], price: [nil, 8.0]}},
     {action: "layout.created", actor_id: admin3.id, actor_type: "User", target_id: layout.id, target_type: "Layout", changes: {name: [nil, "Main Layout"]}}
   ].each do |log|
