@@ -5,16 +5,17 @@ class StripeController < ApplicationController
 
   # Create a payment intent for Stripe
   def create_intent
-    result = tenant_stripe_service.create_payment_intent(
-      params[:amount],
-      params[:currency] || "USD"
-    )
+    begin
+      result = tenant_stripe_service.create_payment_intent(
+        params[:amount],
+        params[:currency] || "USD"
+      )
 
-    if result[:success]
-      render json: { client_secret: result[:client_secret] }
-    else
-      render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
-    end
+      if result[:success]
+        render json: { client_secret: result[:client_secret] }
+      else
+        render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
+      end
     rescue Stripe::StripeError => e
       render json: { error: e.message }, status: :unprocessable_entity
     rescue => e
