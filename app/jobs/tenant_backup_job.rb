@@ -6,8 +6,20 @@
 class TenantBackupJob < ApplicationJob
   queue_as :tenant_operations
   
-  # Include Sidekiq Status for tracking job progress
-  include Sidekiq::Status::Worker
+  # Include Sidekiq Status for tracking job progress if available
+  begin
+    include Sidekiq::Status::Worker if defined?(Sidekiq::Status)
+  rescue NameError
+    # Sidekiq::Status is not available, continue without it
+    Rails.logger.warn "Sidekiq::Status not available, job progress tracking disabled"
+    
+    # Define a fallback store method if Sidekiq::Status is not available
+    def store(status: nil, progress: nil, message: nil, **args)
+      # Log the status update instead
+      status_info = { status: status, progress: progress, message: message }.merge(args).compact
+      Rails.logger.info("Job status update: #{status_info.inspect}")
+    end
+  end
   
   # Perform the backup operation
   # @param operation [String] the operation to perform (export, import, clone, migrate)
