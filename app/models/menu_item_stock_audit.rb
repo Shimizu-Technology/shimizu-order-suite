@@ -1,5 +1,8 @@
 class MenuItemStockAudit < ApplicationRecord
-  apply_default_scope
+  include IndirectTenantScoped
+  
+  # Define the path to restaurant for tenant isolation
+  tenant_path through: [:menu_item, :menu], foreign_key: 'restaurant_id'
 
   belongs_to :menu_item
   belongs_to :user, optional: true

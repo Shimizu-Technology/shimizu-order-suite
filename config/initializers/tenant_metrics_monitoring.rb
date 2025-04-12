@@ -96,30 +96,84 @@ Thread.new do
       # Sleep for a while to avoid excessive DB queries
       sleep(ENV.fetch('METRICS_UPDATE_INTERVAL', 300).to_i)
       
+      # Get the list of models with indirect tenant relationships
+      indirect_tenant_models = Rails.application.config.indirect_tenant_models rescue []
+      
       # Update resource usage metrics for each restaurant
       Restaurant.find_each do |restaurant|
-        # Count orders
-        order_count = Order.where(restaurant_id: restaurant.id).count
-        tenant_resource_usage.set(order_count, labels: { restaurant_id: restaurant.id, resource: 'orders' })
+        # Set the current restaurant context for models with indirect relationships
+        ActiveRecord::Base.current_restaurant = restaurant
         
-        # Count users
-        user_count = User.where(restaurant_id: restaurant.id).count
-        tenant_resource_usage.set(user_count, labels: { restaurant_id: restaurant.id, resource: 'users' })
+        # Count orders - using proper tenant isolation method
+        begin
+          order_count = if Order.column_names.include?("restaurant_id")
+            Order.where(restaurant_id: restaurant.id).count
+          elsif indirect_tenant_models.include?("Order")
+            # Use the model's tenant scope method if it exists
+            Order.respond_to?(:with_restaurant_scope) ? Order.with_restaurant_scope.count : Order.all.count
+          else
+            0
+          end
+          tenant_resource_usage.set(order_count, labels: { restaurant_id: restaurant.id, resource: 'orders' })
+        rescue => e
+          Rails.logger.error("Error counting orders for restaurant #{restaurant.id}: #{e.message}")
+        end
         
-        # Count menu items
-        menu_item_count = MenuItem.where(restaurant_id: restaurant.id).count
-        tenant_resource_usage.set(menu_item_count, labels: { restaurant_id: restaurant.id, resource: 'menu_items' })
+        # Count users - using proper tenant isolation method
+        begin
+          user_count = if User.column_names.include?("restaurant_id")
+            User.where(restaurant_id: restaurant.id).count
+          elsif indirect_tenant_models.include?("User")
+            User.respond_to?(:with_restaurant_scope) ? User.with_restaurant_scope.count : User.all.count
+          else
+            0
+          end
+          tenant_resource_usage.set(user_count, labels: { restaurant_id: restaurant.id, resource: 'users' })
+        rescue => e
+          Rails.logger.error("Error counting users for restaurant #{restaurant.id}: #{e.message}")
+        end
         
-        # Count reservations
-        reservation_count = Reservation.where(restaurant_id: restaurant.id).count
-        tenant_resource_usage.set(reservation_count, labels: { restaurant_id: restaurant.id, resource: 'reservations' })
+        # Count menu items - using proper tenant isolation method
+        begin
+          menu_item_count = if MenuItem.column_names.include?("restaurant_id")
+            MenuItem.where(restaurant_id: restaurant.id).count
+          elsif indirect_tenant_models.include?("MenuItem")
+            MenuItem.respond_to?(:with_restaurant_scope) ? MenuItem.with_restaurant_scope.count : MenuItem.all.count
+          else
+            0
+          end
+          tenant_resource_usage.set(menu_item_count, labels: { restaurant_id: restaurant.id, resource: 'menu_items' })
+        rescue => e
+          Rails.logger.error("Error counting menu items for restaurant #{restaurant.id}: #{e.message}")
+        end
+        
+        # Count reservations - using proper tenant isolation method
+        begin
+          reservation_count = if Reservation.column_names.include?("restaurant_id")
+            Reservation.where(restaurant_id: restaurant.id).count
+          elsif indirect_tenant_models.include?("Reservation")
+            Reservation.respond_to?(:with_restaurant_scope) ? Reservation.with_restaurant_scope.count : Reservation.all.count
+          else
+            0
+          end
+          tenant_resource_usage.set(reservation_count, labels: { restaurant_id: restaurant.id, resource: 'reservations' })
+        rescue => e
+          Rails.logger.error("Error counting reservations for restaurant #{restaurant.id}: #{e.message}")
+        end
         
         # Update DAU/MAU metrics
-        dau = TenantMetricsService.daily_active_users(restaurant)
-        mau = TenantMetricsService.monthly_active_users(restaurant)
+        begin
+          dau = TenantMetricsService.daily_active_users(restaurant)
+          mau = TenantMetricsService.monthly_active_users(restaurant)
+          
+          tenant_dau_gauge.set(dau, labels: { restaurant_id: restaurant.id })
+          tenant_mau_gauge.set(mau, labels: { restaurant_id: restaurant.id })
+        rescue => e
+          Rails.logger.error("Error updating DAU/MAU metrics for restaurant #{restaurant.id}: #{e.message}")
+        end
         
-        tenant_dau_gauge.set(dau, labels: { restaurant_id: restaurant.id })
-        tenant_mau_gauge.set(mau, labels: { restaurant_id: restaurant.id })
+        # Clear the tenant context after processing this restaurant
+        ActiveRecord::Base.current_restaurant = nil
       end
     rescue => e
       # Log error but don't crash the thread
@@ -187,9 +241,25 @@ ActiveSupport::Notifications.subscribe('perform.active_job') do |*args|
   job = payload[:job]
   job_class = job.class.name
   
-  # Skip if we don't have a restaurant_id
-  restaurant_id = job.arguments.first.try(:restaurant_id) if job.arguments.first.is_a?(ActiveRecord::Base)
+  # Try to determine restaurant_id from various sources
+  restaurant_id = nil
+  
+  # First check if the job has a restaurant_id method
+  restaurant_id = job.restaurant_id if job.respond_to?(:restaurant_id) && job.restaurant_id.present?
+  
+  # Next check if the first argument is an ActiveRecord object with restaurant_id
+  if restaurant_id.nil? && job.arguments.first.is_a?(ActiveRecord::Base)
+    if job.arguments.first.respond_to?(:restaurant_id) && job.arguments.first.restaurant_id.present?
+      restaurant_id = job.arguments.first.restaurant_id
+    elsif job.arguments.first.respond_to?(:restaurant) && job.arguments.first.restaurant.present?
+      restaurant_id = job.arguments.first.restaurant.id
+    end
+  end
+  
+  # Check if the first argument is a Hash with restaurant_id
   restaurant_id ||= job.arguments.first[:restaurant_id] if job.arguments.first.is_a?(Hash) && job.arguments.first[:restaurant_id]
+  
+  # Skip if we still don't have a restaurant_id
   next unless restaurant_id.present?
   
   # Calculate duration

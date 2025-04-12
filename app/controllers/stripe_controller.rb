@@ -6,6 +6,24 @@ class StripeController < ApplicationController
   # Create a payment intent for Stripe
   def create_intent
     begin
+      # Ensure we have a restaurant_id parameter
+      unless params[:restaurant_id].present?
+        render json: { error: "restaurant_id is required" }, status: :unprocessable_entity
+        return
+      end
+      
+      # Find the restaurant
+      restaurant = Restaurant.find_by(id: params[:restaurant_id])
+      unless restaurant
+        render json: { error: "Restaurant not found" }, status: :not_found
+        return
+      end
+      
+      # Set the current restaurant context
+      @current_restaurant = restaurant
+      ActiveRecord::Base.current_restaurant = restaurant
+      
+      # Create the payment intent
       result = tenant_stripe_service.create_payment_intent(
         params[:amount],
         params[:currency] || "USD"
@@ -19,7 +37,11 @@ class StripeController < ApplicationController
     rescue Stripe::StripeError => e
       render json: { error: e.message }, status: :unprocessable_entity
     rescue => e
+      Rails.logger.error("Error creating payment intent: #{e.message}\n#{e.backtrace.join("\n")}")
       render json: { error: "An unexpected error occurred" }, status: :internal_server_error
+    ensure
+      # Clear the tenant context
+      ActiveRecord::Base.current_restaurant = nil
     end
   end
 
@@ -619,7 +641,17 @@ class StripeController < ApplicationController
   
   def ensure_tenant_context
     unless current_restaurant.present?
+      # In development, be more permissive and use the first restaurant if none is specified
+      if Rails.env.development? || Rails.env.test?
+        @current_restaurant = Restaurant.first if Restaurant.exists?
+        ActiveRecord::Base.current_restaurant = @current_restaurant
+        return if @current_restaurant.present?
+      end
+      
       render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+    else
+      # Ensure ActiveRecord::Base.current_restaurant is set
+      ActiveRecord::Base.current_restaurant = current_restaurant
     end
   end
 end

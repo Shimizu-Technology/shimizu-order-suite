@@ -1,12 +1,12 @@
 # app/models/option_group.rb
 class OptionGroup < ApplicationRecord
-  apply_default_scope
+  include IndirectTenantScoped
+  
+  # Define the path to restaurant for tenant isolation
+  tenant_path through: [:menu_item, :menu], foreign_key: 'restaurant_id'
 
   belongs_to :menu_item
   has_many :options, dependent: :destroy
-  # Define path to restaurant through associations for tenant isolation
-  has_one :menu, through: :menu_item
-  has_one :restaurant, through: :menu
 
   validates :name, presence: true
   validates :min_select, numericality: { greater_than_or_equal_to: 0 }
@@ -20,14 +20,7 @@ class OptionGroup < ApplicationRecord
     end
   end
 
-  # Override with_restaurant_scope for indirect restaurant association
-  def self.with_restaurant_scope
-    if current_restaurant
-      joins(menu_item: :menu).where(menus: { restaurant_id: current_restaurant.id })
-    else
-      all
-    end
-  end
+  # Note: with_restaurant_scope is now provided by IndirectTenantScoped
 
   # We remove the as_json override entirely.
   # The controller calls `include: { options: { methods: [:additional_price_float] }}`.

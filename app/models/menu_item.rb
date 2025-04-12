@@ -2,8 +2,10 @@
 
 class MenuItem < ApplicationRecord
   include Broadcastable
-  # We don't include TenantScoped directly because MenuItem has an indirect
-  # relationship to Restaurant through Menu
+  include IndirectTenantScoped
+  
+  # Define the path to restaurant for tenant isolation
+  tenant_path through: :menu, foreign_key: 'restaurant_id'
   
   # Define which attributes should trigger broadcasts
   broadcasts_on :name, :price, :description, :stock_quantity, :damaged_quantity, 
@@ -12,11 +14,6 @@ class MenuItem < ApplicationRecord
   belongs_to :menu
   has_many :option_groups, dependent: :destroy
   has_many :menu_item_stock_audits, dependent: :destroy
-  # Define path to restaurant through associations for tenant isolation
-  has_one :restaurant, through: :menu
-  
-  # Apply default scope for tenant isolation
-  default_scope { with_restaurant_scope }
 
   # Callback to reset inventory fields when tracking is disabled
   before_save :reset_inventory_fields_if_tracking_disabled
@@ -35,14 +32,7 @@ class MenuItem < ApplicationRecord
   validates :damaged_quantity, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
   validates :low_stock_threshold, numericality: { only_integer: true, greater_than_or_equal_to: 1 }, allow_nil: true
 
-  # Override with_restaurant_scope for indirect restaurant association
-  def self.with_restaurant_scope
-    if ActiveRecord::Base.current_restaurant
-      joins(:menu).where(menus: { restaurant_id: ActiveRecord::Base.current_restaurant.id })
-    else
-      all
-    end
-  end
+  # Note: with_restaurant_scope is now provided by IndirectTenantScoped
 
   # Optional: validation for promo_label length
   # validates :promo_label, length: { maximum: 50 }, allow_nil: true
