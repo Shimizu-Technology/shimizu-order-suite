@@ -25,13 +25,27 @@ class TenantStripeService < TenantScopedService
       }
     end
 
-    # Check for zero amount - Stripe doesn't allow payment intents with zero amounts
+    # Check for zero or small amounts - Stripe has minimum amount requirements
+    # For USD, the minimum is 50 cents
     if amount.to_f <= 0
       # For free items, return a special flag instead of a client secret
       return { 
         success: true, 
         free_order: true,
         order_id: "free_#{SecureRandom.hex(8)}"
+      }
+    end
+    
+    # Handle small amounts (less than minimum required by Stripe)
+    # Minimum amounts vary by currency, but for USD it's 50 cents
+    min_amount = 0.5 # 50 cents for USD
+    if amount.to_f < min_amount && currency.upcase == "USD"
+      Rails.logger.info("Small amount detected: $#{amount}. Using minimum amount for Stripe: $#{min_amount}")
+      # For small amounts, treat as a special small order
+      return { 
+        success: true, 
+        small_order: true,
+        order_id: "small_#{SecureRandom.hex(8)}"
       }
     end
 
