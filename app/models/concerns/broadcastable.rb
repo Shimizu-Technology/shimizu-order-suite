@@ -37,20 +37,29 @@ module Broadcastable
   
   # Helper method to get restaurant_id from various model structures
   def get_restaurant_id
+    # Try multiple approaches to get the restaurant_id
+    restaurant_id = nil
+    
+    # First try direct restaurant_id field
     if self.respond_to?(:restaurant_id) && self.restaurant_id.present?
-      # Direct restaurant_id field
-      self.restaurant_id
+      restaurant_id = self.restaurant_id
+    # Then try direct restaurant association
     elsif self.respond_to?(:restaurant) && self.restaurant.present?
-      # Direct restaurant association
-      self.restaurant.id
-    elsif self.respond_to?(:menu) && self.menu.present? && self.menu.respond_to?(:restaurant_id)
-      # MenuItem case - access through menu
-      self.menu.restaurant_id
-    else
-      # Log the issue for debugging
-      Rails.logger.error("[Broadcastable] Cannot determine restaurant_id for #{self.class.name} ##{self.id}")
-      nil
+      restaurant_id = self.restaurant.id
+    # Then try through menu for MenuItem
+    elsif self.class.name == 'MenuItem' && self.respond_to?(:menu) && self.menu.present?
+      restaurant_id = self.menu.restaurant_id
+    # Try to get from ActiveRecord::Base.current_restaurant if available
+    elsif defined?(ActiveRecord::Base.current_restaurant) && ActiveRecord::Base.current_restaurant.present?
+      restaurant_id = ActiveRecord::Base.current_restaurant.id
     end
+    
+    # Log if we couldn't determine the restaurant_id
+    if restaurant_id.nil?
+      Rails.logger.error("[Broadcastable] Cannot determine restaurant_id for #{self.class.name} ##{self.id}")
+    end
+    
+    restaurant_id
   end
 
   def broadcast_changes

@@ -1,17 +1,22 @@
 # app/models/menu_item.rb
 
 class MenuItem < ApplicationRecord
-  include Broadcastable
+  # First define the belongs_to association before any has_many :through associations
+  belongs_to :menu
+  
+  # Include IndirectTenantScoped after defining the menu association
   include IndirectTenantScoped
   
   # Define the path to restaurant for tenant isolation
   tenant_path through: :menu, foreign_key: 'restaurant_id'
   
+  # Include Broadcastable after defining the associations it depends on
+  include Broadcastable
+  
   # Define which attributes should trigger broadcasts
   broadcasts_on :name, :price, :description, :stock_quantity, :damaged_quantity, 
                :low_stock_threshold, :enable_stock_tracking, :hidden, :featured
 
-  belongs_to :menu
   has_many :option_groups, dependent: :destroy
   has_many :menu_item_stock_audits, dependent: :destroy
 

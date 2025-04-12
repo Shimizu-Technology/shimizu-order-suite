@@ -25,6 +25,13 @@ class TenantStripeService < TenantScopedService
       }
     end
 
+    # Check for zero amount - Stripe doesn't allow payment intents with zero amounts
+    if amount.to_f <= 0
+      # For free items, return a dummy success response
+      client_secret = "pi_free_#{SecureRandom.hex(16)}_secret_#{SecureRandom.hex(16)}"
+      return { success: true, client_secret: client_secret }
+    end
+
     # Stripe deals with amounts in cents
     amount_in_cents = (amount.to_f * 100).to_i
 
