@@ -14,8 +14,15 @@ class UsersController < ApplicationController
     # Default role to 'customer' if not provided
     create_params[:role] = "customer" if create_params[:role].blank?
     
-    # Assign a fallback restaurant if none specified
-    unless create_params[:restaurant_id]
+    # IMPORTANT: For multi-tenant user creation, we need to use the frontend context
+    # This allows the same email to be used across different restaurants
+    frontend_restaurant_id = request.headers['X-Frontend-Restaurant-ID']
+    
+    if frontend_restaurant_id.present?
+      # Override the restaurant_id with the one from the frontend context
+      create_params[:restaurant_id] = frontend_restaurant_id
+    elsif !create_params[:restaurant_id]
+      # Fallback only if no restaurant_id is specified anywhere
       default_rest = Restaurant.find_by(name: "Hafaloha")
       create_params[:restaurant_id] = default_rest.id if default_rest
     end
@@ -31,10 +38,15 @@ class UsersController < ApplicationController
     end
     
     # Set the current_restaurant for the service
-    @current_restaurant = Restaurant.find_by(id: create_params[:restaurant_id])
+    requested_restaurant = Restaurant.find_by(id: create_params[:restaurant_id])
     
-    # Create the user using the service
-    result = user_service.create_user(create_params)
+    # Important: We need to ensure we're using the restaurant from params, not from tenant context
+    # This allows users to be created for a specific restaurant, even if the request comes from another
+    @current_restaurant = requested_restaurant
+    
+    # Create the user using the service, but don't override the restaurant_id
+    # This is crucial for multi-tenant user creation with the same email
+    result = user_service.create_user(create_params, preserve_restaurant_id: true)
     
     if result[:success]
       user = result[:user]

@@ -7,9 +7,32 @@ class PasswordService
   end
   
   # Handle forgot password request
-  def forgot_password(email)
+  def forgot_password(email, restaurant_id = nil)
     begin
-      user = User.find_by(email: email.to_s.downcase)
+      downcased_email = email.to_s.downcase
+      user = nil
+      
+      # If restaurant_id is provided, find user in that specific restaurant
+      if restaurant_id.present?
+        user = User.find_by("LOWER(email) = ? AND restaurant_id = ?", downcased_email, restaurant_id.to_i)
+      end
+      
+      # If no user found or no restaurant_id provided, try to find any user with this email
+      # This maintains backward compatibility with existing password reset flows
+      if user.nil?
+        users = User.where("LOWER(email) = ?", downcased_email).to_a
+        
+        # If multiple users found (same email across different restaurants),
+        # prioritize in this order: 1) super_admin, 2) admin, 3) staff, 4) customer
+        if users.size > 1
+          user = users.find { |u| u.role == 'super_admin' } || 
+                 users.find { |u| u.role == 'admin' } || 
+                 users.find { |u| u.role == 'staff' } || 
+                 users.first
+        else
+          user = users.first
+        end
+      end
       
       if user
         # 1) Generate the reset token
@@ -33,9 +56,32 @@ class PasswordService
   end
   
   # Handle password reset
-  def reset_password(email, token, new_password, new_password_confirmation)
+  def reset_password(email, token, new_password, new_password_confirmation, restaurant_id = nil)
     begin
-      user = User.find_by(email: email.to_s.downcase)
+      downcased_email = email.to_s.downcase
+      user = nil
+      
+      # If restaurant_id is provided, find user in that specific restaurant
+      if restaurant_id.present?
+        user = User.find_by("LOWER(email) = ? AND restaurant_id = ?", downcased_email, restaurant_id.to_i)
+      end
+      
+      # If no user found or no restaurant_id provided, try to find any user with this email
+      # This maintains backward compatibility with existing password reset flows
+      if user.nil?
+        users = User.where("LOWER(email) = ?", downcased_email).to_a
+        
+        # If multiple users found (same email across different restaurants),
+        # prioritize in this order: 1) super_admin, 2) admin, 3) staff, 4) customer
+        if users.size > 1
+          user = users.find { |u| u.role == 'super_admin' } || 
+                 users.find { |u| u.role == 'admin' } || 
+                 users.find { |u| u.role == 'staff' } || 
+                 users.first
+        else
+          user = users.first
+        end
+      end
       
       unless user
         return { success: false, errors: ["Invalid link or user not found"], status: :unprocessable_entity }

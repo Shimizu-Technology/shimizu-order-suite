@@ -13,11 +13,22 @@ class SessionService
   def authenticate(email, password, restaurant_id = nil)
     begin
       # 1) We downcase the email => "john@EXAMPLE.com" => "john@example.com"
-      # 2) Find by LOWER(email) = downcased email
-      user = User.find_by(
-        "LOWER(email) = ?",
-        email.to_s.downcase
-      )
+      # 2) Find user by email and restaurant context if provided
+      downcased_email = email.to_s.downcase
+      
+      if restaurant_id.present?
+        # If restaurant_id is provided, try to find a user with that specific email and restaurant_id
+        user = User.find_by("LOWER(email) = ? AND restaurant_id = ?", downcased_email, restaurant_id.to_i)
+        
+        # If no user found and this might be a super_admin login attempt, try to find a super_admin with this email
+        if user.nil?
+          user = User.find_by("LOWER(email) = ? AND role = 'super_admin'", downcased_email)
+        end
+      else
+        # If no restaurant_id is provided, just find by email (legacy behavior)
+        # This should be rare since we typically have restaurant context from frontend
+        user = User.find_by("LOWER(email) = ?", downcased_email)
+      end
       
       if user && user.authenticate(password)
         # For non-super_admin users, enforce restaurant-specific authentication

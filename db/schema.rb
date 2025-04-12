@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_04_09_031932) do
+ActiveRecord::Schema[7.2].define(version: 2025_04_12_040941) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -565,7 +565,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_09_031932) do
     t.boolean "phone_verified", default: false
     t.string "verification_code"
     t.datetime "verification_code_sent_at"
-    t.index "lower((email)::text)", name: "index_users_on_lower_email", unique: true
+    t.index "lower((email)::text), COALESCE(restaurant_id, (0)::bigint)", name: "index_users_on_lower_email_and_restaurant_id", unique: true, comment: "Ensures email uniqueness within each restaurant, with special handling for super_admins"
     t.index ["phone"], name: "index_users_on_phone_not_null", where: "(phone IS NOT NULL)"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
     t.index ["restaurant_id"], name: "index_users_on_restaurant_id"

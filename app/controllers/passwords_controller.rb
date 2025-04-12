@@ -13,8 +13,11 @@ class PasswordsController < ApplicationController
 
   # POST /password/forgot
   def forgot
-    # Use the PasswordService to handle the forgot password request
-    result = password_service.forgot_password(params[:email])
+    # Extract restaurant_id from params or headers
+    restaurant_id = params[:restaurant_id] || request.headers['X-Frontend-Restaurant-ID']
+    
+    # Use the PasswordService to handle the forgot password request with restaurant context
+    result = password_service.forgot_password(params[:email], restaurant_id)
     
     if result[:success]
       render json: { message: result[:message] }
@@ -25,12 +28,16 @@ class PasswordsController < ApplicationController
 
   # PATCH /password/reset
   def reset
-    # Use the PasswordService to handle the password reset
+    # Extract restaurant_id from params or headers
+    restaurant_id = params[:restaurant_id] || request.headers['X-Frontend-Restaurant-ID']
+    
+    # Use the PasswordService to handle the password reset with restaurant context
     result = password_service.reset_password(
       params[:email],
       params[:token],
       params[:new_password],
-      params[:new_password_confirmation]
+      params[:new_password_confirmation],
+      restaurant_id
     )
     
     if result[:success]

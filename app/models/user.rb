@@ -42,7 +42,8 @@ class User < ApplicationRecord
   attr_accessor :skip_password_validation
 
   # Email validations
-  validates :email, presence: true, uniqueness: { case_sensitive: false }
+  # Email must be unique within a restaurant, but can be reused across different restaurants
+  validates :email, presence: true, uniqueness: { scope: :restaurant_id, case_sensitive: false }
 
   # We only require :password_digest presence if we're not skipping password validation
   validates :password_digest, presence: true, unless: :skip_password_validation

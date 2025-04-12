@@ -61,10 +61,13 @@ class UserService < TenantScopedService
   end
 
   # Create a new user
-  def create_user(user_params)
+  def create_user(user_params, preserve_restaurant_id: false)
     begin
-      # Ensure the restaurant_id is set to the current restaurant
-      user_params[:restaurant_id] = restaurant.id
+      # Only override restaurant_id if not explicitly preserving it
+      # This is important for multi-tenant user creation with the same email
+      unless preserve_restaurant_id
+        user_params[:restaurant_id] = restaurant.id
+      end
       
       # Create the user
       user = User.new(user_params)
