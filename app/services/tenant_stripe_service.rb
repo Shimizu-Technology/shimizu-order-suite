@@ -70,7 +70,11 @@ class TenantStripeService < TenantScopedService
     amount_in_cents = (amount.to_f * 100).to_i
 
     begin
-      # Create a payment intent with Stripe
+      # Set the API key for this specific restaurant
+      # This is crucial for multi-tenant applications where each restaurant has its own Stripe account
+      secret_key = payment_settings["secret_key"]
+      
+      # Create a payment intent with Stripe using the restaurant's API key
       payment_intent = Stripe::PaymentIntent.create({
         amount: amount_in_cents,
         currency: currency.downcase,
@@ -81,12 +85,25 @@ class TenantStripeService < TenantScopedService
         automatic_payment_methods: {
           enabled: true
         }
+      }, {
+        api_key: secret_key # Pass the restaurant-specific API key
       })
 
       { success: true, client_secret: payment_intent.client_secret }
     rescue Stripe::StripeError => e
+      # Log detailed Stripe error information
+      Rails.logger.error("Stripe Error for restaurant #{@restaurant.id} (#{@restaurant.name}): #{e.message}")
+      Rails.logger.error("Stripe Error Type: #{e.class.name}")
+      Rails.logger.error("Stripe Error HTTP Status: #{e.http_status}")
+      Rails.logger.error("Stripe Error Code: #{e.code}")
+      Rails.logger.error("Stripe Error JSON Body: #{e.json_body}")
+      
       { success: false, errors: [e.message], status: :unprocessable_entity }
     rescue => e
+      # Log general error information
+      Rails.logger.error("Unexpected error for restaurant #{@restaurant.id} (#{@restaurant.name}) when creating payment intent: #{e.message}")
+      Rails.logger.error("Error Backtrace: #{e.backtrace.join("\n")}")
+      
       { success: false, errors: ["An unexpected error occurred: #{e.message}"], status: :internal_server_error }
     end
   end
@@ -108,9 +125,13 @@ class TenantStripeService < TenantScopedService
     end
     
     begin
-      # Verify the webhook signature
+      # Get the secret key for this restaurant
+      secret_key = payment_settings["secret_key"]
+      
+      # Verify the webhook signature using the restaurant's API key
       event = Stripe::Webhook.construct_event(
-        payload, signature, webhook_secret
+        payload, signature, webhook_secret,
+        { api_key: secret_key } # Pass the restaurant-specific API key
       )
       
       # Process the event based on its type

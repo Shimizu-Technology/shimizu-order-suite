@@ -23,6 +23,17 @@ class StripeController < ApplicationController
       @current_restaurant = restaurant
       ActiveRecord::Base.current_restaurant = restaurant
       
+      # Log restaurant information for debugging
+      Rails.logger.info("Creating payment intent for restaurant: #{restaurant.id} (#{restaurant.name})")
+      Rails.logger.info("Amount: #{params[:amount]}, Currency: #{params[:currency] || 'USD'}")
+      
+      # Log Stripe configuration (with sensitive parts redacted)
+      payment_settings = restaurant.admin_settings&.dig("payment_gateway") || {}
+      has_secret_key = payment_settings["secret_key"].present? ? "Yes" : "No"
+      has_publishable_key = payment_settings["publishable_key"].present? ? "Yes" : "No"
+      Rails.logger.info("Restaurant has secret_key: #{has_secret_key}, publishable_key: #{has_publishable_key}")
+      Rails.logger.info("Test mode: #{payment_settings['test_mode'] ? 'Enabled' : 'Disabled'}")
+      
       # Create the payment intent
       result = tenant_stripe_service.create_payment_intent(
         params[:amount],
