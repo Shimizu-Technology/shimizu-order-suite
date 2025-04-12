@@ -11,10 +11,10 @@
         <tr>
           <td align="center" style="background-color: <%= @header_color %>; padding: 20px;">
             <!-- Optionally place a brand logo here:
-            <img src="https://example.com/logo.png" alt="Håfaloha" width="150" style="display:block; border:0;" />
+            <img src="https://example.com/logo.png" alt="<%= @restaurant&.name || 'Restaurant' %>" width="150" style="display:block; border:0;" />
             -->
             <h1 style="margin: 0; font-size: 24px; color: #ffffff; font-family: 'Helvetica Neue', Arial, sans-serif;">
-              Håfaloha Order Update
+              <%= @restaurant&.name || 'Restaurant' %> Order Update
             </h1>
           </td>
         </tr>
@@ -66,7 +66,7 @@
 
             <!-- Closing line -->
             <p style="margin: 0; color: #333333; font-size: 16px; line-height: 24px;">
-              Thank you for choosing Håfaloha — we appreciate your business!
+              Thank you for choosing <%= @restaurant&.name || 'Restaurant' %> — we appreciate your business!
             </p>
 
           </td>
@@ -76,8 +76,8 @@
         <tr>
           <td style="padding: 20px 30px; background-color: #f2f2f2; color: #555555; font-size: 14px; line-height: 20px; border-top: 1px solid #dddddd;">
             <p style="margin: 0;">
-              <strong>Håfaloha</strong><br/>
-              Tamuning, Guam | (671) 989-3444 | 11AM–9PM Daily
+              <strong><%= @restaurant&.name || 'Restaurant' %></strong><br/>
+              <%= @restaurant&.address || '' %> | <%= @restaurant&.phone_number || '' %> | <%= @restaurant&.hours || '' %>
             </p>
           </td>
         </tr>

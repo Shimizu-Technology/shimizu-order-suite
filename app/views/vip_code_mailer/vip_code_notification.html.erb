@@ -74,7 +74,7 @@
       
       <p><strong>How to use your VIP code:</strong></p>
       <ol>
-        <li>Visit our online ordering page at <a href="<%= ENV['FRONTEND_URL'] %>"><%= ENV['FRONTEND_URL'] %></a></li>
+        <li>Visit our online ordering page at <a href="<%= @frontend_url %>"><%= @frontend_url %></a></li>
         <li>Add your desired items to your cart</li>
         <li>Enter your VIP code during checkout</li>
         <li>Skip the lines and enjoy priority service!</li>
@@ -100,7 +100,7 @@
       <p>Best regards,<br>
       The <%= @restaurant.name %> Team</p>
       
-      <a href="<%= ENV['FRONTEND_URL'] %>" class="button">Order Now</a>
+      <a href="<%= @frontend_url %>" class="button">Order Now</a>
     </div>
     
     <div class="footer">

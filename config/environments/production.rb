@@ -121,20 +121,46 @@ Rails.application.configure do
   # config.hosts = [...]
   
   # Action Cable configuration for production
-  # Allow WebSocket connections from the frontend URL
+  # Allow WebSocket connections from all restaurant frontend URLs
+  
+  # Start with the default frontend URL from the environment variable
+  allowed_origins = []
   if ENV['FRONTEND_URL']
+    allowed_origins << ENV['FRONTEND_URL']
+    
     # Parse the URL to extract protocol, host and port
     frontend_uri = URI.parse(ENV['FRONTEND_URL'])
     frontend_host = frontend_uri.host
     frontend_protocol = frontend_uri.scheme
     
-    # Create allowed origins based on the FRONTEND_URL
-    config.action_cable.allowed_request_origins = [
-      ENV['FRONTEND_URL'],
-      # Also allow subdomains
-      /#{frontend_protocol}:\/\/.*\.#{Regexp.escape(frontend_host)}/
-    ]
+    # Also allow subdomains of the default frontend host
+    allowed_origins << /#{frontend_protocol}:\/\/.*\.#{Regexp.escape(frontend_host)}/
   end
+  
+  # Add all restaurant primary_frontend_urls and allowed_origins
+  begin
+    if defined?(Restaurant) && Restaurant.table_exists?
+      # Add primary_frontend_urls from all restaurants
+      Restaurant.where.not(primary_frontend_url: [nil, '']).pluck(:primary_frontend_url).each do |url|
+        allowed_origins << url unless url.include?('localhost')
+      end
+      
+      # Add allowed_origins from all restaurants
+      Restaurant.all.each do |restaurant|
+        if restaurant.allowed_origins.present?
+          restaurant.allowed_origins.each do |url|
+            allowed_origins << url unless url.include?('localhost')
+          end
+        end
+      end
+    end
+  rescue => e
+    # Log error but continue if database isn't available during initialization
+    Rails.logger.error("Error loading restaurant frontend URLs for Action Cable: #{e.message}")
+  end
+  
+  # Set the allowed request origins for Action Cable
+  config.action_cable.allowed_request_origins = allowed_origins.uniq if allowed_origins.any?
   
   # Use secure WebSockets in production
   # Determine the host URL for Action Cable

@@ -6,7 +6,7 @@
 
         <tr>
           <td align="center" style="background-color: <%= @header_color %>; padding: 20px;">
-            <h1 style="margin: 0; font-size: 24px; color: #ffffff;">Håfaloha Order Ready!</h1>
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff;"><%= @restaurant&.name || 'Restaurant' %> Order Ready!</h1>
           </td>
         </tr>
 
@@ -18,14 +18,14 @@
               Hi <strong><%= @order.contact_name.presence || "Valued Customer" %></strong>,
             </p>
             <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
-              Great news! Your Håfaloha order (<strong>##<%= @order.id %></strong>) is now ready to be picked up.
+              Great news! Your <%= @restaurant&.name || 'Restaurant' %> order (<strong>#<%= @order.id %></strong>) is now ready to be picked up.
             </p>
             <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
               We look forward to seeing you soon. If you have any questions, you can reach us at <strong><%= @order.contact_phone %></strong>.
             </p>
 
             <p style="margin: 0; color: #333; font-size: 16px; line-height: 24px;">
-              Thank you for choosing Håfaloha!
+              Thank you for choosing <%= @restaurant&.name || 'Restaurant' %>!
             </p>
           </td>
         </tr>
@@ -33,8 +33,8 @@
         <tr>
           <td style="padding: 20px 30px; background-color: #f2f2f2; color: #555; font-size: 14px; line-height: 20px; border-top: 1px solid #dddddd;">
             <p style="margin: 0;">
-              <strong>Håfaloha</strong><br/>
-              Tamuning, Guam | (671) 989-3444 | 11AM–9PM Daily
+              <strong><%= @restaurant&.name || 'Restaurant' %></strong><br/>
+              <%= @restaurant&.address || '' %> | <%= @restaurant&.phone_number || '' %> | <%= @restaurant&.hours || '' %>
             </p>
           </td>
         </tr>

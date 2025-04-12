@@ -9,9 +9,12 @@ class PasswordMailer < ApplicationMailer
 
     # URL-encode the email so that '+' stays '%2B', etc.
     safe_email = CGI.escape(@user.email)
+    
+    # Get the frontend URL for this restaurant using our helper method
+    frontend_url = get_frontend_url_for(@restaurant)
 
-    # Build the reset link using safe_email
-    @url = "#{ENV['FRONTEND_URL']}/reset-password?token=#{raw_token}&email=#{safe_email}"
+    # Build the reset link using safe_email and restaurant-specific frontend URL
+    @url = "#{frontend_url}/reset-password?token=#{raw_token}&email=#{safe_email}"
 
     mail(
       to: @user.email,

@@ -123,6 +123,7 @@ class RestaurantsController < ApplicationController
       :time_zone,
       :contact_email,
       :custom_pickup_location,
+      :primary_frontend_url,
       :facebook_url,
       :instagram_url,
       :twitter_url,

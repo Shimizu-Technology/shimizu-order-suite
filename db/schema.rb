@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_04_12_040941) do
+ActiveRecord::Schema[7.2].define(version: 2025_04_12_131121) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -436,6 +436,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_12_040941) do
     t.string "facebook_url"
     t.string "instagram_url"
     t.string "twitter_url"
+    t.string "primary_frontend_url"
     t.index ["current_event_id"], name: "index_restaurants_on_current_event_id"
     t.index ["current_layout_id"], name: "index_restaurants_on_current_layout_id"
     t.index ["current_menu_id"], name: "index_restaurants_on_current_menu_id"

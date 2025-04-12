@@ -304,6 +304,7 @@ class RestaurantService
       time_zone:                  restaurant.time_zone,
       admin_settings:             restaurant.admin_settings,
       allowed_origins:            restaurant.allowed_origins,
+      primary_frontend_url:       restaurant.primary_frontend_url,
       custom_pickup_location:     restaurant.custom_pickup_location,
       # Social media fields
       facebook_url:               restaurant.facebook_url,

@@ -927,10 +927,11 @@ def create_refund
       Stripe.api_key = secret_key
       
       # Get restaurant-specific success and cancel URLs
+      frontend_url = view_context.get_frontend_url_for(restaurant)
       success_url = restaurant.admin_settings&.dig("payment_gateway", "success_url") ||
-                    "#{ENV['FRONTEND_URL'] || 'https://app.hafaloha.com'}/payment-success?session_id={CHECKOUT_SESSION_ID}"
+                    "#{frontend_url}/payment-success?session_id={CHECKOUT_SESSION_ID}"
       cancel_url = restaurant.admin_settings&.dig("payment_gateway", "cancel_url") ||
-                  "#{ENV['FRONTEND_URL'] || 'https://app.hafaloha.com'}/payment-cancel"
+                  "#{frontend_url}/payment-cancel"
       
       # Create a Stripe Checkout Session with a payment link
       session = Stripe::Checkout::Session.create({

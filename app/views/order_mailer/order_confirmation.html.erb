@@ -12,7 +12,7 @@
           <td align="center" style="background-color: <%= @header_color %>; padding: 20px;">
             <h1 style="margin: 0; font-size: 24px; color: #ffffff;
                        font-family: 'Helvetica Neue', Arial, sans-serif;">
-              Håfaloha Order Confirmation
+              <%= @restaurant&.name || 'Restaurant' %> Order Confirmation
             </h1>
           </td>
         </tr>
@@ -92,8 +92,8 @@
                      color: #555; font-size: 14px; line-height: 20px;
                      border-top: 1px solid #ddd;">
             <p style="margin: 0;">
-              <strong>Håfaloha</strong><br/>
-              Tamuning, Guam | (671) 989-3444 | 11AM–9PM Daily
+              <strong><%= @restaurant&.name || 'Restaurant' %></strong><br/>
+              <%= @restaurant&.address || '' %> | <%= @restaurant&.phone_number || '' %> | <%= @restaurant&.hours || '' %>
             </p>
           </td>
         </tr>
