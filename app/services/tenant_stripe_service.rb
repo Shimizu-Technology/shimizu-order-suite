@@ -36,10 +36,27 @@ class TenantStripeService < TenantScopedService
       }
     end
     
-    # Handle small amounts (less than or equal to minimum required by Stripe)
-    # Minimum amounts vary by currency, but for USD it's 50 cents
-    min_amount = 0.5 # 50 cents for USD
-    if amount.to_f <= min_amount && currency.upcase == "USD"
+    # Handle small amounts (less than minimum required by Stripe)
+    # Stripe minimum amounts vary by currency:
+    # - USD: 50 cents
+    # - EUR: 50 cents
+    # - GBP: 30 pence
+    # - etc.
+    min_amounts = {
+      "USD" => 0.5,  # 50 cents
+      "EUR" => 0.5,  # 50 cents
+      "GBP" => 0.3,  # 30 pence
+      "CAD" => 0.5,  # 50 cents
+      "AUD" => 0.5,  # 50 cents
+      "JPY" => 50,   # 50 yen
+    }
+    
+    # Default to 50 cents USD equivalent if currency not in the list
+    min_amount = min_amounts[currency.upcase] || 0.5
+    
+    # Only treat as a small order if amount is LESS than the minimum (not equal)
+    # This ensures we only bypass Stripe for amounts that Stripe can't handle
+    if amount.to_f < min_amount
       Rails.logger.info("Small amount detected: $#{amount}. Using minimum amount for Stripe: $#{min_amount}")
       # For small amounts, treat as a special small order
       return { 
