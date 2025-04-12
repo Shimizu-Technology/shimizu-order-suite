@@ -12,8 +12,11 @@ class SessionsController < ApplicationController
 
   # POST /login
   def create
-    # Use the SessionService to authenticate the user
-    result = session_service.authenticate(params[:email], params[:password])
+    # Extract restaurant_id from params or headers
+    restaurant_id = params[:restaurant_id] || request.headers['X-Frontend-Restaurant-ID']
+    
+    # Use the SessionService to authenticate the user with restaurant context
+    result = session_service.authenticate(params[:email], params[:password], restaurant_id)
     
     if result[:success]
       render json: { jwt: result[:token], user: result[:user] }, status: :created

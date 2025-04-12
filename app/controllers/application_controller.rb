@@ -18,22 +18,28 @@ class ApplicationController < ActionController::API
       decoded = TokenService.verify_token(token)
       @current_user = User.find(decoded["user_id"])
       
-      # Verify restaurant context from token
-      restaurant_id = decoded["restaurant_id"]
-      if restaurant_id.present?
-        @current_restaurant = Restaurant.find_by(id: restaurant_id)
-        
-        # Verify user still belongs to this restaurant
-        unless @current_user.super_admin? || @current_user.restaurant_id == @current_restaurant&.id
-          render json: { errors: "User not authorized for this restaurant" }, status: :forbidden
+      # IMPORTANT: The tenant context is already set in the before_action :set_current_tenant callback
+      # from the TenantIsolation concern, which runs before this method
+      # This ensures that the restaurant_id from the request parameters or headers takes precedence
+      
+      # If we don't have a tenant context yet, try to use the one from the token
+      if !@current_restaurant && !ActiveRecord::Base.current_restaurant
+        restaurant_id = decoded["restaurant_id"]
+        if restaurant_id.present?
+          @current_restaurant = Restaurant.find_by(id: restaurant_id)
+          
+          # Verify user still belongs to this restaurant
+          unless @current_user.super_admin? || @current_user.restaurant_id == @current_restaurant&.id
+            render json: { errors: "User not authorized for this restaurant" }, status: :forbidden
+            return nil
+          end
+          
+          # Set tenant context only if it wasn't already set
+          set_tenant_context(@current_restaurant)
+        elsif !global_access_permitted?
+          render json: { errors: "Restaurant context required" }, status: :unprocessable_entity
           return nil
         end
-        
-        # Set tenant context
-        set_tenant_context(@current_restaurant)
-      elsif !global_access_permitted?
-        render json: { errors: "Restaurant context required" }, status: :unprocessable_entity
-        return nil
       end
     rescue TokenService::TokenRevokedError
       render json: { errors: "Token has been revoked" }, status: :unauthorized
@@ -58,12 +64,12 @@ class ApplicationController < ActionController::API
       decoded = TokenService.verify_token(token)
       @current_user = User.find(decoded["user_id"])
       
-      # Try to set restaurant context if available in token
-      restaurant_id = decoded["restaurant_id"]
-      if restaurant_id.present?
-        @current_restaurant = Restaurant.find_by(id: restaurant_id)
-        set_tenant_context(@current_restaurant) if @current_restaurant
-      end
+      # IMPORTANT: Do not override the tenant context that was already set by the TenantIsolation concern
+      # This ensures that the restaurant_id from the request parameters or headers takes precedence
+      # over the one in the token, especially for super_admin users
+      #
+      # The tenant context is already set in the before_action :set_current_tenant callback
+      # from the TenantIsolation concern, which runs before this method
     rescue TokenService::TokenRevokedError, ActiveRecord::RecordNotFound, JWT::DecodeError => e
       # Log the error but don't fail the request
       Rails.logger.debug("Optional JWT authorization failed: #{e.message}")

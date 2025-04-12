@@ -1,5 +1,29 @@
 # app/services/restaurant_management_service.rb
 class RestaurantManagementService < TenantScopedService
+  # Indicate that this service supports global operations
+  def self.global_service?
+    true
+  end
+  
+  # Add attr_accessor for current_user to make it accessible
+  attr_accessor :current_user
+  # Override initialize to make restaurant parameter optional for global admin operations
+  # @param restaurant [Restaurant] Optional restaurant context
+  # @param current_user [User] Optional current user
+  def initialize(restaurant = nil, current_user = nil)
+    # For global admin operations, restaurant can be nil
+    if restaurant.nil?
+      # Just set the instance variable directly without calling super
+      @restaurant = nil
+    else
+      # Call the parent class's initialize method with the restaurant
+      super(restaurant)
+    end
+    
+    # Set the current user if provided
+    @current_user = current_user
+  end
+
   # Get all restaurants (only accessible by super_admin)
   def list_restaurants
     # For super_admin, return all restaurants
@@ -38,12 +62,9 @@ class RestaurantManagementService < TenantScopedService
   private
   
   # Get the current user from the service context
+  # This is now redundant since we have attr_accessor :current_user
+  # but keeping it for backward compatibility
   def current_user
     @current_user
-  end
-  
-  # Set the current user for the service
-  def current_user=(user)
-    @current_user = user
   end
 end

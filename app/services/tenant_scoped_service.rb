@@ -12,10 +12,19 @@ class TenantScopedService
   
   # Initialize with a restaurant context
   # @param restaurant [Restaurant] The restaurant context for this service
-  # @raise [ArgumentError] If restaurant is nil
+  # @raise [ArgumentError] If restaurant is nil and not a global service
   def initialize(restaurant)
     @restaurant = restaurant
-    raise ArgumentError, "Restaurant is required for tenant-scoped services" unless @restaurant
+    # Only require restaurant if this is not a subclass that handles global operations
+    unless @restaurant || self.class.global_service?
+      raise ArgumentError, "Restaurant is required for tenant-scoped services"
+    end
+  end
+  
+  # Class method to indicate if this service supports global operations
+  # Subclasses can override this to return true if they support global operations
+  def self.global_service?
+    false
   end
   
   # Find records of the given model class, automatically scoped to the current restaurant
@@ -66,13 +75,45 @@ class TenantScopedService
   # @return [ActiveRecord::Relation] A relation scoped to the current restaurant
   def scope_query(query)
     base_query = query.is_a?(Class) ? query.all : query
+    model_class = base_query.klass
     
-    if base_query.klass.column_names.include?("restaurant_id")
-      base_query.where(restaurant_id: @restaurant.id)
+    # If no restaurant context (for global operations), return unscoped query
+    return base_query if @restaurant.nil?
+    
+    # First check if the model has a direct restaurant_id column
+    if model_class.column_names.include?("restaurant_id")
+      return base_query.where(restaurant_id: @restaurant.id)
+    end
+    
+    # Check if the model has a with_restaurant_scope class method
+    # This allows models to define their own tenant isolation logic
+    if model_class.respond_to?(:with_restaurant_scope)
+      # Check if the method accepts parameters
+      method = model_class.method(:with_restaurant_scope)
+      if method.arity == 1
+        # Method accepts a restaurant parameter
+        return model_class.with_restaurant_scope(@restaurant)
+      else
+        # Method doesn't accept parameters (uses ActiveRecord::Base.current_restaurant)
+        return model_class.with_restaurant_scope
+      end
+    end
+    
+    # Handle specific known models with indirect tenant relationships
+    # Only handle models that don't already have a with_restaurant_scope method
+    case model_class.name
+    when "Option"
+      # Options belong to OptionGroups which belong to MenuItems which belong to Menus which belong to Restaurants
+      return base_query.joins(option_group: { menu_item: :menu }).where(menus: { restaurant_id: @restaurant.id })
+    when "OptionGroup"
+      # OptionGroups belong to MenuItems which belong to Menus which belong to Restaurants
+      return base_query.joins(menu_item: :menu).where(menus: { restaurant_id: @restaurant.id })
+    when "Category"
+      # Categories belong to Menus which belong to Restaurants
+      return base_query.where(menu_id: Menu.where(restaurant_id: @restaurant.id).pluck(:id))
     else
-      # If the model doesn't have a restaurant_id column, return the original query
-      # This should be rare and carefully considered
-      Rails.logger.warn("Model #{base_query.klass.name} doesn't have restaurant_id column, tenant isolation may be compromised")
+      # If we don't know how to scope this model, log a warning and return the original query
+      Rails.logger.warn("Model #{model_class.name} doesn't have restaurant_id column and no tenant isolation logic is defined")
       base_query
     end
   end
@@ -83,6 +124,10 @@ class TenantScopedService
   # @param record [ActiveRecord::Base] The record to check
   # @raise [ArgumentError] If the record doesn't belong to the current restaurant
   def ensure_record_belongs_to_restaurant(record)
+    # Skip validation if no restaurant context (for global operations)
+    return true if @restaurant.nil?
+    
+    # Skip validation if record doesn't have restaurant_id
     return true unless record.respond_to?(:restaurant_id)
     
     unless record.restaurant_id == @restaurant.id

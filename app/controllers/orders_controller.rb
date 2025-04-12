@@ -265,19 +265,25 @@ class OrdersController < ApplicationController
   end
 
   # GET /orders/creators
-  # Returns a list of users who have created orders (staff, admin, super_admin)
+  # Returns a list of users who have created orders (staff, admin, super_admin) for the current restaurant only
   def order_creators
     # Only allow admin or above to access this endpoint
     unless current_user&.admin_or_above?
       return render json: { error: "Forbidden" }, status: :forbidden
     end
     
-    # Find all users who have created orders
-    # Get unique user_ids from orders where created_by_user_id is not null
-    user_ids = Order.where.not(created_by_user_id: nil).distinct.pluck(:created_by_user_id)
+    # Find all users who have created orders for the current restaurant
+    # Get unique user_ids from orders where created_by_user_id is not null and restaurant_id matches current restaurant
+    user_ids = Order.where(restaurant_id: current_restaurant.id)
+                   .where.not(created_by_user_id: nil)
+                   .distinct
+                   .pluck(:created_by_user_id)
     
-    # Get users with those IDs who are staff, admin, or super_admin
-    @users = User.where(id: user_ids).where(role: ['staff', 'admin', 'super_admin'])
+    # Get users with those IDs who are staff or admin by default
+    # Only include users who belong to the current restaurant
+    @users = User.where(id: user_ids)
+                .where(role: ['staff', 'admin'])
+                .where(restaurant_id: current_restaurant.id)
     
     # Format the response
     creators = @users.map do |user|
@@ -289,7 +295,12 @@ class OrdersController < ApplicationController
       }
     end
     
-    # Return only users who have created orders
+    # Log the response for debugging
+    Rails.logger.info("[TENANT ISOLATION] Returning #{creators.length} order creators for restaurant #{current_restaurant.id}")
+    Rails.logger.info("[TENANT ISOLATION] Current user role: #{current_user.role}, restaurant_id: #{current_user.restaurant_id}")
+    Rails.logger.info("[TENANT ISOLATION] Current restaurant: #{current_restaurant.id}")
+    
+    # Return only users who have created orders for this restaurant
     render json: creators
   end
 

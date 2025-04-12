@@ -6,13 +6,11 @@ module Admin
     
     before_action :authorize_request
     before_action :require_admin!
-    before_action :ensure_tenant_context
+    # Skip ensure_tenant_context for index action since it's a global operation
+    before_action :ensure_tenant_context, except: [:index]
 
     # GET /admin/restaurants
     def index
-      # Set current_user for the service
-      restaurant_management_service.current_user = current_user
-      
       # Use the RestaurantManagementService to get restaurants with tenant isolation
       restaurants = restaurant_management_service.list_restaurants
       render json: restaurants
@@ -46,7 +44,17 @@ module Admin
     end
     
     def restaurant_management_service
-      @restaurant_management_service ||= RestaurantManagementService.new(current_restaurant)
+      # For global operations like index, don't pass a restaurant
+      if action_name == "index" && current_user&.super_admin?
+        @restaurant_management_service ||= RestaurantManagementService.new(nil, current_user)
+      else
+        @restaurant_management_service ||= RestaurantManagementService.new(current_restaurant, current_user)
+      end
+    end
+    
+    # Override global_access_permitted to allow super_admin to access global endpoints
+    def global_access_permitted?
+      current_user&.super_admin? && action_name.in?(["index"])
     end
     
     def ensure_tenant_context

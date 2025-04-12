@@ -45,17 +45,27 @@ module TenantIsolation
 
   # Determine which restaurant ID to use based on various sources
   # Priority order for restaurant_id:
-  # 1. Frontend-specific context (X-Frontend-ID header)
-  # 2. Explicit restaurant_id in params (if allowed)
-  # 3. User's associated restaurant
+  # 1. For admin users (not super_admin), always use their own restaurant_id
+  # 2. Frontend-specific context (X-Frontend-ID header or frontend URL) for super_admin or non-admin users
+  # 3. Explicit restaurant_id in params (if allowed) for super_admin or non-admin users
   # 4. Restaurant ID from URL (for restaurant-specific endpoints)
+  # 5. User's associated restaurant (only for non-admin users)
   def determine_restaurant_id
     restaurant_id = nil
+    
+    # For admin users (not super_admin), ALWAYS use their own restaurant_id
+    # This ensures they can never access data from other restaurants
+    if current_user&.role == "admin" && current_user&.restaurant_id.present?
+      Rails.logger.debug { "Admin user #{current_user.email}: forcing restaurant_id to #{current_user.restaurant_id}" }
+      return current_user.restaurant_id
+    end
+    
+    # For super_admin users and non-admin users, proceed with normal restaurant_id determination
     
     # First check if this is a frontend-specific request with a specified restaurant ID
     # This allows us to handle different frontends (Shimizu Technology, Hafaloha, etc.)
     frontend_id = request.headers['X-Frontend-ID']
-    frontend_restaurant_id = request.headers['X-Frontend-Restaurant-ID']
+    frontend_restaurant_id = request.headers['X-Frontend-Restaurant-ID'] || params[:restaurant_id]
     
     # If we have both a frontend ID and a frontend-specific restaurant ID, use that
     if frontend_id.present? && frontend_restaurant_id.present?
@@ -63,15 +73,20 @@ module TenantIsolation
       return frontend_restaurant_id
     end
     
-    # Next check params[:restaurant_id] if the user can specify a restaurant
-    if params[:restaurant_id].present? && can_specify_restaurant?
-      restaurant_id = params[:restaurant_id]
-    # Then check the user's associated restaurant
-    elsif current_user&.restaurant_id.present?
-      restaurant_id = current_user.restaurant_id
-    # Then check if this is a restaurant-specific endpoint
-    elsif params[:id].present? && controller_name == "restaurants"
+    # Also check for restaurant_id in params, which is commonly used for frontend requests
+    if params[:restaurant_id].present?
+      Rails.logger.debug { "Using restaurant_id from params: #{params[:restaurant_id]}" }
+      return params[:restaurant_id]
+    end
+    
+    # Check if this is a restaurant-specific endpoint
+    if params[:id].present? && controller_name == "restaurants"
       restaurant_id = params[:id]
+    # Only use the user's associated restaurant as a last resort, and not for super_admin users
+    # This prevents super_admin users from accidentally accessing their home restaurant's data
+    # when they're trying to access another restaurant
+    elsif current_user&.restaurant_id.present? && current_user&.role != "super_admin"
+      restaurant_id = current_user.restaurant_id
     end
     
     # If we're in development or test mode and no restaurant_id is found, use the first restaurant
@@ -125,8 +140,26 @@ module TenantIsolation
       log_tenant_access(restaurant)
     end
     
-    # Allow super_admins to access any restaurant
-    return true if current_user&.role == "super_admin"
+    # Allow super_admins to access the restaurant they're explicitly requesting
+    # This ensures that super_admins don't accidentally access data from other restaurants
+    # when they're trying to access a specific restaurant
+    if current_user&.role == "super_admin"
+      # Log the access for auditing purposes
+      Rails.logger.info { "Super admin #{current_user.email} accessing restaurant_id: #{restaurant&.id || 'nil'}" }
+      return true
+    end
+    
+    # For regular admin users, ONLY allow access to their own restaurant,
+    # regardless of what restaurant_id is in the request or frontend
+    if current_user&.role == "admin"
+      # If the requested restaurant doesn't match the admin's restaurant, deny access
+      if current_user.restaurant_id != restaurant&.id
+        log_cross_tenant_access(restaurant&.id)
+        Rails.logger.warn { "Admin user #{current_user.email} (restaurant_id: #{current_user.restaurant_id}) attempted to access restaurant_id: #{restaurant&.id}" }
+        raise TenantAccessDeniedError, "Admin users can only access their own restaurant's data"
+      end
+      return true
+    end
     
     # Allow users to access their own restaurant
     return true if current_user&.restaurant_id == restaurant&.id
@@ -152,8 +185,12 @@ module TenantIsolation
     # CRITICAL: Only allow nil for truly global endpoints accessed by super_admin
     if restaurant.nil? && global_access_permitted? && current_user&.role == "super_admin"
       ActiveRecord::Base.current_restaurant = nil
+      Rails.logger.debug { "Setting nil tenant context for super_admin on global endpoint" }
     else
+      # For super_admin users, always use the explicitly requested restaurant context
+      # This ensures they don't accidentally access data from other restaurants
       ActiveRecord::Base.current_restaurant = restaurant
+      Rails.logger.debug { "Setting tenant context to restaurant_id: #{restaurant&.id || 'nil'} for user role: #{current_user&.role || 'public'}" }
     end
     
     # Log the tenant context for debugging and audit purposes

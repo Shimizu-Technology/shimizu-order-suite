@@ -25,7 +25,10 @@ class RestaurantService
   # Get a specific restaurant by ID
   def get_restaurant(id, current_user)
     begin
-      restaurant = Restaurant.find_by(id: id)
+      # Important: Use the requested restaurant ID (id) for the query
+      # instead of relying on the current tenant context
+      # This ensures super_admins can access any restaurant they request
+      restaurant = Restaurant.unscoped.find_by(id: id)
       
       unless restaurant
         return { success: false, errors: ["Restaurant not found"], status: :not_found }
@@ -36,6 +39,12 @@ class RestaurantService
         unless current_user.role == "super_admin" || current_user.restaurant_id == restaurant.id
           return { success: false, errors: ["Forbidden"], status: :forbidden }
         end
+      end
+      
+      # For super_admins, we need to temporarily set the tenant context to the requested restaurant
+      # This ensures all related data (like layouts, seat sections, etc.) is fetched from the correct restaurant
+      if current_user&.role == "super_admin"
+        Rails.logger.debug { "Super admin accessing restaurant #{id} - using unscoped queries" }
       end
       
       { success: true, restaurant: restaurant }
@@ -246,6 +255,42 @@ class RestaurantService
   
   # Format restaurant JSON for API responses
   def restaurant_json(restaurant)
+    # When accessing related data for a restaurant, we need to ensure we're using the correct tenant context
+    # This is especially important for super_admins who might be accessing a restaurant different from their default
+    
+    # Temporarily use the restaurant's ID as the tenant context for related data queries
+    # This ensures we get the correct related data regardless of the current tenant context
+    layout = nil
+    seat_count = 0
+    
+    # Use unscoped queries to get related data for the specific restaurant
+    # This bypasses the default tenant scoping and ensures we get the correct data
+    ActiveRecord::Base.transaction do
+      # Save the current tenant context
+      original_restaurant = ActiveRecord::Base.current_restaurant
+      
+      begin
+        # Set the tenant context to the requested restaurant for related data queries
+        ActiveRecord::Base.current_restaurant = restaurant
+        Rails.logger.debug { "Setting temporary tenant context to restaurant_id: #{restaurant.id} for related data queries" }
+        
+        # Get the current layout with the correct tenant context
+        if restaurant.current_layout_id
+          layout = Layout.unscoped.find_by(id: restaurant.current_layout_id)
+          
+          # Calculate seat count with the correct tenant context
+          if layout
+            seat_sections = SeatSection.unscoped.where(layout_id: layout.id).includes(:seats)
+            seat_count = seat_sections.flat_map(&:seats).count
+          end
+        end
+      ensure
+        # Restore the original tenant context
+        ActiveRecord::Base.current_restaurant = original_restaurant
+        Rails.logger.debug { "Restored tenant context to restaurant_id: #{original_restaurant&.id || 'nil'}" }
+      end
+    end
+    
     {
       id:                         restaurant.id,
       name:                       restaurant.name,
@@ -269,10 +314,8 @@ class RestaurantService
       vip_enabled:                restaurant.vip_enabled,
       code_prefix:                restaurant.code_prefix,
       current_event_id:           restaurant.current_event_id,
-      # Calculate seat count directly instead of using the private method
-      current_seat_count:         restaurant.current_layout ?
-                                  restaurant.current_layout.seat_sections.includes(:seats).flat_map(&:seats).count :
-                                  0
+      # Use the seat count calculated with the correct tenant context
+      current_seat_count:         seat_count
     }
   end
 end

@@ -7,7 +7,10 @@ class SessionService
   end
   
   # Authenticate a user with email and password
-  def authenticate(email, password)
+  # @param email [String] User's email
+  # @param password [String] User's password
+  # @param restaurant_id [Integer] Optional restaurant_id for tenant-specific login
+  def authenticate(email, password, restaurant_id = nil)
     begin
       # 1) We downcase the email => "john@EXAMPLE.com" => "john@example.com"
       # 2) Find by LOWER(email) = downcased email
@@ -17,11 +20,22 @@ class SessionService
       )
       
       if user && user.authenticate(password)
+        # For non-super_admin users, enforce restaurant-specific authentication
+        if user.role != "super_admin" && restaurant_id.present?
+          # If the user is trying to log in to a restaurant that's not their own, deny access
+          if user.restaurant_id != restaurant_id.to_i
+            Rails.logger.warn { "User #{user.email} (restaurant_id: #{user.restaurant_id}) attempted to access restaurant_id: #{restaurant_id}" }
+            return { success: false, errors: ["You do not have access to this restaurant"], status: :forbidden }
+          end
+        end
+        
         # Generate token using TokenService
-        token = TokenService.generate_token(user)
+        # For super_admin users, we can use the requested restaurant_id if provided
+        token_restaurant_id = user.role == "super_admin" ? restaurant_id : user.restaurant_id
+        token = TokenService.generate_token(user, token_restaurant_id)
         
         # Track successful login
-        analytics.track("user.login.success", { user_id: user.id })
+        analytics.track("user.login.success", { user_id: user.id, restaurant_id: token_restaurant_id || user.restaurant_id })
         
         { success: true, token: token, user: user }
       else
@@ -52,19 +66,20 @@ class SessionService
     end
   end
   
-  # Switch tenant for a user
+  # Switch tenant for a user (only available to super_admin users)
   def switch_tenant(current_user, restaurant_id, current_token)
     begin
+      # Only super_admin users can switch tenants
+      unless current_user.super_admin?
+        Rails.logger.warn { "Non-super_admin user #{current_user.email} attempted to switch tenant to restaurant_id: #{restaurant_id}" }
+        return { success: false, errors: ["Only super_admin users can switch tenants"], status: :forbidden }
+      end
+      
       # Verify the restaurant exists
       restaurant = Restaurant.find_by(id: restaurant_id)
       
       unless restaurant
         return { success: false, errors: ["Restaurant not found"], status: :not_found }
-      end
-      
-      # Verify user has access to the requested restaurant
-      unless current_user.super_admin? || current_user.restaurant_id == restaurant.id
-        return { success: false, errors: ["You don't have access to this restaurant"], status: :forbidden }
       end
       
       # Revoke the current token
