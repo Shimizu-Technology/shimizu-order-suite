@@ -93,7 +93,7 @@
                      border-top: 1px solid #ddd;">
             <p style="margin: 0;">
               <strong><%= @restaurant&.name || 'Restaurant' %></strong><br/>
-              <%= @restaurant&.address || '' %><%= @restaurant&.address.present? && (@restaurant&.phone_number.present? || @restaurant&.hours.present?) ? ' | ' : '' %><%= @restaurant&.phone_number || '' %><%= @restaurant&.phone_number.present? && @restaurant&.hours.present? ? ' | ' : '' %><%= @restaurant&.hours || '' %>
+              <%= @restaurant&.address || '' %><%= @restaurant&.address.present? && @restaurant&.phone_number.present? ? ' | ' : '' %><%= @restaurant&.phone_number || '' %>
             </p>
           </td>
         </tr>

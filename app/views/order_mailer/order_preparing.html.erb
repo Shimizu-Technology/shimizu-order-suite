@@ -77,7 +77,7 @@
           <td style="padding: 20px 30px; background-color: #f2f2f2; color: #555555; font-size: 14px; line-height: 20px; border-top: 1px solid #dddddd;">
             <p style="margin: 0;">
               <strong><%= @restaurant&.name || 'Restaurant' %></strong><br/>
-              <%= @restaurant&.address || '' %><%= @restaurant&.address.present? && (@restaurant&.phone_number.present? || @restaurant&.hours.present?) ? ' | ' : '' %><%= @restaurant&.phone_number || '' %><%= @restaurant&.phone_number.present? && @restaurant&.hours.present? ? ' | ' : '' %><%= @restaurant&.hours || '' %>
+              <%= @restaurant&.address || '' %><%= @restaurant&.address.present? && @restaurant&.phone_number.present? ? ' | ' : '' %><%= @restaurant&.phone_number || '' %>
             </p>
           </td>
         </tr>
