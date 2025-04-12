@@ -30,7 +30,22 @@ class StripeController < ApplicationController
       )
 
       if result[:success]
-        render json: { client_secret: result[:client_secret] }
+        # Handle different types of successful responses
+        response_data = { success: true }
+        
+        # Include client_secret if present (normal paid orders)
+        response_data[:client_secret] = result[:client_secret] if result[:client_secret].present?
+        
+        # Include free_order flag if present
+        response_data[:free_order] = result[:free_order] if result[:free_order]
+        
+        # Include small_order flag if present
+        response_data[:small_order] = result[:small_order] if result[:small_order]
+        
+        # Include order_id if present
+        response_data[:order_id] = result[:order_id] if result[:order_id].present?
+        
+        render json: response_data
       else
         render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
       end
