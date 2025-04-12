@@ -208,7 +208,30 @@ class Restaurant < ApplicationRecord
     update(current_merchandise_collection_id: collection.id)
   end
 
+  # Format operating hours for display in email templates and other places
+  # Returns a formatted string of operating hours or an empty string if no hours are set
+  def hours
+    formatted_hours = operating_hours.order(:day_of_week).map do |oh|
+      next "#{day_name(oh.day_of_week)}: Closed" if oh.closed?
+      
+      open_time = format_time(oh.open_time)
+      close_time = format_time(oh.close_time)
+      "#{day_name(oh.day_of_week)}: #{open_time} - #{close_time}"
+    end.join(", ")
+    
+    formatted_hours.presence || ""
+  end
+
   private
+
+  def day_name(day_of_week)
+    Date::DAYNAMES[day_of_week].first(3)
+  end
+
+  def format_time(time)
+    return "" unless time
+    time.strftime("%l:%M %p").strip
+  end
 
   def normalize_origin(origin)
     # Remove trailing slash if present
