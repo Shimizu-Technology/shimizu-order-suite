@@ -80,7 +80,7 @@
       
       <h2>Payment Received</h2>
       
-      <p>Thank you! We've received your payment for Order #<%= @order.id %> from <%= @restaurant_name %>.</p>
+      <p>Thank you! We've received your payment for Order #<%= @order.order_number.presence || @order.id %> from <%= @restaurant_name %>.</p>
       
       <div class="order-details">
         <h3>Order Summary</h3>

@@ -23,6 +23,7 @@ class StaffMember < ApplicationRecord
       transaction_type: transaction_type,
       description: description,
       order_id: order&.id,
+      order_number: order&.order_number,
       created_by_id: created_by&.id
     )
     
@@ -35,10 +36,12 @@ class StaffMember < ApplicationRecord
   
   # Charge an order to the house account
   def charge_order_to_house_account(order, created_by = nil)
+    # Use order_number if available, otherwise fall back to id
+    order_identifier = order.order_number.present? ? order.order_number : order.id.to_s
     add_house_account_transaction(
       order.total,
       'order',
-      "Order ##{order.id}",
+      "Order ##{order_identifier}",
       order,
       created_by
     )

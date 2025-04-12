@@ -18,7 +18,7 @@
               Hi <strong><%= @order.contact_name.presence || "Valued Customer" %></strong>,
             </p>
             <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
-              Great news! Your <%= @restaurant&.name || 'Restaurant' %> order (<strong>#<%= @order.id %></strong>) is now ready to be picked up.
+              Great news! Your <%= @restaurant&.name || 'Restaurant' %> order (<strong>#<%= @order.order_number.presence || @order.id %></strong>) is now ready to be picked up.
             </p>
             <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
               We look forward to seeing you soon. If you have any questions, you can reach us at <strong><%= @order.contact_phone %></strong>.

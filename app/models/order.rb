@@ -10,6 +10,9 @@ class Order < ApplicationRecord
   # Set staff_created flag based on staff_modal attribute
   before_create :set_staff_created_from_staff_modal
   
+  # Generate and assign a custom order number before creation
+  before_create :assign_order_number
+  
   # Define which attributes should trigger broadcasts
   broadcasts_on :status, :total, :items, :eta, :pickup_time, :is_staff_order, :staff_member_id
   # Order status constants
@@ -50,6 +53,27 @@ class Order < ApplicationRecord
     STATUS_CANCELLED,
     STATUS_REFUNDED
   ]
+  
+  # Generate and assign a restaurant-specific order number
+  def assign_order_number
+    return if order_number.present? # Skip if already assigned
+    
+    # Make sure we have a restaurant_id
+    unless restaurant_id.present?
+      Rails.logger.error("Cannot assign order number: restaurant_id is missing for order")
+      return
+    end
+    
+    # Generate a new order number using the RestaurantCounter
+    self.order_number = RestaurantCounter.next_order_number(restaurant_id)
+    
+    # Log for debugging
+    Rails.logger.info("Assigned order number #{order_number} to order for restaurant #{restaurant_id}")
+  rescue => e
+    # Log error but don't prevent order creation
+    Rails.logger.error("Error assigning order number: #{e.message}")
+    Rails.logger.error(e.backtrace.join("\n"))
+  end
 
   has_many :order_payments, dependent: :destroy
   has_many :house_account_transactions, dependent: :nullify

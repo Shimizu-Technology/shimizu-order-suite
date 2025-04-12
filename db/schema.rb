@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_04_12_131121) do
+ActiveRecord::Schema[7.2].define(version: 2025_04_12_150018) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -97,6 +97,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_12_131121) do
     t.bigint "created_by_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "order_number"
     t.index ["created_by_id"], name: "index_house_account_transactions_on_created_by_id"
     t.index ["order_id"], name: "index_house_account_transactions_on_order_id"
     t.index ["staff_member_id"], name: "index_house_account_transactions_on_staff_member_id"
@@ -352,12 +353,15 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_12_131121) do
     t.bigint "created_by_staff_id"
     t.decimal "pre_discount_total", precision: 10, scale: 2
     t.bigint "created_by_user_id"
+    t.string "order_number"
     t.index ["created_by_staff_id"], name: "index_orders_on_created_by_staff_id"
     t.index ["created_by_user_id"], name: "index_orders_on_created_by_user_id"
     t.index ["global_last_acknowledged_at"], name: "index_orders_on_global_last_acknowledged_at"
     t.index ["is_staff_order", "use_house_account"], name: "index_orders_on_staff_order_and_house_account"
     t.index ["is_staff_order"], name: "index_orders_on_is_staff_order"
+    t.index ["order_number"], name: "index_orders_on_order_number", unique: true
     t.index ["payment_id"], name: "index_orders_on_payment_id"
+    t.index ["restaurant_id", "order_number"], name: "index_orders_on_restaurant_id_and_order_number"
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
     t.index ["staff_member_id"], name: "index_orders_on_staff_member_id"
@@ -411,6 +415,16 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_12_131121) do
     t.integer "duration_minutes", default: 60
     t.index ["restaurant_id"], name: "index_reservations_on_restaurant_id"
     t.check_constraint "status::text = ANY (ARRAY['booked'::character varying::text, 'reserved'::character varying::text, 'seated'::character varying::text, 'finished'::character varying::text, 'canceled'::character varying::text, 'no_show'::character varying::text])", name: "check_reservation_status"
+  end
+
+  create_table "restaurant_counters", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.integer "daily_order_counter", default: 0, null: false
+    t.integer "total_order_counter", default: 0, null: false
+    t.date "last_reset_date", default: -> { "CURRENT_DATE" }, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["restaurant_id"], name: "index_restaurant_counters_on_restaurant_id", unique: true
   end
 
   create_table "restaurants", force: :cascade do |t|
@@ -653,6 +667,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_12_131121) do
   add_foreign_key "promo_codes", "restaurants"
   add_foreign_key "push_subscriptions", "restaurants"
   add_foreign_key "reservations", "restaurants"
+  add_foreign_key "restaurant_counters", "restaurants"
   add_foreign_key "restaurants", "layouts", column: "current_layout_id", on_delete: :nullify
   add_foreign_key "restaurants", "menus", column: "current_menu_id"
   add_foreign_key "restaurants", "merchandise_collections", column: "current_merchandise_collection_id"

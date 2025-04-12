@@ -36,7 +36,7 @@
             <!-- Intro text -->
             <p style="margin: 0 0 15px; color: #333333; font-size: 16px; line-height: 24px;">
               We’re happy to let you know that your order 
-              (<strong>##<%= @order.id %></strong>) is now being prepared!
+              (<strong>#<%= @order.order_number.presence || @order.id %></strong>) is now being prepared!
             </p>
 
             <!-- ETA section -->

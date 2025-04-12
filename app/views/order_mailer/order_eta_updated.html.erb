@@ -60,7 +60,7 @@
     
     <p>Hi <%= @order.contact_name.presence || 'Customer' %>,</p>
     
-    <p>The estimated pickup time for your order #<strong><%= @order.id %></strong> has been updated.</p>
+    <p>The estimated pickup time for your order #<strong><%= @order.order_number.presence || @order.id %></strong> has been updated.</p>
     
     <div class="highlight">
       <p><strong>New pickup time:</strong></p>
