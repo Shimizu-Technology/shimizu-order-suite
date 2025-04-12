@@ -7,7 +7,7 @@ class OrderMailer < ApplicationMailer
 
     mail to: @order.contact_email,
          from: restaurant_from_address(@restaurant),
-         subject: "Your #{@restaurant&.name || 'Restaurant'} Order Confirmation ##{@order.id}"
+         subject: "Your #{@restaurant&.name || 'Restaurant'} Order Confirmation ##{@order.order_number.presence || @order.id}"
   end
 
   def order_ready(order)
@@ -17,7 +17,7 @@ class OrderMailer < ApplicationMailer
 
     mail to: @order.contact_email,
          from: restaurant_from_address(@restaurant),
-         subject: "#{@restaurant&.name || 'Restaurant'} Order ##{@order.id} is Ready!"
+         subject: "#{@restaurant&.name || 'Restaurant'} Order ##{@order.order_number.presence || @order.id} is Ready!"
   end
 
   def order_preparing(order)
@@ -27,7 +27,7 @@ class OrderMailer < ApplicationMailer
 
     mail to: @order.contact_email,
          from: restaurant_from_address(@restaurant),
-         subject: "Your #{@restaurant&.name || 'Restaurant'} Order ##{@order.id} is Being Prepared"
+         subject: "Your #{@restaurant&.name || 'Restaurant'} Order ##{@order.order_number.presence || @order.id} is Being Prepared"
   end
 
   def order_eta_updated(order)
@@ -37,7 +37,7 @@ class OrderMailer < ApplicationMailer
 
     mail to: @order.contact_email,
          from: restaurant_from_address(@restaurant),
-         subject: "Your #{@restaurant&.name || 'Restaurant'} Order ##{@order.id} Pickup Time Has Been Updated"
+         subject: "Your #{@restaurant&.name || 'Restaurant'} Order ##{@order.order_number.presence || @order.id} Pickup Time Has Been Updated"
   end
   
   def payment_link(email, payment_url, order, restaurant_name = nil, restaurant_logo = nil, template = nil)
@@ -51,7 +51,7 @@ class OrderMailer < ApplicationMailer
     
     mail to: email,
          from: restaurant_from_address(@restaurant),
-         subject: "Payment Link for #{@restaurant_name} Order ##{@order.id}"
+         subject: "Payment Link for #{@restaurant_name} Order ##{@order.order_number.presence || @order.id}"
   end
   
   def payment_confirmation(email, order, restaurant_name = nil, restaurant_logo = nil)

@@ -356,7 +356,7 @@ class OrdersController < ApplicationController
       # Broadcast the order update via WebSockets
       WebsocketBroadcastService.broadcast_order_update(order)
       
-      render json: { message: "Order #{order.id} acknowledged" }, status: :ok
+      render json: { message: "Order #{order.order_number.presence || order.id} acknowledged" }, status: :ok
     else
       render json: { error: "Failed to acknowledge order" }, status: :unprocessable_entity
     end
@@ -693,7 +693,7 @@ class OrdersController < ApplicationController
             menu_item.update_stock_quantity(
               new_stock,
               "order",
-              "Order ##{@order.id} - #{quantity} items",
+              "Order ##{@order.order_number.presence || @order.id} - #{quantity} items",
               @current_user,
               @order
             )
@@ -726,7 +726,7 @@ class OrdersController < ApplicationController
         msg = <<~TXT.squish
           Hi #{@order.contact_name.presence || 'Customer'},
           thanks for ordering from #{restaurant_name}!
-          Order ##{@order.id}: #{item_list},
+          Order ##{@order.order_number.presence || @order.id}: #{item_list},
           total: $#{sprintf("%.2f", @order.total.to_f)}.
           We'll text you an ETA once we start preparing your order!
         TXT
@@ -802,12 +802,12 @@ class OrdersController < ApplicationController
           if order.requires_advance_notice?
             eta_date = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%A, %B %-d") : "tomorrow"
             eta_time = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "morning"
-            txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
+            txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.order_number.presence || order.id} "\
                        "is now being prepared! Your order contains items that require advance preparation. "\
                        "Pickup time: #{eta_time} TOMORROW (#{eta_date})."
           else
             eta_str = order.estimated_pickup_time.present? ? order.estimated_pickup_time.strftime("%-I:%M %p") : "soon"
-            txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
+            txt_body = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.order_number.presence || order.id} "\
                        "is now being prepared! ETA: #{eta_str} TODAY."
           end
           SendSmsJob.perform_later(to: order.contact_phone, body: txt_body, from: sms_sender)
@@ -815,7 +815,7 @@ class OrdersController < ApplicationController
         
         # Send Pushover notification for order status change to preparing
         if order.restaurant.pushover_enabled?
-          message = "Order ##{order.id} is now being prepared.\n\n"
+          message = "Order ##{order.order_number.presence || order.id} is now being prepared.\n\n"
           if order.estimated_pickup_time.present?
             if order.requires_advance_notice?
               eta_date = order.estimated_pickup_time.strftime("%A, %B %-d")
@@ -847,12 +847,12 @@ class OrdersController < ApplicationController
           if order.requires_advance_notice?
             eta_date = order.estimated_pickup_time.strftime("%A, %B %-d")
             eta_time = order.estimated_pickup_time.strftime("%-I:%M %p")
-            txt_body = "Hi #{order.contact_name.presence || 'Customer'}, the pickup time for your order ##{order.id} "\
+            txt_body = "Hi #{order.contact_name.presence || 'Customer'}, the pickup time for your order ##{order.order_number.presence || order.id} "\
                        "has been updated. New pickup time: #{eta_time} on #{eta_date}. "\
                        "Thank you for your patience."
           else
             eta_str = order.estimated_pickup_time.strftime("%-I:%M %p")
-            txt_body = "Hi #{order.contact_name.presence || 'Customer'}, the pickup time for your order ##{order.id} "\
+            txt_body = "Hi #{order.contact_name.presence || 'Customer'}, the pickup time for your order ##{order.order_number.presence || order.id} "\
                        "has been updated. New ETA: #{eta_str} TODAY. "\
                        "Thank you for your patience."
           end
@@ -861,7 +861,7 @@ class OrdersController < ApplicationController
         
         # Send Pushover notification for ETA update
         if order.restaurant.pushover_enabled?
-          message = "Order ##{order.id} pickup time updated.\n\n"
+          message = "Order ##{order.order_number.presence || order.id} pickup time updated.\n\n"
           if order.requires_advance_notice?
             eta_date = order.estimated_pickup_time.strftime("%A, %B %-d")
             eta_time = order.estimated_pickup_time.strftime("%-I:%M %p")
@@ -887,14 +887,14 @@ class OrdersController < ApplicationController
           OrderMailer.order_ready(order).deliver_later
         end
         if notification_channels["sms"] == true && order.contact_phone.present?
-          msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.id} "\
+          msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.order_number.presence || order.id} "\
                 "is now ready for pickup! Thank you for choosing #{restaurant_name}."
           SendSmsJob.perform_later(to: order.contact_phone, body: msg, from: sms_sender)
         end
         
         # Send Pushover notification for order ready status
         if order.restaurant.pushover_enabled?
-          message = "Order ##{order.id} is now ready for pickup!\n\n"
+          message = "Order ##{order.order_number.presence || order.id} is now ready for pickup!\n\n"
           message += "Customer: #{order.contact_name}\n" if order.contact_name.present?
           message += "Phone: #{order.contact_phone}" if order.contact_phone.present?
           
@@ -1057,7 +1057,7 @@ class OrdersController < ApplicationController
     menu_item.update_stock_quantity(
       new_stock,
       "order",
-      "Order ##{order.id} - Added item during edit (qty #{quantity})",
+      "Order ##{order.order_number.presence || order.id} - Added item during edit (qty #{quantity})",
       @current_user,
       order
     )
@@ -1079,7 +1079,7 @@ class OrdersController < ApplicationController
     menu_item.update_stock_quantity(
       new_stock,
       "adjustment",
-      "Order ##{order.id} - Removed item during edit (qty #{removed_qty})",
+      "Order ##{order.order_number.presence || order.id} - Removed item during edit (qty #{removed_qty})",
       @current_user,
       order
     )
@@ -1092,7 +1092,7 @@ class OrdersController < ApplicationController
     menu_item.update_stock_quantity(
       [ new_stock, 0 ].max,
       "adjustment",
-      "Order ##{order.id} - Quantity changed from #{original_qty} to #{new_qty}",
+      "Order ##{order.order_number.presence || order.id} - Quantity changed from #{original_qty} to #{new_qty}",
       @current_user,
       order
     )
