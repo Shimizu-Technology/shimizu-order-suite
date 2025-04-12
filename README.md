@@ -40,6 +40,17 @@ The backend is built with **Ruby on Rails** in API-only mode, with a multi-tenan
 - **PayPal** for payment processing with SDK integration
 - **Stripe** for credit card payment processing with webhooks
 
+### Key Features
+
+#### Order Numbering System
+
+The platform implements a restaurant-specific order numbering system that replaces default database IDs with more user-friendly order numbers:
+
+- Each restaurant has its own sequence of order numbers in the format `[PREFIX][COUNTER]` (e.g., "ST001")
+- Daily counter reset maintains clean, consistent numbering
+- Fully integrated with staff house accounts and transaction history
+- See [Order Numbering System Documentation](./docs/order_numbering_system.md) for details
+
 ### Data Flow
 
 1. **API Requests** come in through controllers
