@@ -5,7 +5,7 @@ class TenantStripeService < TenantScopedService
   # Create a payment intent for Stripe
   def create_payment_intent(amount, currency = "USD")
     # Get payment settings from restaurant
-    payment_settings = current_restaurant.admin_settings&.dig("payment_gateway") || {}
+    payment_settings = @restaurant.admin_settings&.dig("payment_gateway") || {}
 
     # Check if test mode is enabled
     test_mode = payment_settings["test_mode"]
@@ -34,7 +34,7 @@ class TenantStripeService < TenantScopedService
         amount: amount_in_cents,
         currency: currency.downcase,
         metadata: {
-          restaurant_id: current_restaurant.id,
+          restaurant_id: @restaurant.id,
           test_mode: test_mode
         },
         automatic_payment_methods: {
@@ -53,7 +53,7 @@ class TenantStripeService < TenantScopedService
   # Process a webhook event from Stripe
   def process_webhook(payload, signature)
     # Get payment settings from restaurant
-    payment_settings = current_restaurant.admin_settings&.dig("payment_gateway") || {}
+    payment_settings = @restaurant.admin_settings&.dig("payment_gateway") || {}
     
     # Get webhook secret from settings
     webhook_secret = payment_settings["webhook_secret"]
