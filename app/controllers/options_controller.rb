@@ -42,7 +42,7 @@ class OptionsController < ApplicationController
 
   def option_params
     # Adjust based on your actual Option columns
-    params.require(:option).permit(:name, :additional_price, :available, :is_preselected)
+    params.require(:option).permit(:name, :additional_price, :available, :is_preselected, :is_available)
   end
 
   def option_service

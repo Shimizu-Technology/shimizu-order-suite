@@ -519,6 +519,45 @@ class OrdersController < ApplicationController
       end
     end
 
+    # Validate that all selected options are available
+    if @order.items.present?
+      unavailable_options = []
+
+      @order.items.each do |item|
+        # Skip items without selected options
+        next unless item[:selected_options].is_a?(Array) && item[:selected_options].any?
+
+        # Get all option IDs from the item
+        option_ids = item[:selected_options].map { |opt| opt[:id] }.compact
+        
+        # Skip if no valid option IDs
+        next if option_ids.empty?
+        
+        # Find any unavailable options
+        unavailable = Option.where(id: option_ids, is_available: false)
+        
+        if unavailable.any?
+          menu_item = menu_items_by_id[item[:id]]
+          item_name = menu_item ? menu_item.name : "Unknown item"
+          
+          unavailable.each do |option|
+            unavailable_options << {
+              item_name: item_name,
+              option_name: option.name,
+              option_id: option.id
+            }
+          end
+        end
+      end
+
+      if unavailable_options.any?
+        return render json: {
+          error: "Some selected options are currently unavailable",
+          unavailable_options: unavailable_options
+        }, status: :unprocessable_entity
+      end
+    end
+
     # Validate merchandise stock levels before accepting the order
     if @order.merchandise_items.present?
       insufficient_items = []

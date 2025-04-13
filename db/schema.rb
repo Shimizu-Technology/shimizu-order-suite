@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_04_12_150018) do
+ActiveRecord::Schema[7.2].define(version: 2025_04_13_112636) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -284,6 +284,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_12_150018) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.boolean "is_preselected", default: false, null: false
+    t.boolean "is_available", default: true, null: false
+    t.index ["is_available"], name: "index_options_on_is_available"
     t.index ["option_group_id"], name: "index_options_on_option_group_id"
   end
 

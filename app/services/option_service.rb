@@ -88,7 +88,7 @@ class OptionService < TenantScopedService
     return nil unless menu
     
     # Finally, check if the menu belongs to the current restaurant
-    return option if menu.restaurant_id == current_restaurant.id
+    return option if menu.restaurant_id == @restaurant.id
     
     nil
   end
