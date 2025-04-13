@@ -317,6 +317,7 @@ Rails.application.routes.draw do
   resources :options, only: [ :update, :destroy ] do
     collection do
       patch :batch_update
+      patch :batch_update_positions
     end
   end
 

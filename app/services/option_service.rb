@@ -73,6 +73,51 @@ class OptionService < TenantScopedService
     end
   end
 
+  # Batch update positions for multiple options
+  def batch_update_positions(positions_data)
+    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
+    return { success: false, errors: ["No positions data provided"], status: :unprocessable_entity } if positions_data.blank?
+    
+    # Group positions by option_group_id to handle each group separately
+    options_by_group = {}
+    
+    # First, collect all options and organize them by group
+    positions_data.each do |position_item|
+      option = find_option_with_tenant_scope(position_item[:id])
+      next unless option
+      
+      group_id = option.option_group_id
+      options_by_group[group_id] ||= []
+      options_by_group[group_id] << { option: option, position: position_item[:position].to_i }
+    end
+    
+    return { success: false, errors: ["No valid options found"], status: :not_found } if options_by_group.empty?
+    
+    # Now update positions for each group
+    updated_count = 0
+    
+    ActiveRecord::Base.transaction do
+      options_by_group.each do |group_id, options|
+        # Sort by the new position
+        sorted_options = options.sort_by { |item| item[:position] }
+        
+        # Assign normalized positions (1, 2, 3...) to ensure no gaps
+        sorted_options.each_with_index do |item, index|
+          normalized_position = index + 1
+          if item[:option].update(position: normalized_position)
+            updated_count += 1
+          end
+        end
+      end
+    end
+    
+    if updated_count > 0
+      { success: true, updated_count: updated_count }
+    else
+      { success: false, errors: ["Failed to update option positions"], status: :unprocessable_entity }
+    end
+  end
+
   private
 
   def is_admin?
@@ -94,7 +139,7 @@ class OptionService < TenantScopedService
     return nil unless menu
     
     # Finally, check if the menu belongs to the current restaurant
-    return option_group if menu.restaurant_id == current_restaurant.id
+    return option_group if menu.restaurant_id == @restaurant.id
     
     nil
   end
