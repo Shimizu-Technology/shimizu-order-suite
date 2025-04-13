@@ -43,6 +43,36 @@ class OptionService < TenantScopedService
     { success: true }
   end
 
+  # Batch update multiple options
+  def batch_update_options(option_ids, updates)
+    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
+    return { success: false, errors: ["No options selected"], status: :unprocessable_entity } if option_ids.blank?
+    return { success: false, errors: ["No updates specified"], status: :unprocessable_entity } if updates.blank?
+    
+    # Find all options with tenant scoping
+    valid_options = []
+    option_ids.each do |id|
+      option = find_option_with_tenant_scope(id)
+      valid_options << option if option
+    end
+    
+    return { success: false, errors: ["No valid options found"], status: :not_found } if valid_options.empty?
+    
+    # Update all valid options
+    updated_count = 0
+    valid_options.each do |option|
+      if option.update(updates)
+        updated_count += 1
+      end
+    end
+    
+    if updated_count > 0
+      { success: true, updated_count: updated_count }
+    else
+      { success: false, errors: ["Failed to update options"], status: :unprocessable_entity }
+    end
+  end
+
   private
 
   def is_admin?

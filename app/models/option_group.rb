@@ -25,4 +25,22 @@ class OptionGroup < ApplicationRecord
   # We remove the as_json override entirely.
   # The controller calls `include: { options: { methods: [:additional_price_float] }}`.
   # That automatically yields JSON for each Option, including that method.
+  
+  # Check if the option group has any available options
+  def has_available_options?
+    options.where(is_available: true).exists?
+  end
+  
+  # Check if this is a required group (min_select > 0) with no available options
+  def required_but_unavailable?
+    min_select > 0 && !has_available_options?
+  end
+  
+  # Include availability status in JSON representation
+  def as_json(options = {})
+    super(options).tap do |json|
+      json['has_available_options'] = has_available_options?
+      json['required_but_unavailable'] = required_but_unavailable?
+    end
+  end
 end

@@ -314,7 +314,11 @@ Rails.application.routes.draw do
   end
 
   # For updating or deleting a specific option (requires just the option ID)
-  resources :options, only: [ :update, :destroy ]
+  resources :options, only: [ :update, :destroy ] do
+    collection do
+      patch :batch_update
+    end
+  end
 
   # Polling route for orders
   get "/orders/new_since/:id", to: "orders#new_since"

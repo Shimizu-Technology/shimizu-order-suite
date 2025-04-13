@@ -219,6 +219,16 @@ class MenuItem < ApplicationRecord
     days_array.include?(current_day)
   end
 
+  # Check if the menu item has any required option groups with all options unavailable
+  def has_required_groups_with_unavailable_options?
+    option_groups.any? { |group| group.required_but_unavailable? }
+  end
+  
+  # Get the list of required option groups with all options unavailable
+  def required_groups_with_unavailable_options
+    option_groups.select { |group| group.required_but_unavailable? }
+  end
+  
   # as_json => only expose category_ids, not full objects
   def as_json(options = {})
     result = super(options).merge(
@@ -236,7 +246,9 @@ class MenuItem < ApplicationRecord
       "available_days"       => available_days || [],
       "hidden"               => hidden,
       # Use numeric IDs only:
-      "category_ids"         => categories.map(&:id)
+      "category_ids"         => categories.map(&:id),
+      # Add availability information
+      "has_required_unavailable_options" => has_required_groups_with_unavailable_options?
     )
 
     # Add inventory tracking fields if enabled

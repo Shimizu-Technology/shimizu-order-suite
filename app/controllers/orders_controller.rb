@@ -522,8 +522,23 @@ class OrdersController < ApplicationController
     # Validate that all selected options are available
     if @order.items.present?
       unavailable_options = []
+      items_with_unavailable_required_groups = []
 
       @order.items.each do |item|
+        # Check if the menu item has required groups with all options unavailable
+        menu_item = menu_items_by_id[item[:id]]
+        if menu_item && menu_item.has_required_groups_with_unavailable_options?
+          # Get the names of the problematic option groups
+          unavailable_groups = menu_item.required_groups_with_unavailable_options.map(&:name)
+          
+          items_with_unavailable_required_groups << {
+            item_name: menu_item.name,
+            item_id: menu_item.id,
+            unavailable_groups: unavailable_groups
+          }
+          next # Skip further validation for this item
+        end
+        
         # Skip items without selected options
         next unless item[:selected_options].is_a?(Array) && item[:selected_options].any?
 
@@ -550,6 +565,15 @@ class OrdersController < ApplicationController
         end
       end
 
+      # Check for items with unavailable required groups first
+      if items_with_unavailable_required_groups.any?
+        return render json: {
+          error: "Some items have required option groups with no available options",
+          items_with_unavailable_required_groups: items_with_unavailable_required_groups
+        }, status: :unprocessable_entity
+      end
+      
+      # Then check for individual unavailable options
       if unavailable_options.any?
         return render json: {
           error: "Some selected options are currently unavailable",
