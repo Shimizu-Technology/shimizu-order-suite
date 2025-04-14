@@ -44,6 +44,17 @@
                   <strong>Total:</strong> $<%= sprintf("%.2f", @order.total.to_f) %>
                 </td>
               </tr>
+              <% if @order.location.present? %>
+              <tr>
+                <td style="padding: 5px 0;">
+                  <strong>Pickup Location:</strong> <%= @order.location.name %>
+                  <div style="margin-top: 5px; margin-left: 10px; color: #555;">
+                    <%= @order.location.address %><br>
+                    <%= @order.location.phone_number %>
+                  </div>
+                </td>
+              </tr>
+              <% end %>
               <tr>
                 <td style="padding: 5px 0;">
                   <strong>Items:</strong>
@@ -93,7 +104,12 @@
                      border-top: 1px solid #ddd;">
             <p style="margin: 0;">
               <strong><%= @restaurant&.name || 'Restaurant' %></strong><br/>
-              <%= @restaurant&.address || '' %><%= @restaurant&.address.present? && @restaurant&.phone_number.present? ? ' | ' : '' %><%= @restaurant&.phone_number || '' %>
+              <% if @order.location.present? %>
+                <%= @order.location.name %><br/>
+                <%= @order.location.address %><%= @order.location.address.present? && @order.location.phone_number.present? ? ' | ' : '' %><%= @order.location.phone_number || '' %>
+              <% else %>
+                <%= @restaurant&.address || '' %><%= @restaurant&.address.present? && @restaurant&.phone_number.present? ? ' | ' : '' %><%= @restaurant&.phone_number || '' %>
+              <% end %>
             </p>
           </td>
         </tr>

@@ -235,6 +235,13 @@ Rails.application.routes.draw do
     end
   end
 
+  # Locations management
+  resources :locations, only: [ :index, :show, :create, :update, :destroy ] do
+    member do
+      put :set_default
+    end
+  end
+
   # For ordering
   resources :orders, only: [ :index, :show, :create, :update, :destroy ] do
     member do

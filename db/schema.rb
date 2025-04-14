@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_04_13_223815) do
+ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -123,11 +123,29 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_13_223815) do
     t.index ["restaurant_id"], name: "index_layouts_on_restaurant_id"
   end
 
+  create_table "locations", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.string "name", null: false
+    t.string "address"
+    t.string "phone_number"
+    t.boolean "is_active", default: true
+    t.boolean "is_default", default: false
+    t.string "email"
+    t.text "description"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["restaurant_id", "is_active"], name: "index_locations_on_restaurant_id_and_is_active"
+    t.index ["restaurant_id", "is_default"], name: "index_locations_on_restaurant_id_and_default", unique: true, where: "(is_default = true)"
+    t.index ["restaurant_id"], name: "index_locations_on_restaurant_id"
+  end
+
   create_table "menu_item_categories", force: :cascade do |t|
     t.bigint "menu_item_id", null: false
     t.bigint "category_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.integer "position", default: 0, null: false
+    t.index ["category_id", "position"], name: "index_menu_item_categories_on_category_id_and_position"
     t.index ["category_id"], name: "index_menu_item_categories_on_category_id"
     t.index ["menu_item_id", "category_id"], name: "index_menu_item_categories_on_menu_item_id_and_category_id", unique: true
     t.index ["menu_item_id"], name: "index_menu_item_categories_on_menu_item_id"
@@ -358,13 +376,16 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_13_223815) do
     t.decimal "pre_discount_total", precision: 10, scale: 2
     t.bigint "created_by_user_id"
     t.string "order_number"
+    t.bigint "location_id", null: false
     t.index ["created_by_staff_id"], name: "index_orders_on_created_by_staff_id"
     t.index ["created_by_user_id"], name: "index_orders_on_created_by_user_id"
     t.index ["global_last_acknowledged_at"], name: "index_orders_on_global_last_acknowledged_at"
     t.index ["is_staff_order", "use_house_account"], name: "index_orders_on_staff_order_and_house_account"
     t.index ["is_staff_order"], name: "index_orders_on_is_staff_order"
+    t.index ["location_id"], name: "index_orders_on_location_id"
     t.index ["order_number"], name: "index_orders_on_order_number", unique: true
     t.index ["payment_id"], name: "index_orders_on_payment_id"
+    t.index ["restaurant_id", "location_id"], name: "index_orders_on_restaurant_id_and_location_id"
     t.index ["restaurant_id", "order_number"], name: "index_orders_on_restaurant_id_and_order_number"
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
@@ -644,6 +665,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_13_223815) do
   add_foreign_key "house_account_transactions", "staff_members"
   add_foreign_key "inventory_statuses", "menu_items"
   add_foreign_key "layouts", "restaurants"
+  add_foreign_key "locations", "restaurants"
   add_foreign_key "menu_item_categories", "categories"
   add_foreign_key "menu_item_categories", "menu_items"
   add_foreign_key "menu_item_stock_audits", "menu_items"
@@ -662,6 +684,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_13_223815) do
   add_foreign_key "order_acknowledgments", "orders"
   add_foreign_key "order_acknowledgments", "users"
   add_foreign_key "order_payments", "orders"
+  add_foreign_key "orders", "locations"
   add_foreign_key "orders", "restaurants"
   add_foreign_key "orders", "staff_members", column: "created_by_staff_id", on_delete: :nullify
   add_foreign_key "orders", "staff_members", on_delete: :nullify

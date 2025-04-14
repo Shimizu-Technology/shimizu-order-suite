@@ -21,9 +21,13 @@ class OrdersController < ApplicationController
       @orders = @orders.where(status: params[:status])
     end
 
+    # Filter by location_id if provided
+    if params[:location_id].present?
+      @orders = @orders.where(location_id: params[:location_id])
+    end
+
     # Filter for online orders only (customer orders)
     if params[:online_orders_only].present? && params[:online_orders_only] == 'true'
-
       @orders = @orders.where(staff_created: false)
     end
 
@@ -79,20 +83,26 @@ class OrdersController < ApplicationController
     sort_by = 'created_at' unless valid_sort_columns.include?(sort_by)
     sort_direction = 'desc' unless valid_sort_directions.include?(sort_direction)
     
-    @orders = @orders.order("#{sort_by} #{sort_direction}")
+    # Include location association to ensure location data is available in the response
+    @orders = @orders.includes(:location)
+                     .order("#{sort_by} #{sort_direction}")
                      .offset((page - 1) * per_page)
                      .limit(per_page)
 
     # Calculate total pages
     total_pages = (total_count.to_f / per_page).ceil
 
+    # Include location data in the response
+    orders_with_location = @orders.as_json(include: :location)
+
     render json: {
-      orders: @orders,
+      orders: orders_with_location,
       total_count: total_count,
       page: page,
       per_page: per_page,
       total_pages: total_pages
     }, status: :ok
+
   end
 
   # GET /orders/:id
@@ -167,6 +177,13 @@ class OrdersController < ApplicationController
     # Filter by status if provided
     if params[:status].present?
       @orders = @orders.where(status: params[:status])
+    end
+
+    # Filter by location_id if provided
+    if params[:locationId].present?
+      @orders = @orders.where(location_id: params[:locationId])
+      Rails.logger.info("[LOCATION FILTER] Filtering orders by location_id: #{params[:locationId]}")
+      Rails.logger.info("[LOCATION FILTER] Orders count after location filter: #{@orders.count}")
     end
 
     # Filter by date range if provided
@@ -248,20 +265,26 @@ class OrdersController < ApplicationController
     sort_by = 'created_at' unless valid_sort_columns.include?(sort_by)
     sort_direction = 'desc' unless valid_sort_directions.include?(sort_direction)
     
-    @orders = @orders.order("#{sort_by} #{sort_direction}")
+    # Include location association to ensure location data is available in the response
+    @orders = @orders.includes(:location)
+                     .order("#{sort_by} #{sort_direction}")
                      .offset((page - 1) * per_page)
                      .limit(per_page)
 
     # Calculate total pages
     total_pages = (total_count.to_f / per_page).ceil
 
+    # Include location data in the response
+    orders_with_location = @orders.as_json(include: :location)
+
     render json: {
-      orders: @orders,
+      orders: orders_with_location,
       total_count: total_count,
       page: page,
       per_page: per_page,
       total_pages: total_pages
     }, status: :ok
+
   end
 
   # GET /orders/creators
@@ -462,6 +485,12 @@ class OrdersController < ApplicationController
     new_params[:user_id] = @current_user&.id
     new_params[:created_by_user_id] = @current_user&.id if @current_user
     
+    # Use OrderService to handle location_id assignment
+    # This will automatically use the default location if none is provided
+    order_service = OrderService.new(current_restaurant)
+    
+    # We'll let the OrderService handle the location assignment during creation
+    
     # Set payment status and amount
     new_params[:payment_status] = "completed"
     new_params[:payment_amount] = new_params[:total]
@@ -489,7 +518,8 @@ class OrdersController < ApplicationController
       end
     end
 
-    @order = Order.new(new_params)
+    # Create the order using OrderService for proper tenant isolation
+    @order = order_service.create_order(new_params)
     @order.status = "pending"
     # The staff_created flag will be set automatically by the before_create callback
     # based on the staff_modal virtual attribute
@@ -1004,9 +1034,9 @@ class OrdersController < ApplicationController
       :contact_phone, :special_instructions, :estimated_pickup_time, 
       :pickup_time, :is_staff_order, :staff_member_id, :staff_on_duty, 
       :use_house_account, :created_by_staff_id, :created_by_user_id, 
-      :pre_discount_total, :vip_code, :vip_access_code_id, :staff_modal,
+      :pre_discount_total, :vip_code, :vip_access_code_id, :staff_modal, :location_id,
       # Handle nested attributes properly
-      items: [:id, :name, :price, :quantity, :notes, :customizations, :menu_id, :category_id],
+      items: [:id, :name, :price, :quantity, :notes, :menu_id, :category_id, { customizations: {} }],
       merchandise_items: [:id, :name, :price, :quantity, :merchandise_variant_id, :notes],
       # Allow all payment details attributes to be passed through
       payment_details: {})

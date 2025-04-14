@@ -110,6 +110,7 @@ class Restaurant < ApplicationRecord
   has_many :vip_access_codes, dependent: :destroy
   has_many :merchandise_collections, dependent: :destroy
   has_many :push_subscriptions, dependent: :destroy
+  has_many :locations,        dependent: :destroy
 
   # Layout-related associations
   has_many :layouts,          dependent: :destroy
@@ -158,6 +159,24 @@ class Restaurant < ApplicationRecord
     update(current_event_id: event.id)
   end
 
+  # Location-related methods
+  def default_location
+    locations.find_by(is_default: true)
+  end
+  
+  def active_locations
+    locations.where(is_active: true)
+  end
+  
+  def has_multiple_locations?
+    locations.count > 1
+  end
+  
+  def set_default_location(location_id)
+    location = locations.find(location_id)
+    location.make_default!
+  end
+  
   # Helper methods for allowed_origins
   def add_allowed_origin(origin)
     return if origin.blank?

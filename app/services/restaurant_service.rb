@@ -262,6 +262,7 @@ class RestaurantService
     # This ensures we get the correct related data regardless of the current tenant context
     layout = nil
     seat_count = 0
+    locations = []
     
     # Use unscoped queries to get related data for the specific restaurant
     # This bypasses the default tenant scoping and ensures we get the correct data
@@ -284,6 +285,9 @@ class RestaurantService
             seat_count = seat_sections.flat_map(&:seats).count
           end
         end
+        
+        # Get locations for this restaurant
+        locations = Location.unscoped.where(restaurant_id: restaurant.id).order(is_default: :desc, name: :asc)
       ensure
         # Restore the original tenant context
         ActiveRecord::Base.current_restaurant = original_restaurant
@@ -316,7 +320,11 @@ class RestaurantService
       code_prefix:                restaurant.code_prefix,
       current_event_id:           restaurant.current_event_id,
       # Use the seat count calculated with the correct tenant context
-      current_seat_count:         seat_count
+      current_seat_count:         seat_count,
+      # Include locations for multi-location support
+      locations:                  locations.as_json(include_order_count: true),
+      has_multiple_locations:     locations.count > 1,
+      default_location_id:        locations.find { |l| l.is_default? }&.id
     }
   end
 end

@@ -33,7 +33,27 @@ class OrderService < TenantScopedService
   # @param attributes [Hash] Attributes for the new order
   # @return [Order] The created order
   def create_order(attributes = {})
+    # If location_id is not provided, use the default location
+    if attributes[:location_id].blank?
+      default_location = find_default_location
+      attributes[:location_id] = default_location&.id
+    end
+    
     create_record(Order, attributes)
+  end
+  
+  # Find orders for a specific location
+  # @param location_id [Integer] The ID of the location to find orders for
+  # @param filters [Hash] Additional filters to apply to the query
+  # @return [ActiveRecord::Relation] A relation of orders for the specified location
+  def find_orders_by_location(location_id, filters = {})
+    find_records(Order, filters.merge(location_id: location_id))
+  end
+  
+  # Find the default location for the current restaurant
+  # @return [Location, nil] The default location or nil if none exists
+  def find_default_location
+    find_records(Location).find_by(is_default: true)
   end
   
   # Update an order, ensuring it belongs to the current restaurant

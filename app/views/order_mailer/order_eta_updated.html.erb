@@ -71,6 +71,17 @@
           Today at <%= @order.estimated_pickup_time.strftime("%-I:%M %p") %>
         <% end %>
       </p>
+      
+      <% if @order.location.present? %>
+      <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+        <p><strong>Pickup Location:</strong></p>
+        <p style="margin: 5px 0;">
+          <%= @order.location.name %><br>
+          <%= @order.location.address %><br>
+          <%= @order.location.phone_number %>
+        </p>
+      </div>
+      <% end %>
     </div>
     
     <p>Thank you for your patience and understanding.</p>
@@ -82,7 +93,9 @@
     
     <div class="footer">
       <p>This is an automated message, please do not reply to this email.</p>
-      <% if @restaurant.address.present? %>
+      <% if @order.location.present? %>
+        <p><%= @order.location.name %> - <%= @order.location.address %></p>
+      <% elsif @restaurant.address.present? %>
         <p><%= @restaurant.address %></p>
       <% end %>
     </div>

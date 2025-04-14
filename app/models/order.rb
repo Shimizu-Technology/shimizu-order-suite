@@ -80,6 +80,7 @@ class Order < ApplicationRecord
   belongs_to :staff_member, optional: true
   belongs_to :created_by_staff, class_name: 'StaffMember', foreign_key: 'created_by_staff_id', optional: true
   belongs_to :created_by_user, class_name: 'User', foreign_key: 'created_by_user_id', optional: true
+  belongs_to :location, optional: true  # Will be set to non-optional after migration
 
   # Payment helper methods
   def initial_payment
@@ -408,6 +409,10 @@ class Order < ApplicationRecord
 
       # VIP code (if present)
       "vip_code" => vip_code,
+      
+      # Location information
+      "location_id" => location_id,
+      "location_name" => location&.name,
       "vip_access_code_id" => vip_access_code_id,
 
       # Merchandise items (if present)
@@ -495,6 +500,17 @@ class Order < ApplicationRecord
       end.join("\n")
     end
 
+    # Get location information if available
+    location_info = ""
+    if location.present?
+      location_info = <<~LOC
+
+      Pickup Location: #{location.name}
+      Address: #{location.address}
+      Phone: #{location.phone_number}
+      LOC
+    end
+
     message_text = <<~MSG
       New order \##{id} created!
 
@@ -503,7 +519,7 @@ class Order < ApplicationRecord
       #{merch_item_lines}
 
       Total: $#{'%.2f' % total.to_f}
-      Status: #{status}
+      Status: #{status}#{location_info}
 
       Instructions: #{special_instructions.presence || 'none'}
     MSG
@@ -534,6 +550,14 @@ class Order < ApplicationRecord
     message += "Total: $#{'%.2f' % total.to_f}\n"
     message += "Customer: #{contact_name}\n" if contact_name.present?
     message += "Phone: #{contact_phone}\n" if contact_phone.present?
+    
+    # Add location information if available
+    if location.present?
+      message += "\nPickup Location: #{location.name}\n"
+      message += "Address: #{location.address}\n"
+      message += "Phone: #{location.phone_number}\n"
+    end
+    
     message += "\nSpecial Instructions: #{special_instructions}" if special_instructions.present?
     
     title = "New Order ##{id} - $#{'%.2f' % total.to_f}"
@@ -558,16 +582,24 @@ class Order < ApplicationRecord
       "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
     end.join(", ")
     
+    # Create notification body with location info if available
+    notification_body = "Total: $#{'%.2f' % total.to_f} - #{food_item_lines}"
+    if location.present?
+      notification_body += " | Location: #{location.name}"
+    end
+    
     # Create the notification payload
     payload = {
       title: "New Order ##{id}",
-      body: "Total: $#{'%.2f' % total.to_f} - #{food_item_lines}",
+      body: notification_body,
       icon: "/icons/icon-192.png",
       badge: "/icons/badge-96.png",
       tag: "new-order-#{id}",
       data: {
         url: "/admin/orders/#{id}",
         orderId: id,
+        locationId: location&.id,
+        locationName: location&.name,
         timestamp: Time.current.to_i
       },
       actions: [
