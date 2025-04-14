@@ -5,6 +5,9 @@ class Category < ApplicationRecord
   
   # Define which attributes should trigger broadcasts
   broadcasts_on :name, :position
+  
+  # Set default position before creating a new category
+  before_create :set_default_position
 
   # Change association from restaurant to menu
   belongs_to :menu
@@ -25,5 +28,16 @@ class Category < ApplicationRecord
     else
       all
     end
+  end
+  
+  private
+  
+  # Set the default position to the end of the list
+  def set_default_position
+    return if position.present?
+    
+    # Find the highest position in this menu
+    max_position = menu.categories.maximum(:position) || 0
+    self.position = max_position + 1
   end
 end

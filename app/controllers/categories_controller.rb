@@ -4,7 +4,7 @@ class CategoriesController < ApplicationController
   
   # No admin requirement here, so all users (or guests) can call index:
   before_action :optional_authorize, only: [:index]
-  before_action :authorize_request, only: [:create, :update, :destroy]
+  before_action :authorize_request, only: [:create, :update, :destroy, :batch_update_positions]
   before_action :ensure_tenant_context
   
   # GET /menus/:menu_id/categories
@@ -46,10 +46,27 @@ class CategoriesController < ApplicationController
     end
   end
   
+  # PATCH /menus/:menu_id/categories/batch_update_positions
+  def batch_update_positions
+    result = category_service.batch_update_positions(params[:menu_id], positions_params)
+    
+    if result[:success]
+      render json: result[:categories]
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
+    end
+  end
+  
   private
   
   def category_params
     params.require(:category).permit(:name, :position, :description)
+  end
+  
+  def positions_params
+    params.require(:positions).map do |position_data|
+      position_data.permit(:id, :position)
+    end
   end
   
   def category_service

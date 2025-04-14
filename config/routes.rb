@@ -98,7 +98,11 @@ Rails.application.routes.draw do
     end
     
     # Nest categories under menus
-    resources :categories, only: [ :index, :create, :update, :destroy ]
+    resources :categories, only: [ :index, :create, :update, :destroy ] do
+      collection do
+        patch :batch_update_positions
+      end
+    end
   end
   resources :menu_items, only: [ :index, :show, :create, :update, :destroy ]
   resources :notifications, only: [ :index, :show, :create, :update, :destroy ] do
