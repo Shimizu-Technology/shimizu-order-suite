@@ -241,13 +241,14 @@ class MenuItemService < TenantScopedService
     { success: false, errors: ["Menu item not found"], status: :not_found }
   end
 
-  # Copy a menu item to another menu
+  # Copy a menu item to another menu or within the same menu
   def copy_item(id, params)
     return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
     
     source_item = scope_query(MenuItem).find(id)
     target_menu_id = params[:target_menu_id]
     category_ids = params[:category_ids] || []
+    new_name = params[:new_name]
     
     unless target_menu_id.present?
       return { success: false, errors: ["Target menu ID is required"], status: :unprocessable_entity }
@@ -260,6 +261,13 @@ class MenuItemService < TenantScopedService
     # Create a new item with the same attributes but new menu_id
     new_item = source_item.dup
     new_item.menu_id = target_menu_id
+    
+    # Set a custom name if provided, otherwise append "(Copy)" for same-menu cloning
+    if new_name.present?
+      new_item.name = new_name
+    elsif target_menu_id.to_s == source_item.menu_id.to_s
+      new_item.name = "#{source_item.name} (Copy)"
+    end
     
     # Assign categories
     new_item.category_ids = category_ids if category_ids.present?
@@ -274,6 +282,9 @@ class MenuItemService < TenantScopedService
     
     # Keep the same image URL
     new_item.image_url = source_item.image_url
+    
+    # Tenant isolation is already handled by the scope_query method
+    # and the tenant context set in the controller
     
     # Save the new item
     if new_item.save
