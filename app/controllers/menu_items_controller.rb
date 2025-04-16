@@ -17,20 +17,39 @@ class MenuItemsController < ApplicationController
 
   # GET /menu_items
   def index
+    Rails.logger.info "[MenuItemsController#index] Params: #{params.inspect}"
     items = menu_item_service.list_items(params)
 
-    render json: items.as_json(
-      include: {
-        option_groups: {
-          include: {
-            options: {
-              only: [ :id, :name, :available, :is_preselected, :is_available ],
-              methods: [ :additional_price_float ]
+    # Optimize response based on view_type
+    case params[:view_type]
+    when 'list'
+      # Minimal data for listings - optimized for performance
+      render json: items.as_json(
+        only: [:id, :name, :price, :image_url, :featured, :seasonal, :hidden, 
+               :category_ids, :menu_id, :available_from, :available_until, 
+               :available_days, :stock_quantity, :damaged_quantity, :stock_status]
+      )
+    when 'admin'
+      # Full data for admin views but without nested option groups
+      render json: items.as_json(
+        methods: [:available_quantity]
+      )
+    else
+      # Full data including options (default)
+      render json: items.as_json(
+        include: {
+          option_groups: {
+            include: {
+              options: {
+                only: [ :id, :name, :available, :is_preselected, :is_available ],
+                methods: [ :additional_price_float ]
+              }
             }
           }
-        }
-      }
-    )
+        },
+        methods: [:available_quantity]
+      )
+    end
   end
 
   # GET /menu_items/:id

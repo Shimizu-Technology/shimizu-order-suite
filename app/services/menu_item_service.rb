@@ -4,8 +4,11 @@ class MenuItemService < TenantScopedService
 
   # List menu items with optional filtering
   def list_items(params = {})
+    # Log the request parameters for debugging
+    Rails.logger.debug "[MenuItemService#list_items] Params: #{params.inspect}"
+    
     # Base query with tenant isolation
-    if is_admin? && (params[:admin].present? || params[:show_all].present?)
+    if is_admin? && (params[:admin].present? || params[:show_all].present? || params[:view_type] == 'admin')
       base_scope = scope_query(MenuItem).all
     else
       # For non-admin users, only show items that are currently available and not hidden
@@ -20,15 +23,45 @@ class MenuItemService < TenantScopedService
       base_scope = base_scope.where(menu_id: restaurant.current_menu_id)
     end
 
-    # Sort by name
-    base_scope = base_scope.order(:name)
-
+    # Apply additional filters based on params
+    
+    # Filter by featured status if requested
+    if params[:featured].present? && params[:featured].to_s.downcase == 'true'
+      base_scope = base_scope.where(featured: true)
+    end
+    
+    # Filter by seasonal status if requested
+    if params[:seasonal].present? && params[:seasonal].to_s.downcase == 'true'
+      base_scope = base_scope.where(seasonal: true)
+    end
+    
+    # Explicit hidden filter for admin users
+    if is_admin? && params[:hidden].present?
+      hidden_value = params[:hidden].to_s.downcase == 'true'
+      base_scope = base_scope.where(hidden: hidden_value)
+    end
+    
     # Category filter if present => now uses many-to-many
     if params[:category_id].present?
       base_scope = base_scope.joins(:categories).where(categories: { id: params[:category_id] })
     end
+    
+    # Sort by name
+    base_scope = base_scope.order(:name)
 
-    base_scope.includes(option_groups: :options)
+    # Optimize response based on view_type
+    # 'list' = minimal data for listings
+    # 'admin' = full data for admin views
+    # 'detail' = full data including options
+    includes_scope = case params[:view_type]
+                    when 'list'
+                      base_scope
+                    else
+                      base_scope.includes(option_groups: :options)
+                    end
+    
+    Rails.logger.debug "[MenuItemService#list_items] Returning #{includes_scope.count} items"
+    includes_scope
   end
 
   # Find a specific menu item by ID

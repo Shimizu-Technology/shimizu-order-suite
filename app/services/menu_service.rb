@@ -3,8 +3,20 @@ class MenuService < TenantScopedService
   attr_accessor :current_user
 
   # List all menus for the current restaurant
+  # @param params [Hash] Parameters for filtering menus
+  # @option params [Boolean] :active If true, only returns active menus; if false, only returns inactive menus
   def list_menus(params = {})
-    scope_query(Menu).order(created_at: :asc)
+    menus = scope_query(Menu).order(created_at: :asc)
+    
+    # Filter by active status if specified
+    if params[:active].present?
+      active_status = ActiveModel::Type::Boolean.new.cast(params[:active])
+      menus = menus.where(active: active_status)
+      Rails.logger.debug { "[MenuService] Filtering menus by active=#{active_status}" }
+    end
+    
+    Rails.logger.debug { "[MenuService] Returning #{menus.count} menus" }
+    menus
   end
 
   # Find a specific menu by ID
