@@ -280,12 +280,13 @@ class MenuItem < ApplicationRecord
     end
   end
 
-  # Enforce max 4 featured items
+  # Enforce max 4 featured items per menu
   def limit_featured_items
     if featured_changed? && featured?
-      currently_featured = MenuItem.where(featured: true).where.not(id: self.id).count
+      # Only count featured items from the same menu
+      currently_featured = MenuItem.where(featured: true, menu_id: self.menu_id).where.not(id: self.id).count
       if currently_featured >= 4
-        errors.add(:featured, "cannot exceed 4 total featured items.")
+        errors.add(:featured, "cannot exceed 4 featured items per menu.")
       end
     end
   end
