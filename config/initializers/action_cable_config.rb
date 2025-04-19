@@ -10,7 +10,8 @@ allowed_origins = [
   'https://hafaloha-lvmt0.kinsta.page',
   'https://hafaloha-orders.com',
   'https://shimizu-order-suite.netlify.app',
-  'https://house-of-chin-fe.netlify.app'
+  'https://house-of-chin-fe.netlify.app',
+  'https://crab-daddy.netlify.app'
 ]
 
 # Also add origins with trailing slashes to handle both formats
