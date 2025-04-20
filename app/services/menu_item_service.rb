@@ -46,6 +46,28 @@ class MenuItemService < TenantScopedService
       base_scope = base_scope.joins(:categories).where(categories: { id: params[:category_id] })
     end
     
+    # Search filter if present
+    if params[:search_query].present?
+      search_term = "%#{params[:search_query].downcase}%"
+      
+      # Check if search term matches any category name
+      matching_category_ids = scope_query(Category).where("LOWER(name) LIKE ?", search_term).pluck(:id)
+      
+      if matching_category_ids.present?
+        Rails.logger.debug "[MenuItemService#list_items] Found matching categories: #{matching_category_ids}"
+        # If we found matching categories, include items from those categories
+        base_scope = base_scope.left_joins(:categories)
+                              .where("LOWER(menu_items.name) LIKE ? OR LOWER(menu_items.description) LIKE ? OR categories.id IN (?)", 
+                                     search_term, search_term, matching_category_ids)
+                              .distinct
+      else
+        # Standard search in name and description
+        base_scope = base_scope.where("LOWER(menu_items.name) LIKE ? OR LOWER(menu_items.description) LIKE ?", search_term, search_term)
+      end
+      
+      Rails.logger.debug "[MenuItemService#list_items] Applying search filter with term: #{params[:search_query]}"
+    end
+    
     # Sort by name
     base_scope = base_scope.order(:name)
 
