@@ -11,7 +11,8 @@ allowed_origins = [
   'https://hafaloha-orders.com',
   'https://shimizu-order-suite.netlify.app',
   'https://house-of-chin-fe.netlify.app',
-  'https://crab-daddy.netlify.app'
+  'https://crab-daddy.netlify.app',
+  'https://shimizu-order-suite.com'
 ]
 
 # Also add origins with trailing slashes to handle both formats
