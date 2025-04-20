@@ -3,13 +3,8 @@ class ApplicationMailer < ActionMailer::Base
   include MailerHelper
 
   # Use a verified sender identity for SendGrid
-  default from: "ShimizuTechnology@gmail.com"
+  default from: -> { default_from_email }
 
   layout "mailer"
 
-  private
-
-  def default_from_address
-    "ShimizuTechnology@gmail.com"
-  end
 end

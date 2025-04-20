@@ -32,28 +32,23 @@ Rails.application.configure do
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :amazon
 
-  # --------------------------------------------------------------------------------
-  # Action Mailer (sending real emails in development, via SendGrid for example)
-  # --------------------------------------------------------------------------------
+  # --------------------------------
+  # Action Mailer (SendGrid in dev)
+  # --------------------------------
+  mail_domain = ENV.fetch("EMAIL_DOMAIN", "shimizu-order-suite.com")
 
-  # If you want to raise an exception when mail can’t send, set this to true.
-  config.action_mailer.raise_delivery_errors = true
-
-  # Actually send emails via SMTP (SendGrid). If you prefer a different provider,
-  # change these settings accordingly.
   config.action_mailer.delivery_method = :smtp
   config.action_mailer.smtp_settings = {
-    user_name: "apikey",                 # SendGrid requirement
-    password:  ENV["SENDGRID_API_KEY"],  # must be set in your environment
-    domain:    "gmail.com",              # or your custom domain
-    address:   "smtp.sendgrid.net",
-    port:      587,
-    authentication: :plain,
+    user_name:            "apikey",
+    password:             ENV["SENDGRID_API_KEY"],
+    domain:               mail_domain,           # <— was "gmail.com"
+    address:              "smtp.sendgrid.net",
+    port:                 587,
+    authentication:       :plain,
     enable_starttls_auto: true
   }
 
-  # Disable caching for Action Mailer templates even if Action Controller caching is enabled.
-  config.action_mailer.perform_caching = false
+  config.action_mailer.perform_caching     = false
 
   # Default URL for mailer links (e.g. password reset). Adjust host & port to match your local setup.
   config.action_mailer.default_url_options = { host: "localhost", port: 3000 }

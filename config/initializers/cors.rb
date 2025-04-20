@@ -21,7 +21,7 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
 
   # For backward compatibility, keep the original origins
   allow do
-    origins "https://hafaloha.netlify.app", "https://hafaloha-lvmt0.kinsta.page", "https://hafaloha-orders.com", "https://shimizu-order-suite.netlify.app", "https://house-of-chin-fe.netlify.app", "https://crab-daddy.netlify.app"
+    origins "https://hafaloha.netlify.app", "https://hafaloha-lvmt0.kinsta.page", "https://hafaloha-orders.com", "https://shimizu-order-suite.netlify.app", "https://house-of-chin-fe.netlify.app", "https://crab-daddy.netlify.app", "https://shimizu-order-suite.com"
 
     resource "*",
       headers: :any,
