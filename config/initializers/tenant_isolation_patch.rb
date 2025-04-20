@@ -64,7 +64,7 @@ Rails.application.config.after_initialize do
         # Log cross-tenant access attempt for security monitoring
         log_cross_tenant_access(restaurant&.id)
         
-        raise TenantAccessDeniedError, "You don't have permission to access this restaurant's data"
+        raise TenantIsolation::TenantAccessDeniedError, "You don't have permission to access this restaurant's data"
       end
     end
     
