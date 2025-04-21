@@ -50,7 +50,8 @@ class RestaurantsController < ApplicationController
   def update
     file_params = {
       hero_image: params[:hero_image],
-      spinner_image: params[:spinner_image]
+      spinner_image: params[:spinner_image],
+      fallback_image: params[:fallback_image]
     }
     
     result = restaurant_service.update_restaurant(params[:id], restaurant_params, file_params, current_user)

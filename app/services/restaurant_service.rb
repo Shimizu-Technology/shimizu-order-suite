@@ -116,6 +116,17 @@ class RestaurantService
         restaurant.admin_settings["spinner_image_url"] = public_url
       end
       
+      if file_params[:fallback_image].present?
+        file = file_params[:fallback_image]
+        ext = File.extname(file.original_filename)
+        new_filename = "fallback_#{restaurant.id}_#{Time.now.to_i}#{ext}"
+        public_url = S3Uploader.upload(file, new_filename)
+        
+        # Initialize admin_settings if it doesn't exist
+        restaurant.admin_settings ||= {}
+        restaurant.admin_settings["fallback_image_url"] = public_url
+      end
+      
       if restaurant.update(restaurant_params)
         # Track restaurant update
         analytics.track("restaurant.updated", { 
