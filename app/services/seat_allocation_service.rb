@@ -34,7 +34,7 @@ class SeatAllocationService < TenantScopedService
         begin
           start_date = Date.parse(filters[:start_date]).beginning_of_day
           end_date = Date.parse(filters[:end_date]).end_of_day
-          query = query.where("allocated_at BETWEEN ? AND ?", start_date, end_date)
+          query = query.where("start_time BETWEEN ? AND ?", start_date, end_date)
         rescue ArgumentError
           return { 
             success: false, 
@@ -109,7 +109,7 @@ class SeatAllocationService < TenantScopedService
         allocation = SeatAllocation.new(
           seat_id: seat.id,
           reservation_id: reservation.id,
-          allocated_at: allocation_params[:allocated_at] || Time.current
+          start_time: allocation_params[:start_time] || Time.current
         )
       elsif waitlist_entry_id.present?
         # Validate waitlist entry belongs to current restaurant
@@ -123,7 +123,7 @@ class SeatAllocationService < TenantScopedService
         allocation = SeatAllocation.new(
           seat_id: seat.id,
           waitlist_entry_id: waitlist_entry.id,
-          allocated_at: allocation_params[:allocated_at] || Time.current
+          start_time: allocation_params[:start_time] || Time.current
         )
       else
         return { 
@@ -282,7 +282,7 @@ class SeatAllocationService < TenantScopedService
             allocation = SeatAllocation.create!(
               seat_id: seat_id,
               reservation_id: reservation.id,
-              allocated_at: Time.current
+              start_time: bulk_params[:start_time] || Time.current
             )
             allocations << allocation
           end
@@ -300,7 +300,7 @@ class SeatAllocationService < TenantScopedService
             allocation = SeatAllocation.create!(
               seat_id: seat_id,
               waitlist_entry_id: waitlist_entry.id,
-              allocated_at: Time.current
+              start_time: bulk_params[:start_time] || Time.current
             )
             allocations << allocation
           end

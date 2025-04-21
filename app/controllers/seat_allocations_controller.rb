@@ -67,7 +67,7 @@ class SeatAllocationsController < ApplicationController
           occupant_name:       occupant_name,
           occupant_party_size: occupant_party_size,
           occupant_status:     occupant_status,
-          start_time:          alloc.allocated_at,
+          start_time:          alloc.start_time,
           end_time:            alloc.released_at,
           released_at:         alloc.released_at
         }
@@ -90,7 +90,7 @@ class SeatAllocationsController < ApplicationController
     # Prepare bulk allocation parameters
     bulk_params = {
       seat_ids: seat_ids,
-      allocated_at: parse_time(sa_params[:start_time]) || Time.current
+      start_time: parse_time(sa_params[:start_time]) || Time.current
     }
     
     # Set the appropriate occupant ID based on type
@@ -119,7 +119,7 @@ class SeatAllocationsController < ApplicationController
         end
       end
       
-      start_time = result[:allocations].first&.allocated_at || Time.current
+      start_time = result[:allocations].first&.start_time || Time.current
       msg = "Seats allocated (seated) from #{start_time.strftime('%H:%M')} for occupant #{occupant_id}"
       render json: { message: msg, allocations: result[:allocations] }, status: :created
     else
@@ -148,7 +148,7 @@ class SeatAllocationsController < ApplicationController
     # Prepare bulk allocation parameters
     bulk_params = {
       seat_ids: seat_ids,
-      allocated_at: parse_time(ra_params[:start_time]) || Time.current
+      start_time: parse_time(ra_params[:start_time]) || Time.current
     }
     
     # Set the appropriate occupant ID based on type
@@ -177,7 +177,7 @@ class SeatAllocationsController < ApplicationController
         end
       end
       
-      start_time = result[:allocations].first&.allocated_at || Time.current
+      start_time = result[:allocations].first&.start_time || Time.current
       msg = "Seats reserved from #{start_time.strftime('%H:%M')}."
       render json: { message: msg, allocations: result[:allocations] }, status: :created
     else

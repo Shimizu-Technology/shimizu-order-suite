@@ -191,7 +191,7 @@ class LayoutService < TenantScopedService
       
       # Update restaurant ID if needed
       if current_user.role != "super_admin"
-        layout.restaurant_id = current_restaurant.id
+        layout.restaurant_id = restaurant.id
       elsif layout_params[:restaurant_id].present?
         layout.restaurant_id = layout_params[:restaurant_id]
       end
@@ -290,7 +290,7 @@ class LayoutService < TenantScopedService
       end
       
       # Check if layout belongs to the user's restaurant
-      if layout.restaurant_id != current_restaurant.id && current_user.role != "super_admin"
+      if layout.restaurant_id != restaurant.id && current_user.role != "super_admin"
         return { success: false, errors: ["Layout does not belong to your restaurant"], status: :forbidden }
       end
       

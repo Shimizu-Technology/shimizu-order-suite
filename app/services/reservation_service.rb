@@ -13,8 +13,9 @@ class ReservationService < TenantScopedService
     
     if params[:date].present?
       date = Date.parse(params[:date])
+      # Use start_time instead of reservation_date
       reservations = reservations.where(
-        "reservation_date >= ? AND reservation_date < ?", 
+        "start_time >= ? AND start_time < ?", 
         date.beginning_of_day, 
         date.end_of_day
       )
@@ -42,7 +43,7 @@ class ReservationService < TenantScopedService
     end
     
     # Order by date and time
-    reservations = reservations.order(reservation_date: :asc)
+    reservations = reservations.order(start_time: :asc)
     
     # Paginate if requested
     if params[:page].present? && params[:per_page].present?
