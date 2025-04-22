@@ -81,16 +81,37 @@ class SeatAllocationsController < ApplicationController
 
   # POST /seat_allocations/multi_create
   def multi_create
-    sa_params = params.require(:seat_allocation).permit(:occupant_type, :occupant_id, :start_time, :end_time, seat_ids: [])
+    # Log raw parameters for debugging
+    Rails.logger.debug "[SeatAllocationsController#multi_create] Raw params=#{params.inspect}"
+    
+    # Get time parameters from either nested or non-nested structure
+    start_time = params[:seat_allocation].present? && params[:seat_allocation][:start_time].present? ? 
+                params[:seat_allocation][:start_time] : params[:start_time]
+    end_time = params[:seat_allocation].present? && params[:seat_allocation][:end_time].present? ? 
+              params[:seat_allocation][:end_time] : params[:end_time]
+    
+    # Get occupant parameters directly from the root level where they are sent
+    occupant_type = params[:occupant_type]
+    occupant_id = params[:occupant_id]
+    seat_ids = params[:seat_ids]
 
-    occupant_type = sa_params[:occupant_type]
-    occupant_id   = sa_params[:occupant_id]
-    seat_ids      = sa_params[:seat_ids] || []
+    # Ensure we have the required parameters and convert to appropriate types
+    seat_ids = Array(seat_ids)
+    occupant_id = occupant_id.to_i if occupant_id.present?
+    
+    # Log extracted parameters for debugging
+    Rails.logger.debug "[SeatAllocationsController#multi_create] Extracted params: occupant_type=#{occupant_type}, occupant_id=#{occupant_id}, seat_ids=#{seat_ids}"
+    
+    # Validate required parameters
+    if occupant_type.blank? || occupant_id.blank? || seat_ids.empty?
+      return render json: { error: "Missing required parameters: occupant_type, occupant_id, or seat_ids" }, status: :unprocessable_entity
+    end
     
     # Prepare bulk allocation parameters
     bulk_params = {
       seat_ids: seat_ids,
-      start_time: parse_time(sa_params[:start_time]) || Time.current
+      start_time: parse_time(start_time) || Time.current,
+      end_time: parse_time(end_time)
     }
     
     # Set the appropriate occupant ID based on type
