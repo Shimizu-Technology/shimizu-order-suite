@@ -590,17 +590,19 @@ class Order < ApplicationRecord
     
     # Create the notification payload
     payload = {
-      title: "New Order ##{id}",
+      title: "New Order ##{order_number}",
       body: notification_body,
       icon: "/icons/icon-192.png",
       badge: "/icons/badge-96.png",
       tag: "new-order-#{id}",
       data: {
-        url: "/admin/orders/#{id}",
+        url: "/admin",
         orderId: id,
+        orderNumber: order_number,
         locationId: location&.id,
         locationName: location&.name,
-        timestamp: Time.current.to_i
+        timestamp: Time.current.to_i,
+        defaultTab: "orders"
       },
       actions: [
         {
