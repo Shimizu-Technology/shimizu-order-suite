@@ -7,7 +7,7 @@ class LayoutsController < ApplicationController
 
   # GET /layouts
   def index
-    result = layout_service.list_layouts
+    result = layout_service.list_layouts(params[:location_id])
     
     if result[:success]
       render json: result[:layouts]
@@ -88,6 +88,6 @@ class LayoutsController < ApplicationController
   end
 
   def layout_params
-    params.require(:layout).permit(:name, :restaurant_id, sections_data: {})
+    params.require(:layout).permit(:name, :restaurant_id, :location_id, sections_data: {})
   end
 end

@@ -23,9 +23,12 @@ class ReservationsController < ApplicationController
     end
     
     # Add other filters if present
-    [:status, :customer_name, :phone, :email, :page, :per_page].each do |param|
+    [:status, :customer_name, :phone, :email, :page, :per_page, :location_id].each do |param|
       filter_params[param] = params[param] if params[param].present?
     end
+    
+    # Debug log to verify location_id is being forwarded properly
+    Rails.logger.debug "Reservation filter params: #{filter_params.inspect}"
     
     result = reservation_service.list_reservations(filter_params)
     
@@ -36,9 +39,10 @@ class ReservationsController < ApplicationController
           :contact_name, :contact_phone, :contact_email,
           :deposit_amount, :reservation_source, :special_requests,
           :status, :created_at, :updated_at, :duration_minutes,
-          :seat_preferences
+          :seat_preferences, :location_id, :reservation_number
         ],
-        methods: :seat_labels
+        methods: :seat_labels,
+        include: { location: { only: [:id, :name] } }
       )
     else
       render json: { error: result[:errors].join(', ') }, status: result[:status] || :internal_server_error
@@ -59,7 +63,7 @@ class ReservationsController < ApplicationController
           :contact_name, :contact_phone, :contact_email,
           :deposit_amount, :reservation_source, :special_requests,
           :status, :created_at, :updated_at, :duration_minutes,
-          :seat_preferences
+          :seat_preferences, :reservation_number
         ],
         methods: :seat_labels
       )
@@ -70,105 +74,151 @@ class ReservationsController < ApplicationController
 
   # Public create
   def create
-    # ---- DEBUG LOGGING ----
-    Rails.logger.debug "DEBUG: raw params = #{params.inspect}"
-
-    # This calls strong params. Let's log what we get back:
-    Rails.logger.debug "DEBUG: reservation_params = #{reservation_params.inspect}"
-
-    @reservation = Reservation.new
-
-    # 1) Manually parse start_time from reservation_params
+    # For public endpoint, ensure tenant context is properly validated
+    # Check if restaurant_id is provided and exists
+    restaurant_id = reservation_params[:restaurant_id]
+    
+    if restaurant_id.blank?
+      # For public API, ensure restaurant_id is always present
+      return render json: { error: "Restaurant ID is required" }, status: :unprocessable_entity
+    end
+    
+    # Verify restaurant exists
+    restaurant = Restaurant.find_by(id: restaurant_id)
+    unless restaurant
+      return render json: { error: "Restaurant not found" }, status: :unprocessable_entity
+    end
+      
+    # Set the current restaurant context for this request
+    @current_restaurant = restaurant
+    
+    # Prepare the reservation data
+    create_params = {}
+    
+    # Process start_time
     if reservation_params[:start_time].present?
       parsed_start = Time.zone.parse(reservation_params[:start_time])
       if parsed_start.nil?
         return render json: { error: "Invalid start_time format" }, status: :unprocessable_entity
       end
-      @reservation.start_time = parsed_start
+      create_params[:start_time] = parsed_start
+    else
+      return render json: { error: "start_time is required" }, status: :unprocessable_entity
     end
-
-    # 2) If an end_time was passed
+    
+    # Process end_time if provided, or calculate it from restaurant's configured duration
     if reservation_params[:end_time].present?
       parsed_end = Time.zone.parse(reservation_params[:end_time])
       return render json: { error: "Invalid end_time format" }, status: :unprocessable_entity if parsed_end.nil?
-      @reservation.end_time = parsed_end
+      create_params[:end_time] = parsed_end
     else
-      # If your model sets end_time automatically based on duration_minutes,
-      # you can skip assigning it here.
+      # Always use the restaurant's configured duration
+      # Get from admin_settings.reservations.duration_minutes if available, fallback to reservation_duration property
+      restaurant_duration = restaurant.admin_settings&.dig("reservations", "duration_minutes") || 
+                           restaurant.reservation_duration || 
+                           60 # Default to 60 minutes if not set
+      
+      # Use the restaurant's duration even if client provided duration_minutes
+      if reservation_params[:duration_minutes].present? && reservation_params[:duration_minutes].to_i != restaurant_duration
+        # Log that we're overriding the client-provided duration
+        Rails.logger.info "Overriding client-provided duration: #{reservation_params[:duration_minutes]} with restaurant setting: #{restaurant_duration} minutes"
+      end
+      
+      create_params[:end_time] = create_params[:start_time] + restaurant_duration.minutes
+      create_params[:duration_minutes] = restaurant_duration
+      
+      Rails.logger.info "Using restaurant-configured duration: #{restaurant_duration} minutes to calculate end_time: #{create_params[:end_time]}"
     end
-
-    # 3) Copy other fields from reservation_params
-    @reservation.restaurant_id       = reservation_params[:restaurant_id]
-    @reservation.party_size         = reservation_params[:party_size]
-    @reservation.contact_name       = reservation_params[:contact_name]
-    @reservation.contact_phone      = reservation_params[:contact_phone]
-    @reservation.contact_email      = reservation_params[:contact_email]
-    @reservation.deposit_amount     = reservation_params[:deposit_amount]
-    @reservation.reservation_source = reservation_params[:reservation_source]
-    @reservation.special_requests   = reservation_params[:special_requests]
-    @reservation.status             = reservation_params[:status]
-    @reservation.duration_minutes   = reservation_params[:duration_minutes] if reservation_params[:duration_minutes].present?
-
-    # 4) seat_preferences: need seat_preferences: [[]] in strong parameters
-    if reservation_params[:seat_preferences].present?
-      Rails.logger.debug "DEBUG: seat_preferences from params = #{reservation_params[:seat_preferences].inspect}"
-      @reservation.seat_preferences = reservation_params[:seat_preferences]
+    
+    # Copy other parameters
+    [:party_size, :contact_name, :contact_phone, :contact_email, 
+     :deposit_amount, :reservation_source, :special_requests, 
+     :status, :seat_preferences].each do |field|
+      create_params[field] = reservation_params[field] if reservation_params[field].present?
     end
-
-    # If staff/admin, force the restaurant_id
-    if current_user && current_user.role != "super_admin"
-      @reservation.restaurant_id = current_user.restaurant_id
-    else
-      # If no user or super_admin, default to 1 if not provided
-      @reservation.restaurant_id ||= 1
+    
+    # Handle location_id specially to verify it exists and belongs to this restaurant
+    if reservation_params[:location_id].present?
+      location_id = reservation_params[:location_id].to_i
+      location = restaurant.locations.find_by(id: location_id)
+      
+      if location
+        Rails.logger.info "Using specified location: #{location.name} (ID: #{location.id})"
+        create_params[:location_id] = location.id
+      else
+        Rails.logger.warn "Location ID #{location_id} not found for restaurant #{restaurant.id}, using default location"
+        # Let the model's set_default_location callback handle it
+      end
     end
-
-    # Require a valid start_time
-    unless @reservation.start_time
-      return render json: { error: "start_time is required" }, status: :unprocessable_entity
-    end
-
-    # 5) Check capacity
-    restaurant = Restaurant.find(@reservation.restaurant_id)
-    if exceeds_capacity?(restaurant, @reservation.start_time, @reservation.end_time, @reservation.party_size)
+    
+    # Set restaurant_id - use the validated restaurant context
+    create_params[:restaurant_id] = restaurant.id
+    
+    # Set status to booked if not provided
+    create_params[:status] ||= 'booked'
+    
+    # Check capacity using the service, including location_id when available
+    if exceeds_capacity?(restaurant, create_params[:start_time], create_params[:end_time], create_params[:party_size], create_params[:location_id])
       return render json: { error: "Not enough seats for that timeslot" }, status: :unprocessable_entity
     end
-
-    # ---- DEBUG: see what's in memory right before save
-    Rails.logger.debug "DEBUG: about to save. @reservation.seat_preferences = #{@reservation.seat_preferences.inspect}"
-
-    # 6) Save
-    if @reservation.save
-      # Get notification preferences - only don't send if explicitly set to false
+    
+    # Use service to create the reservation with proper tenant isolation
+    result = reservation_service.create_reservation(create_params)
+    
+    if result[:success]
+      reservation = result[:reservation]
+      
+      # Handle notifications
       notification_channels = restaurant.admin_settings&.dig("notification_channels", "reservations") || {}
 
-      # Optionally send a confirmation email - send unless explicitly disabled
-      if notification_channels["email"] != false && @reservation.contact_email.present?
-        ReservationMailer.booking_confirmation(@reservation).deliver_later
+      # Optionally send a creation email - send unless explicitly disabled
+      if notification_channels["email"] != false && reservation.contact_email.present?
+        # Send booking creation email instead of confirmation
+        ReservationMailer.booking_created(reservation).deliver_later
       end
 
       # Optionally send a text message - send unless explicitly disabled
-      if notification_channels["sms"] != false && @reservation.contact_phone.present?
+      if notification_channels["sms"] != false && reservation.contact_phone.present?
         restaurant_name = restaurant.name
         # Use custom SMS sender ID if set, otherwise use restaurant name
         sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
 
+        # Prepare location string if needed
+        location_str = ""
+        if reservation.location.present? && restaurant.locations.count > 1 && reservation.location.name != restaurant_name
+          location_str = " at #{reservation.location.name}"
+        end
+        
         message_body = <<~MSG.squish
-          Hi #{@reservation.contact_name}, your #{restaurant_name} reservation is confirmed
-          on #{@reservation.start_time.strftime("%B %d at %I:%M %p")}.
-          #{@reservation.deposit_amount && @reservation.deposit_amount > 0 ? "Deposit amount: $#{sprintf("%.2f", @reservation.deposit_amount.to_f)}. " : ""}
-          We look forward to seeing you!
+          Hi #{reservation.contact_name}, your #{restaurant_name}#{location_str} reservation request has been received
+          for #{reservation.start_time.strftime("%B %d at %I:%M %p")} (party of #{reservation.party_size}).
+          We'll confirm your reservation shortly.
         MSG
-        ClicksendClient.send_text_message(
-          to:   @reservation.contact_phone,
+        
+        # Use background job for SMS sending instead of direct call
+        # This improves API response time by offloading SMS sending to a worker
+        SendSmsJob.perform_later(
+          to:   reservation.contact_phone,
           body: message_body,
           from: sms_sender
         )
+        
+        # Log that SMS was enqueued but not sent synchronously
+        Rails.logger.info("SMS notification for reservation ##{reservation.id} enqueued to background job")
       end
-
-      render json: @reservation, status: :created
+      
+      render json: reservation.as_json(
+        only: [
+          :id, :restaurant_id, :start_time, :end_time, :party_size,
+          :contact_name, :contact_phone, :contact_email,
+          :deposit_amount, :reservation_source, :special_requests,
+          :status, :created_at, :updated_at, :duration_minutes,
+          :seat_preferences, :location_id, :reservation_number
+        ],
+        methods: :seat_labels
+      ), status: :created
     else
-      render json: { errors: @reservation.errors.full_messages }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
 
@@ -177,11 +227,70 @@ class ReservationsController < ApplicationController
       return render json: { error: "Forbidden: staff/admin only" }, status: :forbidden
     end
 
-    reservation = Reservation.find(params[:id])
-    if reservation.update(reservation_params)
-      render json: reservation, status: :ok
+    # Use the reservation service for proper tenant scoping
+    result = reservation_service.update_reservation(params[:id], reservation_params)
+    
+    if result[:success]
+      # Check if this is a status change to 'reserved' (confirmation)
+      # and if so, send confirmation notifications
+      if reservation_params[:status] == 'reserved'
+        reservation = result[:reservation]
+        restaurant = reservation.restaurant
+        
+        # Only proceed with notifications if we have a valid restaurant
+        if restaurant.present?
+          # Get notification settings from restaurant
+          notification_channels = restaurant.admin_settings&.dig("notification_channels", "reservations") || {}
+          
+          # Send confirmation email
+          if notification_channels["email"] != false && reservation.contact_email.present?
+            ReservationMailer.booking_confirmation(reservation).deliver_later
+            Rails.logger.info("Confirmation email for reservation ##{reservation.id} enqueued")
+          end
+          
+          # Send confirmation SMS
+          if notification_channels["sms"] != false && reservation.contact_phone.present?
+            restaurant_name = restaurant.name
+            # Use custom SMS sender ID if set, otherwise use restaurant name
+            sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+            
+            # Prepare location string if needed
+            location_str = ""
+            if reservation.location.present? && restaurant.locations.count > 1 && reservation.location.name != restaurant_name
+              location_str = " at #{reservation.location.name}"
+            end
+            
+            message_body = <<~MSG.squish
+              Hi #{reservation.contact_name}, your #{restaurant_name}#{location_str} reservation has been confirmed
+              for #{reservation.start_time.strftime("%B %d at %I:%M %p")} (party of #{reservation.party_size}).
+              #{reservation.deposit_amount && reservation.deposit_amount > 0 ? "Deposit amount: $#{sprintf("%.2f", reservation.deposit_amount.to_f)}. " : ""}
+              We look forward to seeing you!
+            MSG
+            
+            # Use background job for SMS sending
+            SendSmsJob.perform_later(
+              to:   reservation.contact_phone,
+              body: message_body,
+              from: sms_sender
+            )
+            
+            Rails.logger.info("Confirmation SMS for reservation ##{reservation.id} enqueued")
+          end
+        end
+      end
+      
+      render json: result[:reservation].as_json(
+        only: [
+          :id, :restaurant_id, :start_time, :end_time, :party_size,
+          :contact_name, :contact_phone, :contact_email,
+          :deposit_amount, :reservation_source, :special_requests,
+          :status, :created_at, :updated_at, :duration_minutes,
+          :seat_preferences, :location_id, :reservation_number
+        ],
+        methods: :seat_labels
+      ), status: :ok
     else
-      render json: { errors: reservation.errors.full_messages }, status: :unprocessable_entity
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
 
@@ -190,9 +299,14 @@ class ReservationsController < ApplicationController
       return render json: { error: "Forbidden: staff/admin only" }, status: :forbidden
     end
 
-    reservation = Reservation.find(params[:id])
-    reservation.destroy
-    head :no_content
+    # Use the reservation service for proper tenant scoping
+    result = reservation_service.delete_reservation(params[:id])
+    
+    if result[:success]
+      head :no_content
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
+    end
   end
 
   private
@@ -226,7 +340,8 @@ class ReservationsController < ApplicationController
       :reservation_source,
       :special_requests,
       :status,
-      :duration_minutes
+      :duration_minutes,
+      :location_id
       # Not seat_preferences here
     )
 
@@ -238,23 +353,81 @@ class ReservationsController < ApplicationController
     allowed
   end
 
-  def exceeds_capacity?(restaurant, start_dt, end_dt, new_party_size)
-    total_seats = restaurant.current_seats.count
-    return true if total_seats.zero?
-
-    # Overlapping reservations: same restaurant, not canceled/finished/no_show,
-    # and time range overlaps
+  def exceeds_capacity?(restaurant, start_dt, end_dt, new_party_size, location_id = nil)
+    # Validate input parameters
+    new_party_size = new_party_size.to_i
+    
+    # Get total seat capacity, using location-specific seats when a location_id is provided
+    seats = if location_id.present?
+      restaurant.location_seats(location_id)
+    else
+      restaurant.current_seats
+    end
+    
+    # Calculate total capacity by summing seat capacities, not just counting seats
+    total_seats = 0
+    if seats.present?
+      seats.each do |seat|
+        if seat.respond_to?(:capacity) && seat.capacity.present? && seat.capacity.to_i > 0
+          total_seats += seat.capacity.to_i
+        else
+          # If a seat has no capacity, assume 1
+          total_seats += 1
+        end
+      end
+    end
+    
+    Rails.logger.info "CAPACITY: Calculated total capacity: #{total_seats} from #{seats.count} seats"
+    return true if total_seats.zero? # No seats available at all
+    
+    # Ensure both dates are present
+    if start_dt.nil?
+      Rails.logger.error "CAPACITY: Missing start_dt in exceeds_capacity? check"
+      return true # Fail safely if no start date
+    end
+    
+    # If end_dt is nil, calculate it based on standard duration
+    unless end_dt
+      duration = restaurant.reservation_duration || 60 # Default 60 minutes
+      end_dt = start_dt + duration.minutes
+      Rails.logger.info "CAPACITY: Calculated missing end_dt as #{end_dt} using #{duration} minute duration"
+    end
+    
+    # Log the parameters we're using
+    Rails.logger.info "CAPACITY: Checking seats for #{new_party_size} people from #{start_dt} to #{end_dt} (total capacity: #{total_seats})"
+    
+    # Build query to find overlapping reservations
     overlapping = restaurant
                     .reservations
                     .where.not(status: %w[canceled finished no_show])
-                    .where("start_time < ? AND end_time > ?", end_dt, start_dt)
-
+                    
+    # Add date/time criteria if both dates are present
+    overlapping = overlapping.where("start_time < ? AND end_time > ?", end_dt, start_dt)
+    
+    # Filter by location_id if provided
+    overlapping = overlapping.where(location_id: location_id) if location_id.present?
+    
+    Rails.logger.info "CAPACITY CHECK: Filtering overlapping reservations by location_id=#{location_id}" if location_id.present?
+    
+    # Get total seats already booked during this time
     already_booked = overlapping.sum(:party_size)
-    (already_booked + new_party_size) > total_seats
+    Rails.logger.info "CAPACITY: Found #{overlapping.count} overlapping reservations, total seats booked: #{already_booked}"
+    
+    # Check if this party would exceed capacity
+    exceeds = (already_booked + new_party_size) > total_seats
+    Rails.logger.info "CAPACITY: #{already_booked} + #{new_party_size} #{exceeds ? '>' : '<='} #{total_seats}, so reservation #{exceeds ? 'EXCEEDS' : 'fits within'} capacity"
+    
+    exceeds
   end
   
   def reservation_service
     @reservation_service ||= begin
+      # Ensure we have a restaurant context
+      unless current_restaurant.present?
+        Rails.logger.error "TENANT ISOLATION: No restaurant context in reservation_service"
+        raise TenantAccessDeniedError, "Restaurant context is required for reservation operations"
+      end
+      
       service = ReservationService.new(current_restaurant)
       service.current_user = current_user
       service
@@ -263,7 +436,11 @@ class ReservationsController < ApplicationController
   
   def ensure_tenant_context
     unless current_restaurant.present?
-      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+      Rails.logger.error "TENANT ISOLATION: No restaurant context found in ReservationsController"
+      render json: { error: 'Restaurant context is required for reservation operations' }, status: :unprocessable_entity
+      return false
     end
+    Rails.logger.info "TENANT ISOLATION: Validated restaurant context (id: #{current_restaurant.id})"
+    true
   end
 end

@@ -42,6 +42,11 @@ class ReservationService < TenantScopedService
       )
     end
     
+    # Filter by location_id if provided
+    if params[:location_id].present?
+      reservations = reservations.where(location_id: params[:location_id])
+    end
+    
     # Order by date and time
     reservations = reservations.order(start_time: :asc)
     
@@ -72,15 +77,30 @@ class ReservationService < TenantScopedService
 
   # Create a new reservation
   def create_reservation(params)
-    reservation = Reservation.new(params)
-    reservation.restaurant = current_restaurant
+    # Sanitize params to avoid issues with foreign key constraints
+    sanitized_params = params.dup
     
+    # If location_id is present but not valid, remove it to let the model's callback handle it
+    if sanitized_params[:location_id].present?
+      location = @restaurant.locations.find_by(id: sanitized_params[:location_id])
+      sanitized_params.delete(:location_id) unless location
+    end
+    
+    # Create the reservation with sanitized params
+    reservation = Reservation.new(sanitized_params)
+    reservation.restaurant = @restaurant
+    
+    # Attempt to save and handle any errors
     if reservation.save
+      Rails.logger.info "Successfully created reservation ##{reservation.id} for restaurant ##{@restaurant.id}"
       { success: true, reservation: reservation }
     else
+      Rails.logger.warn "Failed to create reservation: #{reservation.errors.full_messages.join(', ')}"
       { success: false, errors: reservation.errors.full_messages, status: :unprocessable_entity }
     end
   rescue => e
+    Rails.logger.error "Exception creating reservation: #{e.message}"
+    Rails.logger.error e.backtrace.join("\n")
     { success: false, errors: ["Failed to create reservation: #{e.message}"], status: :internal_server_error }
   end
 

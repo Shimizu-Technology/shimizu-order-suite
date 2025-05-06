@@ -8,7 +8,13 @@ class Location < ApplicationRecord
   
   # Associations
   belongs_to :restaurant
+  belongs_to :current_layout, class_name: 'Layout', optional: true, foreign_key: 'current_layout_id'
   has_many :orders, dependent: :restrict_with_error
+  has_one :location_capacity, dependent: :destroy
+  has_many :reservations, dependent: :restrict_with_error
+  has_many :blocked_periods, dependent: :destroy
+  has_many :layouts, dependent: :restrict_with_error
+  has_many :seat_sections
   
   # Validations
   validates :name, presence: true

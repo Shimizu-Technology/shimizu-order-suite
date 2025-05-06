@@ -4,12 +4,15 @@ class SeatSection < ApplicationRecord
   apply_default_scope
 
   belongs_to :layout
+  belongs_to :location, optional: true
   has_many :seats, dependent: :destroy
   # Define path to restaurant through associations for tenant isolation
   has_one :restaurant, through: :layout
 
-  # For example, we allow these types:
+  # Valid section types
   VALID_SECTION_TYPES = %w[counter table bar booth].freeze
+  
+  # Section types (table, counter, etc.)
 
   validates :name, presence: true
   validates :capacity, numericality: { greater_than: 0 }, allow_nil: true
@@ -21,6 +24,9 @@ class SeatSection < ApplicationRecord
               message: "%{value} is not a valid section_type"
             },
             allow_blank: true
+            
+  # Note: Shape, dimension, and rotation validation is handled at the Layout model level
+  # since these properties are stored in the Layout's sections_data JSON field
 
   # ---------------------------------------
   # Floor number or label

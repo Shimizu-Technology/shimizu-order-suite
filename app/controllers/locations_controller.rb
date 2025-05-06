@@ -9,9 +9,30 @@ class LocationsController < ApplicationController
   
   # GET /locations
   def index
-    include_inactive = params[:active] == 'false'
-    @locations = location_service.all_locations(include_inactive: include_inactive)
-    render json: @locations
+    # Determine if we should include inactive locations
+    include_inactive = params[:is_active] != 'true' && params[:active] != 'true'
+    
+    # Log for debugging
+    Rails.logger.info "Fetching locations for restaurant ID: #{current_restaurant&.id}, include_inactive: #{include_inactive}"
+    
+    begin
+      # Get locations from service
+      @locations = location_service.all_locations(include_inactive: include_inactive)
+      
+      # Log count for debugging
+      Rails.logger.info "Found #{@locations.count} locations"
+      
+      # Explicitly respond with JSON and include the content type
+      response.headers['Content-Type'] = 'application/json'
+      render json: @locations
+    rescue => e
+      # Log any errors
+      Rails.logger.error "Error in locations#index: #{e.message}"
+      Rails.logger.error e.backtrace.join("\n")
+      
+      # Return a proper JSON error response
+      render json: { error: "Could not retrieve locations: #{e.message}" }, status: :internal_server_error
+    end
   end
   
   # GET /locations/:id

@@ -20,6 +20,13 @@ class SeatAllocationService < TenantScopedService
         query = query.where(waitlist_entry_id: filters[:waitlist_entry_id])
       end
       
+      # Filter by location_id if provided
+      if filters[:location_id].present?
+        # We need to join to reservations since seat_allocations doesn't have location_id directly
+        query = query.joins("LEFT JOIN reservations ON seat_allocations.reservation_id = reservations.id")
+          .where("reservations.location_id = ? OR seat_allocations.reservation_id IS NULL", filters[:location_id])
+      end
+      
       # Filter by active/inactive status
       if filters[:active].present?
         if ActiveModel::Type::Boolean.new.cast(filters[:active])
@@ -34,7 +41,8 @@ class SeatAllocationService < TenantScopedService
         begin
           start_date = Date.parse(filters[:start_date]).beginning_of_day
           end_date = Date.parse(filters[:end_date]).end_of_day
-          query = query.where("start_time BETWEEN ? AND ?", start_date, end_date)
+          # Use explicit table name to avoid ambiguity
+          query = query.where("seat_allocations.start_time BETWEEN ? AND ?", start_date, end_date)
         rescue ArgumentError
           return { 
             success: false, 
@@ -221,6 +229,9 @@ class SeatAllocationService < TenantScopedService
   # Bulk allocate seats
   def bulk_allocate(bulk_params)
     begin
+      # Add debug logging
+      Rails.logger.info("SeatAllocationService: Starting bulk_allocate with params: #{bulk_params.inspect}")
+      
       seat_ids = bulk_params[:seat_ids]
       reservation_id = bulk_params[:reservation_id]
       waitlist_entry_id = bulk_params[:waitlist_entry_id]
@@ -248,19 +259,53 @@ class SeatAllocationService < TenantScopedService
         return { 
           success: false, 
           errors: ["One or more seats not found"], 
-          status: :not_found 
+          status: :not_found
         }
       end
       
-      # Check if any seats are already allocated
-      already_allocated = scope_query(SeatAllocation)
-        .where(seat_id: seat_ids, released_at: nil)
-        .exists?
+      # Get the start and end times for this allocation
+      start_time = bulk_params[:start_time].presence || Time.current
+      end_time = bulk_params[:end_time].presence || (start_time + 1.hour)
       
-      if already_allocated
+      # Convert to Time objects if strings
+      start_time = start_time.is_a?(String) ? Time.parse(start_time) : start_time
+      end_time = end_time.is_a?(String) ? Time.parse(end_time) : end_time
+      
+      # Extract just the date part for clearer time window definition
+      allocation_date = start_time.to_date
+      
+      # IMPORTANT: We only check for conflicts within the same day
+      # Find any existing allocations for these seats on this specific date
+      date_start = allocation_date.beginning_of_day
+      date_end = allocation_date.end_of_day
+      
+      # Look for any seat allocations that:
+      # 1. Match one of our seat IDs
+      # 2. Haven't been released
+      # 3. Have a start time that falls on our target date
+      existing_allocations = scope_query(SeatAllocation)
+        .where(seat_id: seat_ids, released_at: nil)
+        .where("DATE(start_time) = ?", allocation_date)
+      
+      # Then check for time overlaps only within those same-day allocations
+      conflicting_seats = []
+      
+      existing_allocations.each do |allocation|
+        alloc_start = allocation.start_time
+        alloc_end = allocation.end_time || (alloc_start + 1.hour)
+        
+        # Check for time overlap within the same day
+        if (alloc_start < end_time && alloc_end > start_time)
+          conflicting_seats << allocation.seat_id
+          Rails.logger.info("Found time conflict: Seat #{allocation.seat_id} allocated from #{alloc_start} to #{alloc_end}")
+        end
+      end
+      
+      # If we found conflicts, return an error
+      if conflicting_seats.any?
         return { 
           success: false, 
-          errors: ["One or more seats are already allocated"], 
+          errors: ["One or more seats are already allocated for this time period: #{conflicting_seats.uniq.join(', ')}"], 
           status: :unprocessable_entity 
         }
       end

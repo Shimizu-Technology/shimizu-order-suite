@@ -1,4 +1,4 @@
-<!-- app/views/reservation_mailer/booking_confirmation.html.erb -->
+<!-- app/views/reservation_mailer/booking_created.html.erb -->
 
 <table width="100%" border="0" cellspacing="0" cellpadding="0"
        style="background-color: #f8f8f8; padding: 20px 0; font-family: Arial, sans-serif;">
@@ -11,7 +11,7 @@
         <tr>
           <td align="center" style="background-color: #0078d4; padding: 20px;">
             <h1 style="margin: 0; font-size: 24px; color: #ffffff;">
-              Reservation Confirmed
+              Reservation Request Received
             </h1>
           </td>
         </tr>
@@ -30,7 +30,7 @@
             </p>
 
             <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
-              Great news! Your reservation at <%= @restaurant.name %> has been <strong>confirmed</strong>. Here are your confirmed reservation details:
+              Thank you for requesting a reservation at <%= @restaurant.name %>. Your reservation is currently pending confirmation. Here are your details:
             </p>
 
             <table width="100%" style="margin-bottom: 20px; border-collapse: collapse;">
@@ -52,11 +52,16 @@
                   <%= @reservation.restaurant.name if @reservation.restaurant %>
                 </td>
               </tr>
-              <% if @reservation.location.present? && @reservation.restaurant&.locations&.count.to_i > 1 %>
+              <% if @reservation.location.present? %>
               <tr style="border-bottom: 1px solid #eee;">
                 <td style="padding: 10px 0; color: #666;">Location:</td>
                 <td style="padding: 10px 0; color: #333; font-weight: bold;">
                   <%= @reservation.location.name %>
+                  <% if @reservation.location.address.present? %>
+                  <div style="font-weight: normal; margin-top: 5px;">
+                    <%= @reservation.location.address.gsub("\n", "<br>").html_safe %>
+                  </div>
+                  <% end %>
                 </td>
               </tr>
               <% end %>
@@ -84,8 +89,12 @@
               </tr>
             </table>
 
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
+              Our staff will review your reservation request and confirm it shortly. You will receive a confirmation email and text message once your reservation is confirmed.
+            </p>
+
             <p style="margin: 0; color: #333; font-size: 16px; line-height: 24px;">
-              We look forward to serving you!
+              Thank you for choosing <%= @restaurant.name %>!
             </p>
           </td>
         </tr>

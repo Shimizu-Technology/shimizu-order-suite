@@ -16,6 +16,7 @@ gem "faker"
 gem "dotenv-rails"
 # Rails background job adapter
 gem "sidekiq"
+gem "rufus-scheduler", "~> 3.8"
 # AWS S3
 gem "aws-sdk-s3", require: false
 # Pagination

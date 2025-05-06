@@ -23,7 +23,7 @@ class RestaurantCounter < ApplicationRecord
     counter.generate_order_number
   end
   
-  # Generate a new order number with a simplified format: [PREFIX][COUNTER]
+  # Generate a new order number with format: [PREFIX]-O-[COUNTER]
   def generate_order_number
     # Check if we need to reset the daily counter
     reset_daily_counter_if_needed
@@ -38,8 +38,8 @@ class RestaurantCounter < ApplicationRecord
     # Format daily counter with leading zeros (e.g., 001, 012, 123)
     counter_str = daily_order_counter.to_s.rjust(3, '0')
     
-    # Create the simplified order number
-    order_number = "#{restaurant_prefix}#{counter_str}"
+    # Create the order number with O prefix and dashes for better readability
+    order_number = "#{restaurant_prefix}-O-#{counter_str}"
     
     # Check if the order number already exists in the database
     # If it does, increment the counter and try again
@@ -51,7 +51,7 @@ class RestaurantCounter < ApplicationRecord
       self.daily_order_counter += 1
       self.total_order_counter += 1
       counter_str = daily_order_counter.to_s.rjust(3, '0')
-      order_number = "#{restaurant_prefix}#{counter_str}"
+      order_number = "#{restaurant_prefix}-O-#{counter_str}"
       attempts += 1
     end
     
@@ -59,7 +59,7 @@ class RestaurantCounter < ApplicationRecord
     if attempts >= max_attempts
       # Add a timestamp-based suffix to ensure uniqueness
       timestamp_suffix = Time.now.to_i.to_s[-4..-1]
-      order_number = "#{restaurant_prefix}#{counter_str}-#{timestamp_suffix}"
+      order_number = "#{restaurant_prefix}-O-#{counter_str}-#{timestamp_suffix}"
     end
     
     # Save the updated counters

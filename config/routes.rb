@@ -6,6 +6,13 @@ Rails.application.routes.draw do
   # Health check endpoints
   get "/health/check", to: "health#index"
   get "/health/sidekiq", to: "health#sidekiq_stats"
+  
+  # Public endpoints (no authentication required)
+  namespace :public do
+    # Restaurant schedule (operating hours & special events) for the reservation system
+    get '/restaurant_schedule/:restaurant_id', to: 'restaurant_schedule#show'
+    resources :restaurant_schedule, only: [:show]
+  end
   # Authentication
   post "/signup", to: "users#create"
   post "/login",  to: "sessions#create"
@@ -79,6 +86,18 @@ Rails.application.routes.draw do
 
   resources :reservations, only: [ :index, :show, :create, :update, :destroy ]
   resources :waitlist_entries, only: [ :index, :show, :create, :update, :destroy ]
+  
+  # API namespace for newer endpoints
+  namespace :api do
+    namespace :v1 do
+      # Table management endpoints
+      resources :blocked_periods, only: [ :index, :show, :create, :update, :destroy ]
+      resources :location_capacities, only: [ :index, :show, :create, :update ]
+      
+      # Location capacity endpoint
+      get 'locations/:location_id/available_capacity', to: 'location_capacities#available_capacity'
+    end
+  end
 
   resources :seat_allocations, only: [ :index, :create, :update, :destroy ] do
     collection do
@@ -126,6 +145,8 @@ Rails.application.routes.draw do
 
   # Availability
   get "/availability", to: "availability#index"
+  get "/availability/capacity", to: "availability#capacity"
+  get "/availability/simple_capacity", to: "availability#simple_capacity"
 
   # Operating Hours (for backward compatibility with frontend)
   get "/operating_hours", to: "admin/operating_hours#index"

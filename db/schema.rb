@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
+ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -58,6 +58,25 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
     t.index ["resource_type", "resource_id"], name: "index_audit_logs_on_resource_type_and_resource_id"
     t.index ["restaurant_id"], name: "index_audit_logs_on_restaurant_id"
     t.index ["user_id"], name: "index_audit_logs_on_user_id"
+  end
+
+  create_table "blocked_periods", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.bigint "location_id"
+    t.bigint "seat_section_id"
+    t.datetime "start_time", null: false
+    t.datetime "end_time", null: false
+    t.string "reason", null: false
+    t.string "status", default: "active"
+    t.json "metadata", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["location_id", "start_time", "end_time"], name: "idx_blocked_periods_loc_times"
+    t.index ["location_id"], name: "index_blocked_periods_on_location_id"
+    t.index ["restaurant_id", "start_time", "end_time"], name: "idx_blocked_periods_rest_times"
+    t.index ["restaurant_id"], name: "index_blocked_periods_on_restaurant_id"
+    t.index ["seat_section_id"], name: "index_blocked_periods_on_seat_section_id"
+    t.check_constraint "status::text = ANY (ARRAY['active'::character varying, 'cancelled'::character varying]::text[])", name: "check_blocked_period_status"
   end
 
   create_table "categories", force: :cascade do |t|
@@ -120,7 +139,22 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
     t.jsonb "sections_data", default: {"sections"=>[]}
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "location_id"
+    t.index ["location_id"], name: "index_layouts_on_location_id"
     t.index ["restaurant_id"], name: "index_layouts_on_restaurant_id"
+  end
+
+  create_table "location_capacities", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.bigint "location_id", null: false
+    t.integer "total_capacity", default: 26, null: false
+    t.integer "default_table_capacity", default: 4, null: false
+    t.json "capacity_metadata", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["location_id"], name: "index_location_capacities_on_location_id"
+    t.index ["restaurant_id", "location_id"], name: "index_location_capacities_on_restaurant_id_and_location_id", unique: true
+    t.index ["restaurant_id"], name: "index_location_capacities_on_restaurant_id"
   end
 
   create_table "locations", force: :cascade do |t|
@@ -134,6 +168,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
     t.text "description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "current_layout_id"
+    t.index ["current_layout_id"], name: "index_locations_on_current_layout_id"
     t.index ["restaurant_id", "is_active"], name: "index_locations_on_restaurant_id_and_is_active"
     t.index ["restaurant_id", "is_default"], name: "index_locations_on_restaurant_id_and_default", unique: true, where: "(is_default = true)"
     t.index ["restaurant_id"], name: "index_locations_on_restaurant_id"
@@ -422,6 +458,16 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
     t.index ["restaurant_id"], name: "index_push_subscriptions_on_restaurant_id"
   end
 
+  create_table "reservation_counters", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.integer "monthly_counter", default: 0, null: false
+    t.integer "total_counter", default: 0, null: false
+    t.date "last_reset_date", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["restaurant_id"], name: "index_reservation_counters_on_restaurant_id", unique: true
+  end
+
   create_table "reservations", force: :cascade do |t|
     t.bigint "restaurant_id", null: false
     t.datetime "start_time"
@@ -438,6 +484,10 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
     t.datetime "updated_at", null: false
     t.jsonb "seat_preferences", default: [], null: false
     t.integer "duration_minutes", default: 60
+    t.bigint "location_id"
+    t.string "reservation_number"
+    t.index ["location_id"], name: "index_reservations_on_location_id"
+    t.index ["reservation_number"], name: "index_reservations_on_reservation_number", unique: true
     t.index ["restaurant_id"], name: "index_reservations_on_restaurant_id"
     t.check_constraint "status::text = ANY (ARRAY['booked'::character varying::text, 'reserved'::character varying::text, 'seated'::character varying::text, 'finished'::character varying::text, 'canceled'::character varying::text, 'no_show'::character varying::text])", name: "check_reservation_status"
   end
@@ -507,7 +557,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
     t.datetime "updated_at", null: false
     t.bigint "layout_id", null: false
     t.integer "floor_number", default: 1, null: false
+    t.bigint "location_id"
     t.index ["layout_id"], name: "index_seat_sections_on_layout_id"
+    t.index ["location_id"], name: "index_seat_sections_on_location_id"
   end
 
   create_table "seats", force: :cascade do |t|
@@ -518,7 +570,13 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "capacity", default: 1, null: false
+    t.integer "min_capacity", default: 1, null: false
+    t.integer "max_capacity"
+    t.string "category", default: "standard"
+    t.index ["category"], name: "index_seats_on_category"
     t.index ["seat_section_id"], name: "index_seats_on_seat_section_id"
+    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying, 'booth'::character varying, 'outdoor'::character varying, 'bar'::character varying, 'private'::character varying, 'high_top'::character varying]::text[])", name: "check_seat_category_values"
+    t.check_constraint "max_capacity IS NULL OR min_capacity <= max_capacity", name: "check_min_max_capacity"
   end
 
   create_table "site_settings", force: :cascade do |t|
@@ -659,12 +717,19 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "audit_logs", "restaurants", on_delete: :cascade
+  add_foreign_key "blocked_periods", "locations"
+  add_foreign_key "blocked_periods", "restaurants"
+  add_foreign_key "blocked_periods", "seat_sections"
   add_foreign_key "categories", "menus"
   add_foreign_key "feature_flags", "restaurants", on_delete: :cascade
   add_foreign_key "house_account_transactions", "orders", on_delete: :nullify
   add_foreign_key "house_account_transactions", "staff_members"
   add_foreign_key "inventory_statuses", "menu_items"
+  add_foreign_key "layouts", "locations"
   add_foreign_key "layouts", "restaurants"
+  add_foreign_key "location_capacities", "locations"
+  add_foreign_key "location_capacities", "restaurants"
+  add_foreign_key "locations", "layouts", column: "current_layout_id", on_delete: :nullify
   add_foreign_key "locations", "restaurants"
   add_foreign_key "menu_item_categories", "categories"
   add_foreign_key "menu_item_categories", "menu_items"
@@ -693,6 +758,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
   add_foreign_key "orders", "vip_access_codes"
   add_foreign_key "promo_codes", "restaurants"
   add_foreign_key "push_subscriptions", "restaurants"
+  add_foreign_key "reservation_counters", "restaurants"
+  add_foreign_key "reservations", "locations"
   add_foreign_key "reservations", "restaurants"
   add_foreign_key "restaurant_counters", "restaurants"
   add_foreign_key "restaurants", "layouts", column: "current_layout_id", on_delete: :nullify
@@ -703,6 +770,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_04_14_033742) do
   add_foreign_key "seat_allocations", "seats"
   add_foreign_key "seat_allocations", "waitlist_entries"
   add_foreign_key "seat_sections", "layouts"
+  add_foreign_key "seat_sections", "locations"
   add_foreign_key "seats", "seat_sections"
   add_foreign_key "site_settings", "restaurants"
   add_foreign_key "special_events", "restaurants"

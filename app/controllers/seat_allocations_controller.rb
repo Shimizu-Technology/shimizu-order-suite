@@ -29,6 +29,7 @@ class SeatAllocationsController < ApplicationController
     filters[:seat_id] = params[:seat_id] if params[:seat_id].present?
     filters[:reservation_id] = params[:reservation_id] if params[:reservation_id].present?
     filters[:waitlist_entry_id] = params[:waitlist_entry_id] if params[:waitlist_entry_id].present?
+    filters[:location_id] = params[:location_id] if params[:location_id].present?
     
     result = seat_allocation_service.list_allocations(filters)
     
