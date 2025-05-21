@@ -21,12 +21,12 @@ end
 log "Starting Crab Daddy menu setup script", :info
 log "======================================", :info
 
-# Set restaurant ID to 4 (Crab Daddy)
-restaurant_id = ENV['RESTAURANT_ID'] || "4"
+# Find the Crab Daddy restaurant by name
+restaurant_name = "Crab Daddy"
 
 begin
-  # Find the restaurant
-  restaurant = Restaurant.find(restaurant_id)
+  # Find the restaurant by name
+  restaurant = Restaurant.find_by!(name: restaurant_name)
   log "Setting up menu for restaurant: #{restaurant.name} (ID: #{restaurant.id})", :info
   
   # Set the tenant context for proper isolation

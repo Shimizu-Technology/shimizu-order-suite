@@ -148,7 +148,7 @@ main_menu = Menu.find_or_create_by!(
   restaurant_id: crab_daddy.id,
   name: "Main Menu"
 ) do |menu|
-  menu.is_active = true
+  menu.active = true
 end
 
 puts "Created Main Menu: #{main_menu.name}"
@@ -180,9 +180,7 @@ category_names.each do |key, name|
   categories[key] = Category.find_or_create_by!(
     menu_id: main_menu.id,
     name: name
-  ) do |cat|
-    cat.is_active = true
-  end
+  )
 end
 
 puts "Created Categories:"
