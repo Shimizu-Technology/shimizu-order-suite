@@ -238,15 +238,10 @@ unless Restaurant.exists?(name: "Hafaloha")
     name: "Build-A-Bowl",
     description: "Custom fruit bowl—pick your base and add as many toppings as you'd like!",
     price: 8.0,
-    category: nil,
     available: true,
     featured: true,
-    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_26_1739747052.webp"
-  )
-  
-  MenuItemCategory.create!(
-    menu_item_id: build_a_bowl.id,
-    category_id: desserts_category.id
+    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_26_1739747052.webp",
+    category_ids: [desserts_category.id]
   )
 
   shave_ice = MenuItem.create!(
@@ -254,15 +249,10 @@ unless Restaurant.exists?(name: "Hafaloha")
     name: "Shave Ice",
     description: "Customize your shave ice YOUR way—mix up to three flavors!",
     price: 6.5,
-    category: nil,
     available: true,
     featured: false,
-    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_21_1739747735.webp"
-  )
-  
-  MenuItemCategory.create!(
-    menu_item_id: shave_ice.id,
-    category_id: desserts_category.id
+    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_21_1739747735.webp",
+    category_ids: [desserts_category.id]
   )
 
   # Drinks
@@ -271,15 +261,10 @@ unless Restaurant.exists?(name: "Hafaloha")
     name: "Smoothies (20 oz.)",
     description: "Smoothies made real fresh & with REAL fruit—One size only",
     price: 8.25,
-    category: nil,
     available: true,
     featured: false,
-    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_34_1742862792.jpg"
-  )
-  
-  MenuItemCategory.create!(
-    menu_item_id: smoothies.id,
-    category_id: drinks_category.id
+    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_34_1742862792.jpg",
+    category_ids: [drinks_category.id]
   )
 
   # Plates
@@ -288,15 +273,10 @@ unless Restaurant.exists?(name: "Hafaloha")
     name: "Hawaiian Plate",
     description: "Your Hawaiian favorites all wrapped into one plate. Includes kalua pork, teriyaki chicken, and macaroni salad, all on a bed of rice.",
     price: 25.95,
-    category: nil,
     available: true,
     featured: false,
-    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_74_1741976564.jpg"
-  )
-  
-  MenuItemCategory.create!(
-    menu_item_id: hawaiian_plate.id,
-    category_id: plates_category.id
+    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_74_1741976564.jpg",
+    category_ids: [plates_category.id]
   )
 
   # Appetizers
@@ -305,15 +285,10 @@ unless Restaurant.exists?(name: "Hafaloha")
     name: "The Cheesy Pig Quesadilla",
     description: "Kalua pulled pork wrapped in a flour tortilla with melted cheese and topped with our homemade spicy mayo sauce.",
     price: 13.95,
-    category: nil,
     available: true,
     featured: false,
-    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_6_1739747976.webp"
-  )
-  
-  MenuItemCategory.create!(
-    menu_item_id: cheesy_pig.id,
-    category_id: appetizers_category.id
+    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_6_1739747976.webp",
+    category_ids: [appetizers_category.id]
   )
 
   # Bowls
@@ -322,15 +297,10 @@ unless Restaurant.exists?(name: "Hafaloha")
     name: "Cali Poke",
     description: "A california roll in a bowl filled with ahi poke, crab meat, avocado, cucumber, and tobiko, all on a bed of rice.",
     price: 16.95,
-    category: nil,
     available: true,
     featured: false,
-    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_12_1741982347.jpg"
-  )
-  
-  MenuItemCategory.create!(
-    menu_item_id: cali_poke.id,
-    category_id: bowls_category.id
+    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_12_1741982347.jpg",
+    category_ids: [bowls_category.id]
   )
 
   # Burgers
@@ -339,15 +309,10 @@ unless Restaurant.exists?(name: "Hafaloha")
     name: "Håfaloha Burger",
     description: "Hawaiian Sweet Roll bun stacked on our well-seasoned beef patty, topped with lettuce, tomato, onion, and our homemade burger sauce.",
     price: 13.95,
-    category: nil,
     available: true,
     featured: false,
-    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_15_1741978996.jpg"
-  )
-  
-  MenuItemCategory.create!(
-    menu_item_id: hafaloha_burger.id,
-    category_id: burgers_category.id
+    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_15_1741978996.jpg",
+    category_ids: [burgers_category.id]
   )
 
   # Platters
@@ -355,15 +320,10 @@ unless Restaurant.exists?(name: "Hafaloha")
     menu_id: main_menu.id,
     name: "Mochiko Chicken Platter",
     price: 65.0,
-    category: nil,
     available: true,
     featured: false,
-    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_248_1743192972.png"
-  )
-  
-  MenuItemCategory.create!(
-    menu_item_id: chicken_platter.id,
-    category_id: platters_category.id
+    image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_248_1743192972.png",
+    category_ids: [platters_category.id]
   )
 
   puts "Created menu items with category associations"
@@ -376,64 +336,48 @@ unless Restaurant.exists?(name: "Hafaloha")
   # Shave Ice Options
   flavor_group = OptionGroup.create!(
     name: "Flavors",
-    description: "Choose up to 3 flavors",
-    restaurant_id: restaurant.id,
-    min_selections: 1,
-    max_selections: 3,
-    position: 0
+    min_select: 1,
+    max_select: 3,
+    menu_item_id: shave_ice.id
   )
   
   ["Blue Hawaii", "Cherry", "Coconut", "Grape", "Green Apple", "Guava", "Lemon", "Lilikoi", "Lime", "Mango", 
    "Orange", "Pineapple", "Strawberry", "Vanilla", "Watermelon"].each_with_index do |flavor, index|
     Option.create!(
       name: flavor,
-      price: 0.0,
+      additional_price: 0.0,
       position: index,
       option_group_id: flavor_group.id
     )
   end
   
-  # Associate option group with menu item
-  MenuItemOptionGroup.create!(
-    menu_item_id: shave_ice.id,
-    option_group_id: flavor_group.id,
-    required: true
-  )
+  # Option group is already associated with menu item via menu_item_id
   
   # Smoothie Options
   smoothie_flavor_group = OptionGroup.create!(
-    name: "Smoothie Flavors",
-    description: "Choose your smoothie flavor",
-    restaurant_id: restaurant.id,
-    min_selections: 1,
-    max_selections: 1,
-    position: 0
+    name: "Flavors",
+    min_select: 1,
+    max_select: 1,
+    menu_item_id: smoothies.id
   )
   
   ["Strawberry", "Mango", "Pineapple", "Mixed Berry", "Banana"].each_with_index do |flavor, index|
     Option.create!(
       name: flavor,
-      price: 0.0,
+      additional_price: 0.0,
       position: index,
       option_group_id: smoothie_flavor_group.id
     )
   end
   
-  # Associate option group with menu item
-  MenuItemOptionGroup.create!(
-    menu_item_id: smoothies.id,
-    option_group_id: smoothie_flavor_group.id,
-    required: true
-  )
+  # Option group is already associated with menu item via menu_item_id
   
   # Burger Options
   burger_addon_group = OptionGroup.create!(
-    name: "Burger Add-ons",
-    description: "Customize your burger",
-    restaurant_id: restaurant.id,
-    min_selections: 0,
-    max_selections: 5,
-    position: 0
+    name: "Add-ons",
+    min_select: 0,
+    max_select: 5,
+    menu_item_id: hafaloha_burger.id
   )
   
   [
@@ -445,50 +389,37 @@ unless Restaurant.exists?(name: "Hafaloha")
   ].each_with_index do |addon, index|
     Option.create!(
       name: addon[:name],
-      price: addon[:price],
+      additional_price: addon[:price],
       position: index,
       option_group_id: burger_addon_group.id
     )
   end
   
-  # Associate option group with menu item
-  MenuItemOptionGroup.create!(
-    menu_item_id: hafaloha_burger.id,
-    option_group_id: burger_addon_group.id,
-    required: false
-  )
+  # Option group is already associated with menu item via menu_item_id
   
   # Poke Bowl Protein Options
   protein_group = OptionGroup.create!(
     name: "Protein",
-    description: "Choose your protein",
-    restaurant_id: restaurant.id,
-    min_selections: 1,
-    max_selections: 1,
-    position: 0
+    min_select: 1,
+    max_select: 1,
+    menu_item_id: build_a_bowl.id
   )
   
   [
     {name: "Ahi Poke", price: 0.0},
     {name: "Salmon Poke", price: 0.0},
     {name: "Cooked Shrimp", price: 0.0},
-    {name: "Tofu", price: -2.0}
+    {name: "Tofu", price: 0.0}
   ].each_with_index do |protein, index|
     Option.create!(
       name: protein[:name],
-      price: protein[:price],
+      additional_price: protein[:price],
       position: index,
       option_group_id: protein_group.id
     )
   end
   
-  # Associate option group with menu item
-  MenuItemOptionGroup.create!(
-    menu_item_id: cali_poke.id,
-    option_group_id: protein_group.id,
-    required: true
-  )
-
+  # Option group is already associated with menu item via menu_item_id
   puts "Created option groups and options"
 
   # ------------------------------------------------------------------------------
@@ -496,41 +427,31 @@ unless Restaurant.exists?(name: "Hafaloha")
   # ------------------------------------------------------------------------------
   layout = Layout.create!(
     name: "Main Layout",
-    restaurant_id: restaurant.id,
-    active: true,
-    default: true
+    restaurant_id: restaurant.id
   )
 
   # Create seat sections
   inside_section = SeatSection.create!(
     layout_id: layout.id,
     name: "Inside",
-    position: 0,
-    color: "#4CAF50",
     capacity: 24
   )
 
   outside_section = SeatSection.create!(
     layout_id: layout.id,
     name: "Outside",
-    position: 1,
-    color: "#2196F3",
     capacity: 16
   )
 
   bar_section = SeatSection.create!(
     layout_id: layout.id,
     name: "Bar",
-    position: 2,
-    color: "#FF9800",
     capacity: 8
   )
 
   private_section = SeatSection.create!(
     layout_id: layout.id,
     name: "Private Room",
-    position: 3,
-    color: "#9C27B0",
     capacity: 12
   )
 
@@ -539,13 +460,10 @@ unless Restaurant.exists?(name: "Hafaloha")
   (1..6).each do |i|
     Seat.create!(
       seat_section_id: inside_section.id,
-      name: "Table #{i}",
+      label: "Table #{i}",
       capacity: 4,
-      x_position: 100 + (i-1)*120,
-      y_position: 100,
-      shape: "circle",
-      width: 80,
-      height: 80
+      position_x: 100 + (i-1)*120,
+      position_y: 100
     )
   end
 
@@ -553,13 +471,11 @@ unless Restaurant.exists?(name: "Hafaloha")
   (1..4).each do |i|
     Seat.create!(
       seat_section_id: outside_section.id,
-      name: "Patio #{i}",
+      label: "Patio #{i}",
       capacity: 4,
-      x_position: 100 + (i-1)*120,
-      y_position: 250,
-      shape: "circle",
-      width: 80,
-      height: 80
+      position_x: 100 + (i-1)*120,
+      position_y: 250,
+      category: "outdoor"
     )
   end
 
@@ -567,13 +483,11 @@ unless Restaurant.exists?(name: "Hafaloha")
   (1..8).each do |i|
     Seat.create!(
       seat_section_id: bar_section.id,
-      name: "Bar #{i}",
+      label: "Bar #{i}",
       capacity: 1,
-      x_position: 50 + (i-1)*50,
-      y_position: 400,
-      shape: "square",
-      width: 40,
-      height: 40
+      position_x: 50 + (i-1)*50,
+      position_y: 400,
+      category: "bar"
     )
   end
 
@@ -581,13 +495,11 @@ unless Restaurant.exists?(name: "Hafaloha")
   (1..3).each do |i|
     Seat.create!(
       seat_section_id: private_section.id,
-      name: "Private #{i}",
+      label: "Private #{i}",
       capacity: 4,
-      x_position: 100 + (i-1)*150,
-      y_position: 550,
-      shape: "rectangle",
-      width: 100,
-      height: 60
+      position_x: 100 + (i-1)*150,
+      position_y: 550,
+      category: "private"
     )
   end
 
@@ -598,17 +510,17 @@ unless Restaurant.exists?(name: "Hafaloha")
   # ------------------------------------------------------------------------------
   # Create feature flags for the restaurant
   [
-    {key: "online_ordering", enabled: true, description: "Enable online ordering functionality"},
-    {key: "reservations", enabled: true, description: "Enable reservations functionality"},
-    {key: "merchandise", enabled: true, description: "Enable merchandise sales"},
-    {key: "loyalty_program", enabled: false, description: "Enable loyalty program functionality"},
-    {key: "gift_cards", enabled: true, description: "Enable gift card sales"},
-    {key: "pickup_scheduling", enabled: true, description: "Enable pickup time scheduling"},
-    {key: "delivery", enabled: false, description: "Enable delivery options"}
+    {name: "online_ordering", enabled: true, description: "Enable online ordering functionality"},
+    {name: "reservations", enabled: true, description: "Enable reservations functionality"},
+    {name: "merchandise", enabled: true, description: "Enable merchandise sales"},
+    {name: "loyalty_program", enabled: false, description: "Enable loyalty program functionality"},
+    {name: "gift_cards", enabled: true, description: "Enable gift card sales"},
+    {name: "pickup_scheduling", enabled: true, description: "Enable pickup time scheduling"},
+    {name: "delivery", enabled: false, description: "Enable delivery options"}
   ].each do |flag|
     FeatureFlag.create!(
       restaurant_id: restaurant.id,
-      key: flag[:key],
+      name: flag[:name],
       enabled: flag[:enabled],
       description: flag[:description]
     )
@@ -623,15 +535,13 @@ unless Restaurant.exists?(name: "Hafaloha")
   apparel_collection = MerchandiseCollection.create!(
     name: "Apparel",
     description: "Hafaloha branded clothing and accessories",
-    restaurant_id: restaurant.id,
-    position: 0
+    restaurant_id: restaurant.id
   )
 
   gifts_collection = MerchandiseCollection.create!(
     name: "Gifts & Souvenirs",
     description: "Take a piece of Hafaloha home with you",
-    restaurant_id: restaurant.id,
-    position: 1
+    restaurant_id: restaurant.id
   )
 
   # Create merchandise items
@@ -640,20 +550,17 @@ unless Restaurant.exists?(name: "Hafaloha")
     name: "Hafaloha T-Shirt",
     description: "100% cotton t-shirt with Hafaloha logo",
     price: 24.95,
-    category: nil,
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/merchandise_tshirt.jpg",
-    is_merchandise: true
-  )
-
-  MenuItemCategory.create!(
-    menu_item_id: tshirt.id,
-    category_id: retail_category.id
+    category_ids: [retail_category.id]
   )
 
   MerchandiseItem.create!(
-    menu_item_id: tshirt.id,
+    name: tshirt.name,
+    description: tshirt.description,
+    base_price: tshirt.price,
+    image_url: tshirt.image_url,
     merchandise_collection_id: apparel_collection.id
   )
 
@@ -662,20 +569,17 @@ unless Restaurant.exists?(name: "Hafaloha")
     name: "Hafaloha Snapback Hat",
     description: "Adjustable snapback hat with embroidered Hafaloha logo",
     price: 29.95,
-    category: nil,
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/merchandise_hat.jpg",
-    is_merchandise: true
-  )
-
-  MenuItemCategory.create!(
-    menu_item_id: hat.id,
-    category_id: retail_category.id
+    category_ids: [retail_category.id]
   )
 
   MerchandiseItem.create!(
-    menu_item_id: hat.id,
+    name: hat.name,
+    description: hat.description,
+    base_price: hat.price,
+    image_url: hat.image_url,
     merchandise_collection_id: apparel_collection.id
   )
 
@@ -684,20 +588,17 @@ unless Restaurant.exists?(name: "Hafaloha")
     name: "Hafaloha Coffee Mug",
     description: "Ceramic coffee mug with Hafaloha logo",
     price: 14.95,
-    category: nil,
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/merchandise_mug.jpg",
-    is_merchandise: true
-  )
-
-  MenuItemCategory.create!(
-    menu_item_id: mug.id,
-    category_id: retail_category.id
+    category_ids: [retail_category.id]
   )
 
   MerchandiseItem.create!(
-    menu_item_id: mug.id,
+    name: mug.name,
+    description: mug.description,
+    base_price: mug.price,
+    image_url: mug.image_url,
     merchandise_collection_id: gifts_collection.id
   )
 
@@ -717,11 +618,10 @@ unless Restaurant.exists?(name: "Hafaloha")
     AuditLog.create!(
       restaurant_id: restaurant.id,
       action: log[:action],
-      actor_id: log[:actor_id],
-      actor_type: log[:actor_type],
-      target_id: log[:target_id],
-      target_type: log[:target_type],
-      changes: log[:changes],
+      user_id: log[:actor_id],
+      resource_id: log[:target_id],
+      resource_type: log[:target_type],
+      details: log[:changes],
       created_at: rand(1..30).days.ago
     )
   end
