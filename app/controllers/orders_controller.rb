@@ -1020,7 +1020,9 @@ class OrdersController < ApplicationController
   private
 
   def can_edit?(order)
-    return true if current_user&.role.in?(%w[admin super_admin])
+    # Allow admin, super_admin, and staff users to edit any order
+    return true if current_user&.role.in?(%w[admin super_admin staff])
+    # For customers, only allow editing their own orders
     current_user && order.user_id == current_user.id
   end
 

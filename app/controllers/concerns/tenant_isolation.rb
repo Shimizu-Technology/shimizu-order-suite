@@ -149,14 +149,14 @@ module TenantIsolation
       return true
     end
     
-    # For regular admin users, ONLY allow access to their own restaurant,
+    # For regular admin and staff users, ONLY allow access to their own restaurant,
     # regardless of what restaurant_id is in the request or frontend
-    if current_user&.role == "admin"
-      # If the requested restaurant doesn't match the admin's restaurant, deny access
+    if current_user&.role.in?(["admin", "staff"])
+      # If the requested restaurant doesn't match the user's restaurant, deny access
       if current_user.restaurant_id != restaurant&.id
         log_cross_tenant_access(restaurant&.id)
-        Rails.logger.warn { "Admin user #{current_user.email} (restaurant_id: #{current_user.restaurant_id}) attempted to access restaurant_id: #{restaurant&.id}" }
-        raise TenantAccessDeniedError, "Admin users can only access their own restaurant's data"
+        Rails.logger.warn { "#{current_user.role.capitalize} user #{current_user.email} (restaurant_id: #{current_user.restaurant_id}) attempted to access restaurant_id: #{restaurant&.id}" }
+        raise TenantAccessDeniedError, "#{current_user.role.capitalize} users can only access their own restaurant's data"
       end
       return true
     end
