@@ -18,9 +18,15 @@ class RestaurantCounter < ApplicationRecord
   end
   
   # Generate a new order number for a restaurant
-  def self.next_order_number(restaurant_id)
+  def self.next_order_number(restaurant_id, options = {})
     counter = for_restaurant(restaurant_id)
-    counter.generate_order_number
+    
+    # Check if this is a fundraiser order
+    if options[:fundraiser_id].present?
+      counter.generate_fundraiser_order_number(options[:fundraiser_id])
+    else
+      counter.generate_order_number
+    end
   end
   
   # Generate a new order number with format: [PREFIX]-O-[COUNTER]
@@ -69,6 +75,60 @@ class RestaurantCounter < ApplicationRecord
     order_number
   end
   
+  # Generate a fundraiser-specific order number with format: [PREFIX]-[ORDER_CODE]-[COUNTER]
+  def generate_fundraiser_order_number(fundraiser_id)
+    # Find the fundraiser and get its order_code
+    fundraiser = Fundraiser.find_by(id: fundraiser_id)
+    
+    if fundraiser.nil? || fundraiser.order_code.blank?
+      # Fallback if fundraiser not found or has no code
+      return generate_order_number
+    end
+    
+    # Get restaurant prefix
+    restaurant_prefix = get_restaurant_prefix
+    
+    # Get or create a fundraiser-specific counter
+    fundraiser_counter = get_fundraiser_counter(fundraiser.id)
+    
+    # Increment the fundraiser-specific counter
+    fundraiser_counter += 1
+    
+    # Format counter with leading zeros
+    counter_str = fundraiser_counter.to_s.rjust(3, '0')
+    
+    # Create the order number with the fundraiser's order_code
+    order_number = "#{restaurant_prefix}-#{fundraiser.order_code}-#{counter_str}"
+    
+    # Check if the order number already exists in the database
+    attempts = 0
+    max_attempts = 10
+    
+    while Order.exists?(order_number: order_number) && attempts < max_attempts
+      # Increment the counter and try again
+      fundraiser_counter += 1
+      counter_str = fundraiser_counter.to_s.rjust(3, '0')
+      order_number = "#{restaurant_prefix}-#{fundraiser.order_code}-#{counter_str}"
+      attempts += 1
+    end
+    
+    # If we've tried too many times, add a unique suffix
+    if attempts >= max_attempts
+      timestamp_suffix = Time.now.to_i.to_s[-4..-1]
+      order_number = "#{restaurant_prefix}-#{fundraiser.order_code}-#{counter_str}-#{timestamp_suffix}"
+    end
+    
+    # Store the updated fundraiser counter
+    update_fundraiser_counter(fundraiser.id, fundraiser_counter)
+    
+    # Also increment the total counter (but don't use it for this number)
+    self.total_order_counter += 1
+    save!
+    
+    # Return the generated order number
+    order_number
+  end
+  
   private
   
   # Reset the daily counter if it's a new day
@@ -77,6 +137,30 @@ class RestaurantCounter < ApplicationRecord
       self.daily_order_counter = 0
       self.last_reset_date = Date.current
     end
+  end
+  
+  # Get the current counter value for a specific fundraiser
+  def get_fundraiser_counter(fundraiser_id)
+    # Use Redis or a dedicated table to store fundraiser-specific counters
+    counter = FundraiserCounter.find_by(restaurant_id: restaurant_id, fundraiser_id: fundraiser_id)
+    
+    if counter.nil?
+      # Start from 0 if no counter exists yet
+      return 0
+    else
+      return counter.counter_value
+    end
+  end
+  
+  # Update the counter value for a specific fundraiser
+  def update_fundraiser_counter(fundraiser_id, value)
+    counter = FundraiserCounter.find_or_initialize_by(
+      restaurant_id: restaurant_id,
+      fundraiser_id: fundraiser_id
+    )
+    
+    counter.counter_value = value
+    counter.save!
   end
   
   # Get a 2-3 letter prefix from the restaurant name

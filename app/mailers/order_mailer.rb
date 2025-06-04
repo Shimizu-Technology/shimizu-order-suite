@@ -63,6 +63,23 @@ class OrderMailer < ApplicationMailer
          from: restaurant_from_address(@restaurant),
          subject: "Your #{@restaurant&.name || 'Restaurant'} Order ##{@order.order_number.presence || @order.id} Pickup Time Has Been Updated"
   end
+  
+  def wholesale_order_confirmation(order)
+    @order = order
+    @restaurant = get_restaurant_for(@order)
+    @header_color = email_header_color_for(@restaurant)
+    
+    # Get fundraiser and participant information
+    @fundraiser = @order.fundraiser
+    @participant = @order.fundraiser_participant
+    
+    # Get enriched item data with participant information
+    @items_with_participants = @order.get_item_participants
+    
+    mail to: @order.contact_email,
+         from: restaurant_from_address(@restaurant),
+         subject: "Your #{@restaurant&.name || 'Restaurant'} Fundraiser Order Confirmation ##{@order.order_number.presence || @order.id}"
+  end
 
   private
   

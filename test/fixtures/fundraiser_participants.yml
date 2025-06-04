@@ -1,0 +1,25 @@
+# test/fixtures/fundraiser_participants.yml
+
+one:
+  fundraiser: one
+  name: John Doe
+  team: Team Alpha
+  active: true
+
+two:
+  fundraiser: one
+  name: Jane Smith
+  team: Team Beta
+  active: true
+
+three:
+  fundraiser: two
+  name: Bob Johnson
+  team: Team Alpha
+  active: false
+
+four:
+  fundraiser: three
+  name: Alice Williams
+  team: Team Gamma
+  active: true

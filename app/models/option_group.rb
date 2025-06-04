@@ -3,10 +3,32 @@ class OptionGroup < ApplicationRecord
   include IndirectTenantScoped
   
   # Define the path to restaurant for tenant isolation
-  tenant_path through: [:menu_item, :menu], foreign_key: 'restaurant_id'
+  # Uses a lambda to dynamically determine the appropriate path based on the associated object
+  tenant_path lambda { |record|
+    # Make sure record is an actual record and not a symbol or other type
+    if record.is_a?(OptionGroup) && record.optionable_type.present? && record.optionable_type == 'FundraiserItem'
+      { through: [:optionable, :fundraiser], foreign_key: 'restaurant_id', polymorphic: true }
+    else
+      # Default to menu item path for backward compatibility
+      { through: [:menu_item, :menu], foreign_key: 'restaurant_id' }
+    end
+  }
 
-  belongs_to :menu_item
+  # Keep old association for backward compatibility
+  belongs_to :menu_item, optional: true
+  # Add new polymorphic association
+  belongs_to :optionable, polymorphic: true, optional: true
   has_many :options, dependent: :destroy
+  
+  # Validation to ensure either menu_item or optionable is present
+  validate :ensure_valid_association
+  
+  # Custom validation to ensure we have a valid association
+  def ensure_valid_association
+    unless menu_item_id.present? || (optionable_id.present? && optionable_type.present?)
+      errors.add(:base, "Option group must be associated with either a menu item or another optionable object")
+    end
+  end
 
   validates :name, presence: true
   validates :min_select, numericality: { greater_than_or_equal_to: 0 }

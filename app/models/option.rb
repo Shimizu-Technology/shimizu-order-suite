@@ -3,7 +3,22 @@ class Option < ApplicationRecord
   include IndirectTenantScoped
   
   # Define the path to restaurant for tenant isolation
-  tenant_path through: [:option_group, :menu_item, :menu], foreign_key: 'restaurant_id'
+  # Uses a lambda to dynamically determine the appropriate path based on the option group's associated object
+  tenant_path lambda { |record|
+    # Make sure record is an actual record and not a symbol or other type
+    if record.is_a?(Option) && record.option_group.present?
+      option_group = record.option_group
+      if option_group.optionable_type.present? && option_group.optionable_type == 'FundraiserItem'
+        { through: [:option_group, :optionable, :fundraiser], foreign_key: 'restaurant_id', polymorphic: true }
+      else
+        # Default to menu item path for backward compatibility
+        { through: [:option_group, :menu_item, :menu], foreign_key: 'restaurant_id' }
+      end
+    else
+      # Default path when record is not an Option instance
+      { through: [:option_group, :menu_item, :menu], foreign_key: 'restaurant_id' }
+    end
+  }
 
   belongs_to :option_group
   

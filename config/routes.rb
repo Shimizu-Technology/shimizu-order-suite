@@ -97,6 +97,63 @@ Rails.application.routes.draw do
       # Location capacity endpoint
       get 'locations/:location_id/available_capacity', to: 'location_capacities#available_capacity'
     end
+    
+    # Wholesale fundraising API endpoints
+    namespace :wholesale do
+      resources :fundraisers do
+        member do
+          post :toggle_active
+        end
+        
+        collection do
+          get 'by_slug/:slug', to: 'fundraisers#by_slug', as: 'by_slug'
+        end
+        
+        resources :participants, controller: 'fundraiser_participants' do
+          collection do
+            post :bulk_import
+          end
+        end
+        
+        resources :items, controller: 'fundraiser_items' do
+          member do
+            post :upload_image
+          end
+          
+          collection do
+            post :import_from_menu_items
+          end
+          
+          member do
+            patch :update_inventory
+          end
+          
+          # Option groups for fundraiser items
+          resources :option_groups, controller: 'fundraiser_item_option_groups' do
+            member do
+              post :reorder
+            end
+            
+            # Options within option groups
+            resources :options, controller: 'fundraiser_item_options' do
+              member do
+                post :reorder
+                patch :toggle_availability
+              end
+            end
+          end
+        end
+      end
+      
+      # Fundraiser orders endpoints
+      resources :fundraiser_orders, only: [:index, :show, :create] do
+        collection do
+          get :by_fundraiser
+          get :by_participant
+          get :stats
+        end
+      end
+    end
   end
 
   resources :seat_allocations, only: [ :index, :create, :update, :destroy ] do

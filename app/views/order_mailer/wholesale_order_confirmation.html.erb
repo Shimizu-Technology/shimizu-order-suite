@@ -1,0 +1,166 @@
+<!-- app/views/order_mailer/wholesale_order_confirmation.html.erb -->
+
+<table width="100%" border="0" cellspacing="0" cellpadding="0"
+       style="background-color: #f8f8f8; padding: 20px 0; font-family: Arial, sans-serif;">
+  <tr>
+    <td align="center">
+      <table width="600" border="0" cellspacing="0" cellpadding="0"
+             style="background-color: #ffffff; border-radius: 6px; overflow: hidden;">
+        
+        <!-- HEADER -->
+        <tr>
+          <td align="center" style="background-color: <%= @header_color %>; padding: 20px;">
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff;
+                       font-family: 'Helvetica Neue', Arial, sans-serif;">
+              <%= @restaurant&.name || 'Restaurant' %> Fundraiser Order
+            </h1>
+          </td>
+        </tr>
+
+        <!-- SPACER -->
+        <tr><td style="height: 20px;">&nbsp;</td></tr>
+
+        <!-- MAIN CONTENT -->
+        <tr>
+          <td style="padding: 0 30px 20px;">
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
+              Hi <strong><%= @order.contact_name.presence || "Valued Customer" %></strong>,
+            </p>
+
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
+              Thank you for your fundraiser order! Below are your details:
+            </p>
+
+            <!-- Fundraiser Information -->
+            <table width="100%" border="0" cellspacing="0" cellpadding="0"
+                   style="margin-bottom: 15px; font-size: 16px; color: #333; background-color: #f9f9f9; border-radius: 4px;">
+              <tr>
+                <td style="padding: 10px;">
+                  <div style="font-weight: bold; font-size: 18px; margin-bottom: 5px; color: <%= @header_color %>;">
+                    Fundraiser Information
+                  </div>
+                  <div style="margin-bottom: 5px;">
+                    <strong>Fundraiser:</strong> <%= @fundraiser&.name || "Fundraiser" %>
+                  </div>
+                  <% if @participant.present? %>
+                  <div>
+                    <strong>Supporting Participant:</strong> <%= @participant.name %>
+                    <% if @participant.team.present? %>
+                    <span style="color: #666; font-size: 14px;">(Team: <%= @participant.team %>)</span>
+                    <% end %>
+                  </div>
+                  <% end %>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Order Details -->
+            <table width="100%" border="0" cellspacing="0" cellpadding="0"
+                   style="margin-bottom: 15px; font-size: 16px; color: #333;">
+              <tr>
+                <td style="padding: 5px 0;">
+                  <strong>Order Number:</strong> <%= @order.order_number.presence || @order.id %>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 5px 0;">
+                  <strong>Total:</strong> $<%= sprintf("%.2f", @order.total.to_f) %>
+                </td>
+              </tr>
+              <% if @order.location.present? %>
+              <tr>
+                <td style="padding: 5px 0;">
+                  <strong>Pickup Location:</strong> <%= @order.location.name %>
+                  <div style="margin-top: 5px; margin-left: 10px; color: #555;">
+                    <%= @order.location.address %><br>
+                    <%= @order.location.phone_number %>
+                  </div>
+                </td>
+              </tr>
+              <% end %>
+              <tr>
+                <td style="padding: 5px 0;">
+                  <strong>Items:</strong>
+                  <ul style="margin: 8px 0 0 20px; padding: 0;">
+                    <% @items_with_participants.each do |i| %>
+                      <li style="margin-bottom: 5px; list-style-type: disc;">
+                        <%= i['quantity'] %>× <%= i['name'] %>
+                        ($<%= sprintf("%.2f", i['price'].to_f) %> each)
+                        <% if i['participant_id'].present? && @order.fundraiser_participant_id.to_s != i['participant_id'].to_s %>
+                          <div style="margin-left: 10px; font-size: 14px; color: #666;">
+                            Supporting: <%= i['participant_name'] || "Participant ##{i['participant_id']}" %>
+                            <% if i['participant_team'].present? %>
+                              <span style="color: #888;">(Team: <%= i['participant_team'] %>)</span>
+                            <% end %>
+                          </div>
+                        <% end %>
+                      </li>
+                    <% end %>
+                  </ul>
+                </td>
+              </tr>
+
+              <% if @order.shipping_address.present? %>
+                <tr>
+                  <td style="padding: 5px 0;">
+                    <strong>Shipping Address:</strong>
+                    <div style="margin-top: 5px; margin-left: 10px; color: #555;">
+                      <%= @order.shipping_address['address'] %><br>
+                      <%= @order.shipping_address['city'] %>, <%= @order.shipping_address['state'] %> <%= @order.shipping_address['zip_code'] %>
+                    </div>
+                  </td>
+                </tr>
+              <% end %>
+
+              <% if @order.special_instructions.present? %>
+                <tr>
+                  <td style="padding: 5px 0;">
+                    <strong>Special Instructions:</strong>
+                    <%= @order.special_instructions %>
+                  </td>
+                </tr>
+              <% end %>
+
+              <!-- Always show the same pickup time message -->
+              <tr>
+                <td style="padding: 5px 0;">
+                  <strong>Pickup/Delivery:</strong>
+                  We'll send you another message with your order status update.
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
+              We'll contact you at <strong><%= @order.contact_phone %></strong> if we have questions.
+            </p>
+
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
+              Thank you for supporting <%= @fundraiser&.name || "our fundraiser" %>!
+            </p>
+
+            <p style="margin: 0; color: #333; font-size: 16px; line-height: 24px;">
+              We appreciate your business!
+            </p>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="padding: 20px 30px; background-color: #f2f2f2;
+                     color: #555; font-size: 14px; line-height: 20px;
+                     border-top: 1px solid #ddd;">
+            <p style="margin: 0;">
+              <strong><%= @restaurant&.name || 'Restaurant' %></strong><br/>
+              <% if @order.location.present? %>
+                <%= @order.location.name %><br/>
+                <%= @order.location.address %><%= @order.location.address.present? && @order.location.phone_number.present? ? ' | ' : '' %><%= @order.location.phone_number || '' %>
+              <% else %>
+                <%= @restaurant&.address || '' %><%= @restaurant&.address.present? && @restaurant&.phone_number.present? ? ' | ' : '' %><%= @restaurant&.phone_number || '' %>
+              <% end %>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>

@@ -35,6 +35,10 @@ class OrdersController < ApplicationController
     if params[:staff_member_id].present?
       @orders = @orders.where(created_by_staff_id: params[:staff_member_id])
     end
+    
+    # Always filter out fundraiser orders from the regular orders endpoint
+    # Fundraiser orders should be accessed through the FundraiserOrdersController
+    @orders = @orders.where(order_type: Order::ORDER_TYPE_STANDARD)
 
     # Filter by date range if provided
     if params[:date_from].present? && params[:date_to].present?
@@ -121,7 +125,12 @@ class OrdersController < ApplicationController
     # Apply policy scope to ensure proper filtering based on role
     new_orders = policy_scope(Order).where("id > ?", last_id)
                       .where(staff_created: [false, nil]) # Exclude staff-created orders
-                      .order(:id)
+                      
+    # Always filter out fundraiser orders from regular orders endpoints
+    # Fundraiser orders should be accessed through the FundraiserOrdersController
+    new_orders = new_orders.where(order_type: Order::ORDER_TYPE_STANDARD)
+    
+    new_orders = new_orders.order(:id)
     render json: new_orders, status: :ok
   end
 
@@ -185,6 +194,10 @@ class OrdersController < ApplicationController
       Rails.logger.info("[LOCATION FILTER] Filtering orders by location_id: #{params[:locationId]}")
       Rails.logger.info("[LOCATION FILTER] Orders count after location filter: #{@orders.count}")
     end
+    
+    # Always filter out fundraiser orders from the regular orders endpoint
+    # Fundraiser orders should be accessed through the FundraiserOrdersController
+    @orders = @orders.where(order_type: Order::ORDER_TYPE_STANDARD)
 
     # Filter by date range if provided
     if params[:date_from].present? && params[:date_to].present?
@@ -346,15 +359,20 @@ class OrdersController < ApplicationController
       unacknowledged_orders = Order.where("created_at > ?", time_threshold)
                                    .where.not(id: current_user.acknowledged_orders.pluck(:id))
                                    .where(staff_created: [false, nil]) # Exclude staff-created orders
-                                   .order(created_at: :desc)
     else
       # First-time user case: Only return orders that haven't been acknowledged by anyone
       # OR orders that came in after the last global acknowledgment
       unacknowledged_orders = Order.where("created_at > ?", time_threshold)
                                    .where(staff_created: [false, nil]) # Exclude staff-created orders
                                    .where("global_last_acknowledged_at IS NULL OR created_at > global_last_acknowledged_at")
-                                   .order(created_at: :desc)
     end
+    
+    # Always filter out fundraiser orders from regular orders endpoints
+    # Fundraiser orders should be accessed through the FundraiserOrdersController
+    unacknowledged_orders = unacknowledged_orders.where(order_type: Order::ORDER_TYPE_STANDARD)
+    
+    # Apply final ordering
+    unacknowledged_orders = unacknowledged_orders.order(created_at: :desc)
 
     render json: unacknowledged_orders, status: :ok
   end
@@ -1020,9 +1038,7 @@ class OrdersController < ApplicationController
   private
 
   def can_edit?(order)
-    # Allow admin, super_admin, and staff users to edit any order
-    return true if current_user&.role.in?(%w[admin super_admin staff])
-    # For customers, only allow editing their own orders
+    return true if current_user&.role.in?(%w[admin super_admin])
     current_user && order.user_id == current_user.id
   end
 
@@ -1037,6 +1053,7 @@ class OrdersController < ApplicationController
       :pickup_time, :is_staff_order, :staff_member_id, :staff_on_duty, 
       :use_house_account, :created_by_staff_id, :created_by_user_id, 
       :pre_discount_total, :vip_code, :vip_access_code_id, :staff_modal, :location_id,
+      :fulfillment_method, :pickup_location_id,
       # Handle nested attributes properly
       items: [:id, :name, :price, :quantity, :notes, :menu_id, :category_id, { customizations: {} }],
       merchandise_items: [:id, :name, :price, :quantity, :merchandise_variant_id, :notes],
@@ -1063,7 +1080,10 @@ class OrdersController < ApplicationController
       :contact_name,
       :contact_phone,
       :contact_email,
-      :status
+      :status,
+      :location_id,
+      :fulfillment_method,
+      :pickup_location_id
     )
   end
 

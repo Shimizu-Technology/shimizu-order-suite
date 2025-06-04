@@ -4,8 +4,12 @@ class Order < ApplicationRecord
   include Broadcastable
   include TenantScoped
   
-  # Virtual attribute for staff_modal flag
-  attr_accessor :staff_modal
+  # Virtual attributes
+  attr_accessor :staff_modal, :fundraiser_order_subtype
+  
+  # Order types
+  ORDER_TYPE_STANDARD = 'standard'
+  ORDER_TYPE_FUNDRAISER = 'fundraiser'
   
   # Set staff_created flag based on staff_modal attribute
   before_create :set_staff_created_from_staff_modal
@@ -13,8 +17,11 @@ class Order < ApplicationRecord
   # Generate and assign a custom order number before creation
   before_create :assign_order_number
   
+  # Ensure order_type is set based on is_fundraiser_order flag
+  before_save :set_order_type
+  
   # Define which attributes should trigger broadcasts
-  broadcasts_on :status, :total, :items, :eta, :pickup_time, :is_staff_order, :staff_member_id
+  broadcasts_on :status, :total, :items, :eta, :pickup_time, :is_staff_order, :staff_member_id, :is_fundraiser_order, :fundraiser_id, :fundraiser_participant_id, :fulfillment_method, :pickup_location_id, :order_type
   # Order status constants
   STATUS_PENDING = "pending"
   STATUS_PREPARING = "preparing"
@@ -65,10 +72,14 @@ class Order < ApplicationRecord
     end
     
     # Generate a new order number using the RestaurantCounter
-    self.order_number = RestaurantCounter.next_order_number(restaurant_id)
-    
-    # Log for debugging
-    Rails.logger.info("Assigned order number #{order_number} to order for restaurant #{restaurant_id}")
+    # Pass fundraiser_id as an option if this is a fundraiser order
+    if is_fundraiser_order? && fundraiser_id.present?
+      self.order_number = RestaurantCounter.next_order_number(restaurant_id, fundraiser_id: fundraiser_id)
+      Rails.logger.info("Assigned fundraiser order number #{order_number} to order for fundraiser #{fundraiser_id}")
+    else
+      self.order_number = RestaurantCounter.next_order_number(restaurant_id)
+      Rails.logger.info("Assigned order number #{order_number} to order for restaurant #{restaurant_id}")
+    end
   rescue => e
     # Log error but don't prevent order creation
     Rails.logger.error("Error assigning order number: #{e.message}")
@@ -81,6 +92,125 @@ class Order < ApplicationRecord
   belongs_to :created_by_staff, class_name: 'StaffMember', foreign_key: 'created_by_staff_id', optional: true
   belongs_to :created_by_user, class_name: 'User', foreign_key: 'created_by_user_id', optional: true
   belongs_to :location, optional: true  # Will be set to non-optional after migration
+  
+  # Fulfillment associations
+  belongs_to :pickup_location, class_name: 'Location', foreign_key: 'pickup_location_id', optional: true
+  
+  # Fundraiser associations
+  belongs_to :fundraiser, optional: true
+  belongs_to :fundraiser_participant, optional: true
+  
+  # Fundraiser scopes
+  scope :fundraiser_orders, -> { where(is_fundraiser_order: true) }
+  scope :by_fundraiser, ->(fundraiser_id) { where(fundraiser_id: fundraiser_id) if fundraiser_id.present? }
+  scope :by_participant, ->(participant_id) { where(fundraiser_participant_id: participant_id) if participant_id.present? }
+  
+  # Fulfillment validations
+  validates :fulfillment_method, presence: true, inclusion: { in: ['pickup', 'shipping'] }
+  validate :validate_fulfillment_fields
+  
+  # Fundraiser validations
+  validate :validate_fundraiser_fields, if: :is_fundraiser_order?
+  
+  # Helper method to check if this is a fundraiser order
+  def is_fundraiser_order?
+    is_fundraiser_order == true
+  end
+  
+  # Helper method to get participant information for items
+  def get_item_participants
+    return {} unless is_fundraiser_order? && items.present?
+    
+    # Extract all participant IDs from items
+    participant_ids = items.map { |item| item['participant_id'] }.compact.uniq
+    return {} if participant_ids.empty?
+    
+    # Fetch all participants in a single query
+    participants = FundraiserParticipant.where(id: participant_ids)
+    
+    # Create a map of participant_id to participant name
+    participant_map = {}
+    participants.each do |p|
+      participant_map[p.id.to_s] = {
+        name: p.name,
+        team: p.team
+      }
+    end
+    
+    # Enrich items with participant information
+    enriched_items = items.map do |item|
+      if item['participant_id'].present? && participant_map[item['participant_id'].to_s].present?
+        item.merge({
+          'participant_name' => participant_map[item['participant_id'].to_s][:name],
+          'participant_team' => participant_map[item['participant_id'].to_s][:team]
+        })
+      else
+        item
+      end
+    end
+    
+    enriched_items
+  end
+  
+  # Validate that required fundraiser fields are present
+  def validate_fundraiser_fields
+    if fundraiser.nil?
+      errors.add(:fundraiser, "must be present for fundraiser orders")
+    end
+    
+    # Skip participant validation for general support orders
+    if fundraiser_order_subtype == "general_support"
+      return
+    end
+    
+    # For participant support orders, require a fundraiser_participant
+    if fundraiser_participant.nil?
+      errors.add(:fundraiser_participant, "must be present for participant support orders")
+    end
+    
+    # Ensure the participant belongs to the fundraiser
+    if fundraiser.present? && fundraiser_participant.present? && fundraiser_participant.fundraiser_id != fundraiser.id
+      errors.add(:fundraiser_participant, "must belong to the selected fundraiser")
+    end
+  end
+  
+  # Validate fulfillment method fields
+  def validate_fulfillment_fields
+    # Only validate for pickup orders
+    return unless pickup?
+
+    # Pickup location is required
+    if pickup_location_id.blank?
+      errors.add(:pickup_location_id, "must be provided for pickup orders")
+    end
+  end
+
+  # Set order_type based on is_fundraiser_order flag
+  def set_order_type
+    if is_fundraiser_order?
+      self.order_type = ORDER_TYPE_FUNDRAISER
+    else
+      self.order_type = ORDER_TYPE_STANDARD
+    end
+  end
+  
+  # Helper methods for fulfillment
+  
+  # Check if order is for pickup
+  def pickup?
+    fulfillment_method == 'pickup'
+  end
+  
+  # Check if order is for shipping
+  def shipping?
+    fulfillment_method == 'shipping'
+  end
+  
+  # Get the pickup location (returns Location object)
+  def get_pickup_location
+    return nil unless pickup?
+    pickup_location || location # Fallback to order.location if pickup_location not set
+  end
 
   # Payment helper methods
   def initial_payment
@@ -382,59 +512,62 @@ class Order < ApplicationRecord
 
   # Convert total to float, add created/updated times, plus userId & contact info
   def as_json(options = {})
-    super(options).merge(
-      "total" => total.to_f,
-      "createdAt" => created_at.iso8601,
-      "updatedAt" => updated_at.iso8601,
-      "userId" => user_id,
-
-      # Provide an ISO8601 string for JS
-      "estimatedPickupTime" => estimated_pickup_time&.iso8601,
-
-      # Contact fields
-      "contact_name" => contact_name,
-      "contact_phone" => contact_phone,
-      "contact_email" => contact_email,
-
-      # Add flag for orders requiring 24-hour advance notice
-      "requires_advance_notice" => requires_advance_notice?,
-      "max_advance_notice_hours" => max_advance_notice_hours,
-
+    super(options).tap do |json|
+      # Convert total to float for JS
+      json['total'] = json['total'].to_f if json['total']
+      
       # Payment fields
-      "payment_method" => payment_method,
-      "transaction_id" => transaction_id,
-      "payment_status" => payment_status,
-      "payment_amount" => payment_amount.to_f,
-      "payment_details" => payment_details,
+      json['transaction_id'] = transaction_id
+      json['payment_status'] = payment_status
+      json['payment_amount'] = payment_amount.to_f if payment_amount
+      json['payment_details'] = payment_details
 
       # VIP code (if present)
-      "vip_code" => vip_code,
+      json['vip_code'] = vip_code
       
       # Location information
-      "location_id" => location_id,
-      "location_name" => location&.name,
-      "vip_access_code_id" => vip_access_code_id,
+      json['location_id'] = location_id
+      json['location_name'] = location&.name
+      json['vip_access_code_id'] = vip_access_code_id
 
       # Merchandise items (if present)
-      "merchandise_items" => merchandise_items || [],
+      json['merchandise_items'] = merchandise_items || []
       
       # Acknowledgment timestamp
-      "global_last_acknowledged_at" => global_last_acknowledged_at&.iso8601,
+      json['global_last_acknowledged_at'] = global_last_acknowledged_at&.iso8601
       
       # Staff order fields
-      "is_staff_order" => is_staff_order,
-      "staff_member_id" => staff_member_id,
-      "staff_member_name" => staff_member&.name,
-      "staff_on_duty" => staff_on_duty,
-      "use_house_account" => use_house_account,
-      "created_by_staff_id" => created_by_staff_id,
-      "created_by_staff_name" => created_by_staff&.name,
-      "created_by_user_id" => created_by_user_id,
-      "created_by_user_name" => created_by_user&.full_name,
-      "pre_discount_total" => pre_discount_total.to_f,
-      "discount_amount" => discount_amount.to_f,
-      "discount_rate" => staff_discount_rate
-    )
+      json['is_staff_order'] = is_staff_order
+      json['staff_member_id'] = staff_member_id
+      json['staff_member_name'] = staff_member&.name
+      json['staff_on_duty'] = staff_on_duty
+      json['use_house_account'] = use_house_account
+      json['created_by_staff_id'] = created_by_staff_id
+      json['created_by_staff_name'] = created_by_staff&.name
+      json['created_by_user_id'] = created_by_user_id
+      json['created_by_user_name'] = created_by_user&.full_name
+      json['pre_discount_total'] = pre_discount_total.to_f if pre_discount_total
+      json['discount_amount'] = discount_amount.to_f if discount_amount
+      json['discount_rate'] = staff_discount_rate
+      
+      # Fundraiser fields
+      json['is_fundraiser_order'] = is_fundraiser_order
+      if is_fundraiser_order? && fundraiser.present?
+        json['fundraiser'] = {
+          id: fundraiser.id,
+          name: fundraiser.name,
+          slug: fundraiser.slug
+        }
+        
+        if fundraiser_participant.present?
+          json['fundraiser_participant'] = {
+            id: fundraiser_participant.id,
+            name: fundraiser_participant.name,
+            team: fundraiser_participant.team
+          }
+        end
+      end
+    end
   end
 
   # Check if this order contains any items requiring advance notice (24 hours)

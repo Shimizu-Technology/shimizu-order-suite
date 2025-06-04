@@ -1,0 +1,45 @@
+# test/fixtures/fundraiser_items.yml
+
+tshirt:
+  fundraiser: one
+  name: Fundraiser T-Shirt
+  description: A comfortable cotton t-shirt with the fundraiser logo
+  price: 19.99
+  image_url: https://example.com/tshirt.jpg
+  active: true
+  stock_quantity: 100
+  enable_stock_tracking: true
+  low_stock_threshold: 20
+
+hat:
+  fundraiser: one
+  name: Fundraiser Hat
+  description: A stylish hat with the fundraiser logo
+  price: 14.99
+  image_url: https://example.com/hat.jpg
+  active: true
+  stock_quantity: 50
+  enable_stock_tracking: true
+  low_stock_threshold: 10
+
+mug:
+  fundraiser: two
+  name: Fundraiser Mug
+  description: A ceramic mug with the fundraiser logo
+  price: 9.99
+  image_url: https://example.com/mug.jpg
+  active: true
+  stock_quantity: 75
+  enable_stock_tracking: false
+  low_stock_threshold: null
+
+inactive_item:
+  fundraiser: one
+  name: Inactive Item
+  description: This item is not currently active
+  price: 24.99
+  image_url: https://example.com/inactive.jpg
+  active: false
+  stock_quantity: 0
+  enable_stock_tracking: true
+  low_stock_threshold: 5

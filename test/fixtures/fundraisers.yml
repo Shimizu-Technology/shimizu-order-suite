@@ -1,0 +1,31 @@
+# test/fixtures/fundraisers.yml
+
+one:
+  restaurant: one
+  name: First Fundraiser
+  slug: first-fundraiser
+  description: This is the first test fundraiser
+  banner_image_url: https://example.com/banner1.jpg
+  active: true
+  start_date: <%= Time.current - 1.day %>
+  end_date: <%= Time.current + 1.week %>
+
+two:
+  restaurant: one
+  name: Second Fundraiser
+  slug: second-fundraiser
+  description: This is the second test fundraiser
+  banner_image_url: https://example.com/banner2.jpg
+  active: false
+  start_date: <%= Time.current + 1.day %>
+  end_date: <%= Time.current + 2.weeks %>
+
+three:
+  restaurant: two
+  name: Third Fundraiser
+  slug: third-fundraiser
+  description: This is a fundraiser for the second restaurant
+  banner_image_url: https://example.com/banner3.jpg
+  active: true
+  start_date: <%= Time.current - 1.week %>
+  end_date: <%= Time.current + 1.month %>

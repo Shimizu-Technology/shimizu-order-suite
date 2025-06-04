@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
+ActiveRecord::Schema[7.2].define(version: 2025_06_03_074504) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -76,7 +76,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.index ["restaurant_id", "start_time", "end_time"], name: "idx_blocked_periods_rest_times"
     t.index ["restaurant_id"], name: "index_blocked_periods_on_restaurant_id"
     t.index ["seat_section_id"], name: "index_blocked_periods_on_seat_section_id"
-    t.check_constraint "status::text = ANY (ARRAY['active'::character varying, 'cancelled'::character varying]::text[])", name: "check_blocked_period_status"
+    t.check_constraint "status::text = ANY (ARRAY['active'::character varying::text, 'cancelled'::character varying::text])", name: "check_blocked_period_status"
   end
 
   create_table "categories", force: :cascade do |t|
@@ -104,6 +104,66 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.index ["name", "restaurant_id"], name: "index_feature_flags_on_name_and_restaurant_id", unique: true
     t.index ["name"], name: "index_feature_flags_on_name"
     t.index ["restaurant_id"], name: "index_feature_flags_on_restaurant_id"
+  end
+
+  create_table "fundraiser_counters", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.bigint "fundraiser_id", null: false
+    t.integer "counter_value", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["fundraiser_id"], name: "index_fundraiser_counters_on_fundraiser_id"
+    t.index ["restaurant_id", "fundraiser_id"], name: "index_fundraiser_counters_on_restaurant_id_and_fundraiser_id", unique: true
+    t.index ["restaurant_id"], name: "index_fundraiser_counters_on_restaurant_id"
+  end
+
+  create_table "fundraiser_items", force: :cascade do |t|
+    t.bigint "fundraiser_id", null: false
+    t.string "name", null: false
+    t.text "description"
+    t.decimal "price", precision: 10, scale: 2, default: "0.0", null: false
+    t.string "image_url"
+    t.boolean "active", default: true, null: false
+    t.integer "stock_quantity", default: 0
+    t.boolean "enable_stock_tracking", default: false, null: false
+    t.integer "low_stock_threshold"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["fundraiser_id", "active"], name: "index_fundraiser_items_on_fundraiser_id_and_active"
+    t.index ["fundraiser_id", "name"], name: "index_fundraiser_items_on_fundraiser_id_and_name"
+    t.index ["fundraiser_id"], name: "index_fundraiser_items_on_fundraiser_id"
+  end
+
+  create_table "fundraiser_participants", force: :cascade do |t|
+    t.bigint "fundraiser_id", null: false
+    t.string "name", null: false
+    t.string "team"
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["fundraiser_id", "active"], name: "index_fundraiser_participants_on_fundraiser_id_and_active"
+    t.index ["fundraiser_id", "team"], name: "index_fundraiser_participants_on_fundraiser_id_and_team"
+    t.index ["fundraiser_id"], name: "index_fundraiser_participants_on_fundraiser_id"
+  end
+
+  create_table "fundraisers", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.string "banner_image_url"
+    t.boolean "active", default: false, null: false
+    t.datetime "start_date"
+    t.datetime "end_date"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "featured", default: false, null: false
+    t.string "order_code"
+    t.index ["active", "start_date", "end_date"], name: "index_fundraisers_on_active_and_start_date_and_end_date"
+    t.index ["featured"], name: "index_fundraisers_on_featured"
+    t.index ["restaurant_id", "order_code"], name: "index_fundraisers_on_restaurant_id_and_order_code", unique: true
+    t.index ["restaurant_id", "slug"], name: "index_fundraisers_on_restaurant_id_and_slug", unique: true
+    t.index ["restaurant_id"], name: "index_fundraisers_on_restaurant_id"
   end
 
   create_table "house_account_transactions", force: :cascade do |t|
@@ -180,8 +240,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.bigint "category_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.integer "position", default: 0, null: false
-    t.index ["category_id", "position"], name: "index_menu_item_categories_on_category_id_and_position"
     t.index ["category_id"], name: "index_menu_item_categories_on_category_id"
     t.index ["menu_item_id", "category_id"], name: "index_menu_item_categories_on_menu_item_id_and_category_id", unique: true
     t.index ["menu_item_id"], name: "index_menu_item_categories_on_menu_item_id"
@@ -323,11 +381,14 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.string "name", null: false
     t.integer "min_select", default: 0
     t.integer "max_select", default: 1
-    t.bigint "menu_item_id", null: false
+    t.bigint "menu_item_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "free_option_count", default: 0, null: false
+    t.string "optionable_type"
+    t.bigint "optionable_id"
     t.index ["menu_item_id"], name: "index_option_groups_on_menu_item_id"
+    t.index ["optionable_type", "optionable_id"], name: "index_option_groups_on_optionable_type_and_optionable_id"
   end
 
   create_table "options", force: :cascade do |t|
@@ -413,14 +474,25 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.bigint "created_by_user_id"
     t.string "order_number"
     t.bigint "location_id", null: false
+    t.bigint "fundraiser_id"
+    t.bigint "fundraiser_participant_id"
+    t.boolean "is_fundraiser_order", default: false
+    t.string "fulfillment_method", default: "pickup"
+    t.bigint "pickup_location_id"
+    t.string "order_type", default: "standard", null: false
     t.index ["created_by_staff_id"], name: "index_orders_on_created_by_staff_id"
     t.index ["created_by_user_id"], name: "index_orders_on_created_by_user_id"
+    t.index ["fundraiser_id"], name: "index_orders_on_fundraiser_id"
+    t.index ["fundraiser_participant_id"], name: "index_orders_on_fundraiser_participant_id"
     t.index ["global_last_acknowledged_at"], name: "index_orders_on_global_last_acknowledged_at"
+    t.index ["is_fundraiser_order"], name: "index_orders_on_is_fundraiser_order"
     t.index ["is_staff_order", "use_house_account"], name: "index_orders_on_staff_order_and_house_account"
     t.index ["is_staff_order"], name: "index_orders_on_is_staff_order"
     t.index ["location_id"], name: "index_orders_on_location_id"
     t.index ["order_number"], name: "index_orders_on_order_number", unique: true
+    t.index ["order_type"], name: "index_orders_on_order_type"
     t.index ["payment_id"], name: "index_orders_on_payment_id"
+    t.index ["pickup_location_id"], name: "index_orders_on_pickup_location_id"
     t.index ["restaurant_id", "location_id"], name: "index_orders_on_restaurant_id_and_location_id"
     t.index ["restaurant_id", "order_number"], name: "index_orders_on_restaurant_id_and_order_number"
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
@@ -575,7 +647,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.string "category", default: "standard"
     t.index ["category"], name: "index_seats_on_category"
     t.index ["seat_section_id"], name: "index_seats_on_seat_section_id"
-    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying, 'booth'::character varying, 'outdoor'::character varying, 'bar'::character varying, 'private'::character varying, 'high_top'::character varying]::text[])", name: "check_seat_category_values"
+    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying::text, 'booth'::character varying::text, 'outdoor'::character varying::text, 'bar'::character varying::text, 'private'::character varying::text, 'high_top'::character varying::text])", name: "check_seat_category_values"
     t.check_constraint "max_capacity IS NULL OR min_capacity <= max_capacity", name: "check_min_max_capacity"
   end
 
@@ -722,6 +794,11 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
   add_foreign_key "blocked_periods", "seat_sections"
   add_foreign_key "categories", "menus"
   add_foreign_key "feature_flags", "restaurants", on_delete: :cascade
+  add_foreign_key "fundraiser_counters", "fundraisers"
+  add_foreign_key "fundraiser_counters", "restaurants"
+  add_foreign_key "fundraiser_items", "fundraisers"
+  add_foreign_key "fundraiser_participants", "fundraisers"
+  add_foreign_key "fundraisers", "restaurants"
   add_foreign_key "house_account_transactions", "orders", on_delete: :nullify
   add_foreign_key "house_account_transactions", "staff_members"
   add_foreign_key "inventory_statuses", "menu_items"
@@ -749,7 +826,10 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
   add_foreign_key "order_acknowledgments", "orders"
   add_foreign_key "order_acknowledgments", "users"
   add_foreign_key "order_payments", "orders"
+  add_foreign_key "orders", "fundraiser_participants"
+  add_foreign_key "orders", "fundraisers"
   add_foreign_key "orders", "locations"
+  add_foreign_key "orders", "locations", column: "pickup_location_id"
   add_foreign_key "orders", "restaurants"
   add_foreign_key "orders", "staff_members", column: "created_by_staff_id", on_delete: :nullify
   add_foreign_key "orders", "staff_members", on_delete: :nullify
