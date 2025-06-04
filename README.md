@@ -579,7 +579,7 @@ end
 
 1. **Clone the Repository**  
    ```bash
-   git clone https://github.com/YourUsername/shimizu-order-suite.git
+   git clone https://github.com/Shimizu-Technology/shimizu-order-suite.git
    cd shimizu-order-suite
    ```
 
@@ -594,38 +594,45 @@ end
    brew services start postgresql
    ```
 
-4. **Create and Migrate the Database**  
+4. **Set up environment variables:**
+   - Create a `.env` file in the project root with:
+   ```
+   NOTE: This is NOT public information. (Get information from a team member)
+   ```
+
+5. **Create and Migrate the Database**  
    ```bash
    rails db:create
    rails db:migrate
-   rails db:seed # Optional: Seed initial data
+   rails db:seed # Optional: Seed initial data 
    ```
+   - NOTE: Do NOT run `rails db:seed`. For the time being, we are using a copy of the production database to populate our local databases. (Get information from a team member)
 
-5. **Install and Start Redis** (for Sidekiq)  
+6. **Install and Start Redis** (for Sidekiq)  
    ```bash
    brew install redis
    brew services start redis
    ```
 
-6. **Database Setup**
+7. **Database Setup**
    - For a fresh database setup, run:
      ```bash
      rails db:create db:migrate db:seed
      ```
    - To import an existing database (recommended for development), see [Database Export and Import Guide](docs/database_export_import.md)
 
-6. **Run Sidekiq** in a Separate Terminal  
+8. **Run Sidekiq** in a Separate Terminal  
    ```bash
    bundle exec sidekiq -C config/sidekiq.yml
    ```
 
-7. **Start Rails Server**  
+9. **Start Rails Server**  
    ```bash
    rails server
    ```
    By default, Rails listens on `http://localhost:3000`.
 
-8. **Create a Test Restaurant and Admin**
+10. **Create a Test Restaurant and Admin**
    ```bash
    rails console
    ```
