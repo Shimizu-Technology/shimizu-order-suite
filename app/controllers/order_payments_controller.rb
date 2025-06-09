@@ -17,9 +17,9 @@ class OrderPaymentsController < ApplicationController
     
     render json: {
       payments: payments,
-      total_paid: payment_summary[:total_paid],
-      total_refunded: payment_summary[:total_refunded],
-      net_amount: payment_summary[:net_amount]
+      total_paid: payment_summary&.dig(:total_paid) || 0,
+      total_refunded: payment_summary&.dig(:total_refunded) || 0,
+      net_amount: payment_summary&.dig(:net_amount) || 0
     }
   end
 

@@ -9,7 +9,41 @@ class OrdersController < ApplicationController
   # GET /orders
   def index
     # Use Pundit's policy_scope to filter orders based on user role
+    # This automatically handles staff/admin/customer authorization
     @orders = policy_scope(Order)
+
+    # Enhanced filtering logic consolidated from staff_orders method
+    
+    # Filter for online orders only (customer orders)
+    if params[:online_orders_only].present? && params[:online_orders_only] == 'true'
+      @orders = @orders.where(staff_created: false, is_staff_order: false)
+    end
+
+    # Filter by staff member if provided
+    if params[:staff_member_id].present?
+      # Handle both user ID (admin/super_admin) or staff member ID formats
+      if params[:staff_member_id].to_s.include?('user_')
+        # Extract user ID from 'user_123' format
+        user_id = params[:staff_member_id].to_s.gsub('user_', '')
+        @orders = @orders.where(created_by_user_id: user_id)
+      else
+        # This is a staff member ID
+        @orders = @orders.where(created_by_staff_id: params[:staff_member_id])
+      end
+    end
+
+    # Filter by user_id if provided (for admin-created orders)
+    if params[:user_id].present?
+      user_orders = @orders.where(created_by_user_id: params[:user_id])
+      
+      # Include online orders if requested
+      if params[:include_online_orders].present? && params[:include_online_orders] == 'true'
+        online_orders = @orders.where(staff_created: false, is_staff_order: false)
+        @orders = user_orders.or(online_orders)
+      else
+        @orders = user_orders
+      end
+    end
 
     # Filter by restaurant_id if provided
     if params[:restaurant_id].present?
@@ -21,48 +55,83 @@ class OrdersController < ApplicationController
       @orders = @orders.where(status: params[:status])
     end
 
-    # Filter by location_id if provided
-    if params[:location_id].present?
-      @orders = @orders.where(location_id: params[:location_id])
+    # Filter by location_id if provided (support both locationId and location_id)
+    location_id = params[:location_id] || params[:locationId]
+    if location_id.present?
+      @orders = @orders.where(location_id: location_id)
+      Rails.logger.info("[LOCATION FILTER] Filtering orders by location_id: #{location_id}")
+      Rails.logger.info("[LOCATION FILTER] Orders count after location filter: #{@orders.count}")
     end
 
-    # Filter for online orders only (customer orders)
-    if params[:online_orders_only].present? && params[:online_orders_only] == 'true'
-      @orders = @orders.where(staff_created: false)
-    end
-
-    # Filter by staff member if provided
-    if params[:staff_member_id].present?
-      @orders = @orders.where(created_by_staff_id: params[:staff_member_id])
-    end
-
-    # Filter by date range if provided
+    # Enhanced date filtering with timezone handling (from staff_orders)
     if params[:date_from].present? && params[:date_to].present?
-      # Parse dates with timezone consideration
-      # If timezone info is included in the string, it will be respected
-      date_from = Time.zone.parse(params[:date_from]).beginning_of_day
-      date_to = Time.zone.parse(params[:date_to]).end_of_day
-      @orders = @orders.where(created_at: date_from..date_to)
+      begin
+        # Debug log for incoming date parameters
+        Rails.logger.info("[DATE FILTER DEBUG] Received date parameters:")
+        Rails.logger.info("[DATE FILTER DEBUG] date_from: #{params[:date_from]}")
+        Rails.logger.info("[DATE FILTER DEBUG] date_to: #{params[:date_to]}")
+        Rails.logger.info("[DATE FILTER DEBUG] Current time in Rails: #{Time.zone.now}")
+        
+        # Parse the dates with timezone information preserved
+        date_from_str = params[:date_from]
+        date_to_str = params[:date_to]
+        
+        # Parse the dates - Time.zone.parse will handle the timezone conversion
+        date_from = Time.zone.parse(date_from_str)
+        date_to = Time.zone.parse(date_to_str)
+        
+        # For dates in UTC (ending with Z), adjust for timezone
+        if date_from_str.end_with?('Z') || date_to_str.end_with?('Z')
+          Rails.logger.info("[DATE FILTER DEBUG] Detected UTC dates, adjusting for timezone")
+          date_from = date_from.beginning_of_day
+          date_to = date_to.end_of_day
+        end
+        
+        # Debug log for parsed dates
+        Rails.logger.info("[DATE FILTER DEBUG] Parsed dates:")
+        Rails.logger.info("[DATE FILTER DEBUG] date_from parsed: #{date_from}")
+        Rails.logger.info("[DATE FILTER DEBUG] date_to parsed: #{date_to}")
+        
+        # Extend the range slightly to ensure we capture all orders
+        date_from = date_from - 1.second
+        date_to = date_to + 1.second
+        
+        # Apply date filter
+        orders_before_filter = @orders.count
+        @orders = @orders.where(created_at: date_from..date_to)
+        orders_after_filter = @orders.count
+        
+        Rails.logger.info("[DATE FILTER DEBUG] Orders count before filter: #{orders_before_filter}")
+        Rails.logger.info("[DATE FILTER DEBUG] Orders count after filter: #{orders_after_filter}")
+        
+      rescue => e
+        # Log the error but continue with unfiltered orders
+        Rails.logger.error("Error parsing date range: #{e.message}")
+        Rails.logger.error("date_from: #{params[:date_from]}, date_to: #{params[:date_to]}")
+      end
     end
 
     # Search functionality
     if params[:search].present?
       search_term = "%#{params[:search]}%"
-      @orders = @orders.where(
+      
+      # Search in basic order fields
+      basic_search = @orders.where(
         "id::text ILIKE ? OR contact_name ILIKE ? OR contact_email ILIKE ? OR contact_phone ILIKE ? OR special_instructions ILIKE ?",
         search_term, search_term, search_term, search_term, search_term
       )
       
-      # Also search in order items (requires a join)
-      order_items_search = Order.joins(:order_items)
-                               .where("order_items.name ILIKE ? OR order_items.notes ILIKE ?", 
-                                     search_term, search_term)
-                               .distinct
-                               .pluck(:id)
+      # Search in order items using JSON operators and apply the same filters
+      # Since items are stored as JSON, we search within the JSON array
+      item_search = @orders.where(
+        "EXISTS (
+          SELECT 1 FROM jsonb_array_elements(items) as item
+          WHERE item->>'name' ILIKE ? OR item->>'notes' ILIKE ?
+        )", search_term, search_term
+      )
       
-      if order_items_search.any?
-        @orders = @orders.or(Order.where(id: order_items_search))
-      end
+      # Combine both search results while maintaining all filters
+      @orders = basic_search.or(item_search)
     end
 
     # Get total count after filtering but before pagination
@@ -125,167 +194,7 @@ class OrdersController < ApplicationController
     render json: new_orders, status: :ok
   end
 
-  # GET /orders/staff
-  # Allows admins to filter orders by staff member or user
-  def staff_orders
-    # Only allow admin or above to access this endpoint
-    unless current_user&.admin_or_above?
-      return render json: { error: "Forbidden" }, status: :forbidden
-    end
 
-    # Start with all orders
-    @orders = Order.all
-
-    # Primary filtering logic - these are mutually exclusive
-    if params[:online_orders_only].present? && params[:online_orders_only] == 'true'
-      # Filter for online orders only (customer orders)
-      @orders = @orders.where(staff_created: false)
-    elsif params[:staff_member_id].present?
-      # Filter by staff member or user if provided
-      # Check if this is a user ID (admin/super_admin) or a staff member ID
-      if params[:staff_member_id].to_s.include?('user_')
-        # If the ID starts with 'user_', it's a user ID
-        user_id = params[:staff_member_id].to_s.gsub('user_', '')
-        # Only filter by user_id for user-created orders
-        @orders = @orders.where(created_by_user_id: user_id)
-      else
-        # This is a staff member ID
-        @orders = @orders.where(created_by_staff_id: params[:staff_member_id])
-      end
-    elsif params[:user_id].present?
-      # Filter by user_id if provided
-      user_orders = @orders.where(created_by_user_id: params[:user_id])
-      
-      # Include online orders if requested
-      if params[:include_online_orders].present? && params[:include_online_orders] == 'true'
-        online_orders = @orders.where(staff_created: false)
-        @orders = user_orders.or(online_orders)
-      else
-        @orders = user_orders
-      end
-    else
-      # If no staff member or user specified, show ALL orders (both staff and customer orders)
-      # No additional filtering needed here - we want to show everything
-      # The 'online_orders_only' parameter will handle filtering to only customer orders if needed
-    end
-
-    # Filter by restaurant_id if provided
-    if params[:restaurant_id].present?
-      @orders = @orders.where(restaurant_id: params[:restaurant_id])
-    end
-
-    # Filter by status if provided
-    if params[:status].present?
-      @orders = @orders.where(status: params[:status])
-    end
-
-    # Filter by location_id if provided
-    if params[:locationId].present?
-      @orders = @orders.where(location_id: params[:locationId])
-      Rails.logger.info("[LOCATION FILTER] Filtering orders by location_id: #{params[:locationId]}")
-      Rails.logger.info("[LOCATION FILTER] Orders count after location filter: #{@orders.count}")
-    end
-
-    # Filter by date range if provided
-    if params[:date_from].present? && params[:date_to].present?
-      # Parse dates with timezone consideration
-      # Ensure we capture the full day by extending the range slightly
-      begin
-        # Debug log for incoming date parameters
-        Rails.logger.info("[DATE FILTER DEBUG] Received date parameters:")
-        Rails.logger.info("[DATE FILTER DEBUG] date_from: #{params[:date_from]}")
-        Rails.logger.info("[DATE FILTER DEBUG] date_to: #{params[:date_to]}")
-        Rails.logger.info("[DATE FILTER DEBUG] Current time in Rails: #{Time.zone.now}")
-        
-        # Parse the dates with timezone information preserved
-        # If the date string has 'Z' at the end (UTC timezone), convert it to Guam time (UTC+10)
-        date_from_str = params[:date_from]
-        date_to_str = params[:date_to]
-        
-        # Parse the dates - Time.zone.parse will handle the timezone conversion
-        date_from = Time.zone.parse(date_from_str)
-        date_to = Time.zone.parse(date_to_str)
-        
-        # For dates in UTC (ending with Z), we need to adjust the query to match Guam timezone
-        if date_from_str.end_with?('Z') || date_to_str.end_with?('Z')
-          Rails.logger.info("[DATE FILTER DEBUG] Detected UTC dates, adjusting for Guam timezone")
-          
-          # For custom date range, ensure we're using the full day in Guam time
-          # Start at 00:00:00 Guam time for the start date
-          date_from = date_from.beginning_of_day
-          # End at 23:59:59 Guam time for the end date
-          date_to = date_to.end_of_day
-        end
-        
-        # Debug log for parsed dates
-        Rails.logger.info("[DATE FILTER DEBUG] Parsed dates:")
-        Rails.logger.info("[DATE FILTER DEBUG] date_from parsed: #{date_from}")
-        Rails.logger.info("[DATE FILTER DEBUG] date_to parsed: #{date_to}")
-        
-        # Extend the range slightly to ensure we capture all orders
-        # Subtract 1 second from start and add 1 second to end
-        date_from = date_from - 1.second
-        date_to = date_to + 1.second
-        
-        # Debug log for extended dates
-        Rails.logger.info("[DATE FILTER DEBUG] Extended dates:")
-        Rails.logger.info("[DATE FILTER DEBUG] date_from extended: #{date_from}")
-        Rails.logger.info("[DATE FILTER DEBUG] date_to extended: #{date_to}")
-        
-        # Debug log for SQL query
-        @orders_before_filter = @orders.count
-        @orders = @orders.where(created_at: date_from..date_to)
-        @orders_after_filter = @orders.count
-        
-        Rails.logger.info("[DATE FILTER DEBUG] Orders count before filter: #{@orders_before_filter}")
-        Rails.logger.info("[DATE FILTER DEBUG] Orders count after filter: #{@orders_after_filter}")
-        Rails.logger.info("[DATE FILTER DEBUG] Difference: #{@orders_before_filter - @orders_after_filter}")
-      rescue => e
-        # Log the error but continue with unfiltered orders
-        Rails.logger.error("Error parsing date range: #{e.message}")
-        Rails.logger.error("date_from: #{params[:date_from]}, date_to: #{params[:date_to]}")
-      end
-    end
-
-    # Get total count after filtering but before pagination
-    total_count = @orders.count
-
-    # Add pagination
-    page = (params[:page] || 1).to_i
-    per_page = (params[:per_page] || 10).to_i
-
-    # Apply sorting
-    sort_by = params[:sort_by] || 'created_at'
-    sort_direction = params[:sort_direction] || 'desc'
-    
-    # Validate sort parameters to prevent SQL injection
-    valid_sort_columns = ['id', 'created_at', 'updated_at', 'status', 'total']
-    valid_sort_directions = ['asc', 'desc']
-    
-    sort_by = 'created_at' unless valid_sort_columns.include?(sort_by)
-    sort_direction = 'desc' unless valid_sort_directions.include?(sort_direction)
-    
-    # Include location association to ensure location data is available in the response
-    @orders = @orders.includes(:location)
-                     .order("#{sort_by} #{sort_direction}")
-                     .offset((page - 1) * per_page)
-                     .limit(per_page)
-
-    # Calculate total pages
-    total_pages = (total_count.to_f / per_page).ceil
-
-    # Include location data in the response
-    orders_with_location = @orders.as_json(include: :location)
-
-    render json: {
-      orders: orders_with_location,
-      total_count: total_count,
-      page: page,
-      per_page: per_page,
-      total_pages: total_pages
-    }, status: :ok
-
-  end
 
   # GET /orders/creators
   # Returns a list of users who have created orders (staff, admin, super_admin) for the current restaurant only
