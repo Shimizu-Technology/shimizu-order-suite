@@ -6,6 +6,7 @@ class Option < ApplicationRecord
   tenant_path through: [:option_group, :menu_item, :menu], foreign_key: 'restaurant_id'
 
   belongs_to :option_group
+  has_many :option_stock_audits, dependent: :destroy
   
   # Default scope to order by position
   default_scope { order(position: :asc) }
@@ -14,6 +15,8 @@ class Option < ApplicationRecord
   validates :additional_price, numericality: { greater_than_or_equal_to: 0.0 }
   validates :is_preselected, inclusion: { in: [true, false] }
   validates :is_available, inclusion: { in: [true, false] }
+  validates :stock_quantity, numericality: { greater_than_or_equal_to: 0 }
+  validates :damaged_quantity, numericality: { greater_than_or_equal_to: 0 }
 
   # Note: with_restaurant_scope is now provided by IndirectTenantScoped
 
@@ -29,7 +32,66 @@ class Option < ApplicationRecord
       json['additional_price_float'] = additional_price_float
       json['is_available'] = is_available
       json['position'] = position
+      json['available_quantity'] = available_quantity
+      json['is_low_stock'] = low_stock?
+      json['is_out_of_stock'] = out_of_stock?
     end
+  end
+
+  # Inventory methods
+  def available_quantity
+    [stock_quantity - damaged_quantity, 0].max
+  end
+
+  def low_stock?
+    return false unless option_group.enable_option_inventory?
+    available_quantity <= option_group.low_stock_threshold
+  end
+
+  def out_of_stock?
+    return false unless option_group.enable_option_inventory?
+    available_quantity <= 0
+  end
+
+  def stock_sufficient?(quantity_requested)
+    return true unless option_group.enable_option_inventory?
+    available_quantity >= quantity_requested
+  end
+
+  def update_stock_with_audit!(new_quantity, reason, user: nil, order: nil)
+    return unless option_group.enable_option_inventory?
+    
+    previous_quantity = stock_quantity
+    
+    transaction do
+      update!(stock_quantity: new_quantity)
+      
+      option_stock_audits.create!(
+        previous_quantity: previous_quantity,
+        new_quantity: new_quantity,
+        reason: reason,
+        user: user,
+        order: order
+      )
+    end
+  end
+
+  def deduct_stock!(quantity, order: nil)
+    return unless option_group.enable_option_inventory?
+    
+    new_quantity = [stock_quantity - quantity, 0].max
+    update_stock_with_audit!(
+      new_quantity,
+      "Stock deducted for order (#{quantity} units)",
+      order: order
+    )
+  end
+
+  def restore_stock!(quantity, reason = "Stock restored", user: nil, order: nil)
+    return unless option_group.enable_option_inventory?
+    
+    new_quantity = stock_quantity + quantity
+    update_stock_with_audit!(new_quantity, reason, user: user, order: order)
   end
   
   # Set default position when creating a new option

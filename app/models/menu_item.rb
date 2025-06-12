@@ -36,6 +36,9 @@ class MenuItem < ApplicationRecord
   validates :stock_quantity, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
   validates :damaged_quantity, numericality: { only_integer: true, greater_than_or_equal_to: 0 }, allow_nil: true
   validates :low_stock_threshold, numericality: { only_integer: true, greater_than_or_equal_to: 1 }, allow_nil: true
+  
+  # Option-level inventory validation
+  validate :validate_option_level_inventory_constraints
 
   # Note: with_restaurant_scope is now provided by IndirectTenantScoped
 
@@ -45,17 +48,48 @@ class MenuItem < ApplicationRecord
   # Validation for Featured
   validate :limit_featured_items, on: [ :create, :update ]
 
+  # Inventory strategy helper methods (matching PRD design)
+  def option_level_tracking?
+    enable_stock_tracking && option_groups.any?(&:enable_option_inventory?)
+  end
+
+  def menu_item_level_tracking?
+    enable_stock_tracking && !option_level_tracking?
+  end
+
+  def manual_tracking?
+    !enable_stock_tracking
+  end
+
+  def primary_tracked_option_group
+    option_groups.find(&:primary_tracking_group?)
+  end
+
+  def inventory_tracking_type
+    return "manual" if manual_tracking?
+    return "option_level" if option_level_tracking?
+    return "menu_item_level" if menu_item_level_tracking?
+    "manual"
+  end
+
   # Inventory tracking methods
   def available_quantity
     return nil unless enable_stock_tracking
 
-    total = stock_quantity.to_i
-    damaged = damaged_quantity.to_i
-    available = total - damaged
+    if option_level_tracking?
+      # For option-level tracking, return total available across primary tracked options
+      primary_group = primary_tracked_option_group
+      return primary_group&.total_available_stock || 0
+    else
+      # Menu item-level tracking (existing logic)
+      total = stock_quantity.to_i
+      damaged = damaged_quantity.to_i
+      available = total - damaged
 
-    Rails.logger.info("INVENTORY DEBUG: available_quantity for #{id} (#{name}) - Stock: #{total}, Damaged: #{damaged}, Available: #{available}")
+      Rails.logger.info("INVENTORY DEBUG: available_quantity for #{id} (#{name}) - Stock: #{total}, Damaged: #{damaged}, Available: #{available}")
 
-    available
+      available
+    end
   end
 
   def actual_low_stock_threshold
@@ -151,24 +185,37 @@ class MenuItem < ApplicationRecord
     false
   end
 
-  # Update stock status based on available quantity
+  # Update stock status based on available quantity (supports both menu item and option level tracking)
   def update_stock_status!
     return unless enable_stock_tracking
 
-    available = available_quantity
     old_status = stock_status
-
-    new_status = if available <= 0
-                  :out_of_stock
-    elsif available <= actual_low_stock_threshold
-                  :low_stock
-    else
-                  :in_stock
-    end
+    
+    new_status = if option_level_tracking?
+                   # Option-level inventory logic
+                   primary_group = primary_tracked_option_group
+                   if primary_group&.all_options_out_of_stock?
+                     :out_of_stock
+                   elsif primary_group&.has_low_stock_options?
+                     :low_stock
+                   else
+                     :in_stock
+                   end
+                 else
+                   # Menu item-level inventory logic (existing)
+                   available = available_quantity
+                   if available <= 0
+                     :out_of_stock
+                   elsif available <= actual_low_stock_threshold
+                     :low_stock
+                   else
+                     :in_stock
+                   end
+                 end
 
     # Only update if status has changed
     if stock_status != new_status.to_s
-      update_column(:stock_status, stock_status_before_type_cast)
+      update_column(:stock_status, new_status)
       
       # Broadcast low stock notification if status changed to low_stock
       if new_status == :low_stock && old_status != 'low_stock'
@@ -255,17 +302,45 @@ class MenuItem < ApplicationRecord
     if enable_stock_tracking
       result.merge!(
         "enable_stock_tracking" => enable_stock_tracking,
-        "stock_quantity" => stock_quantity.to_i,
-        "damaged_quantity" => damaged_quantity.to_i,
-        "available_quantity" => available_quantity,
-        "low_stock_threshold" => actual_low_stock_threshold
+        "inventory_tracking_type" => inventory_tracking_type,
+        "available_quantity" => available_quantity
       )
+      
+      # Add menu item level tracking fields
+      if menu_item_level_tracking?
+        result.merge!(
+          "stock_quantity" => stock_quantity.to_i,
+          "damaged_quantity" => damaged_quantity.to_i,
+          "low_stock_threshold" => actual_low_stock_threshold
+        )
+      end
+      
+      # Add option level tracking information
+      if option_level_tracking?
+        primary_group = primary_tracked_option_group
+        result.merge!(
+          "primary_tracked_option_group_id" => primary_group&.id,
+          "primary_tracked_option_group_name" => primary_group&.name,
+          "total_option_stock" => primary_group&.total_available_stock || 0
+        )
+      end
     end
 
     result
   end
 
   private
+
+  # Validation for option-level inventory constraints
+  def validate_option_level_inventory_constraints
+    return unless enable_stock_tracking
+    
+    # If option-level tracking is enabled, cannot have both option and menu item tracking
+    primary_groups = option_groups.select(&:primary_tracking_group?)
+    if primary_groups.count > 1
+      errors.add(:option_groups, "can only have one primary tracked option group")
+    end
+  end
 
   # Reset inventory tracking fields when tracking is turned off
   def reset_inventory_fields_if_tracking_disabled

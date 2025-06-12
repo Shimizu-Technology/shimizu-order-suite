@@ -689,19 +689,61 @@ class OrdersController < ApplicationController
 
             Rails.logger.debug("Extracted quantity: #{quantity.inspect} for menu item #{menu_item.name}")
 
-            current_stock = menu_item.stock_quantity.to_i
-            new_stock = [ current_stock - quantity, 0 ].max
+            # Check if this item uses option-level tracking
+            if menu_item.option_level_tracking?
+              # Extract tracked option data
+              tracked_option = nil
+              if item.is_a?(Hash)
+                tracked_option = item["tracked_option"] || item[:tracked_option]
+              elsif item.respond_to?(:tracked_option)
+                tracked_option = item.tracked_option
+              end
 
-            menu_item.update_stock_quantity(
-              new_stock,
-              "order",
-              "Order ##{@order.order_number.presence || @order.id} - #{quantity} items",
-              @current_user,
-              @order
-            )
+              if tracked_option.present?
+                # Find the option and deduct stock
+                option_id = tracked_option["option_id"] || tracked_option[:option_id]
+                option = Option.find_by(id: option_id)
+                
+                if option.present?
+                  current_stock = option.stock_quantity.to_i
+                  new_stock = [ current_stock - quantity, 0 ].max
+                  
+                  option.update_stock_quantity(
+                    new_stock,
+                    "order",
+                    "Order ##{@order.order_number.presence || @order.id} - #{quantity} items",
+                    @current_user,
+                    @order
+                  )
+                  
+                  # Check if low stock notification is needed
+                  option_group = option.option_group
+                  if option_group && option.stock_quantity <= option_group.low_stock_threshold && !Rails.env.test? && !test_mode
+                    # TODO: Implement option low-stock notifications if needed
+                    Rails.logger.info("Option #{option.name} is low on stock (#{option.stock_quantity} remaining)")
+                  end
+                else
+                  Rails.logger.error("Tracked option not found for option_id: #{option_id}")
+                end
+              else
+                Rails.logger.error("Option-level tracking enabled but no tracked_option data for item: #{menu_item.name}")
+              end
+            else
+              # Menu item level tracking (existing logic)
+              current_stock = menu_item.stock_quantity.to_i
+              new_stock = [ current_stock - quantity, 0 ].max
 
-            if menu_item.stock_status == "low_stock" && !Rails.env.test? && !test_mode
-              # TODO: implement menu item low-stock notifications if needed
+              menu_item.update_stock_quantity(
+                new_stock,
+                "order",
+                "Order ##{@order.order_number.presence || @order.id} - #{quantity} items",
+                @current_user,
+                @order
+              )
+
+              if menu_item.stock_status == "low_stock" && !Rails.env.test? && !test_mode
+                # TODO: implement menu item low-stock notifications if needed
+              end
             end
           end
         end
@@ -946,8 +988,9 @@ class OrdersController < ApplicationController
       :pickup_time, :is_staff_order, :staff_member_id, :staff_on_duty, 
       :use_house_account, :created_by_staff_id, :created_by_user_id, 
       :pre_discount_total, :vip_code, :vip_access_code_id, :staff_modal, :location_id,
-      # Handle nested attributes properly
-      items: [:id, :name, :price, :quantity, :notes, :menu_id, :category_id, { customizations: {} }],
+      # Handle nested attributes properly - include tracked_option for option-level inventory
+      items: [:id, :name, :price, :quantity, :notes, :menu_id, :category_id, 
+              { customizations: {}, tracked_option: [:option_id, :option_group_id, :quantity] }],
       merchandise_items: [:id, :name, :price, :quantity, :merchandise_variant_id, :notes],
       # Allow all payment details attributes to be passed through
       payment_details: {})
@@ -1055,50 +1098,78 @@ class OrdersController < ApplicationController
   end
 
   def process_new_item(menu_item, quantity, order)
-    current_stock = menu_item.stock_quantity.to_i
-    new_stock = [ current_stock - quantity, 0 ].max
+    # Check if this item uses option-level tracking
+    if menu_item.option_level_tracking?
+      # For option-level tracking, we need to find the tracked option from the order items
+      # This is tricky because we're in process_inventory_changes which aggregates by menu_item_id
+      # We need access to the original item data with tracked_option
+      Rails.logger.warn("Option-level tracking detected for new item #{menu_item.name}, but tracked_option data not available in aggregated processing")
+      # Note: The actual deduction happens in the create action when processing individual items
+    else
+      # Menu item level tracking
+      current_stock = menu_item.stock_quantity.to_i
+      new_stock = [ current_stock - quantity, 0 ].max
 
-    menu_item.update_stock_quantity(
-      new_stock,
-      "order",
-      "Order ##{order.order_number.presence || order.id} - Added item during edit (qty #{quantity})",
-      @current_user,
-      order
-    )
+      menu_item.update_stock_quantity(
+        new_stock,
+        "order",
+        "Order ##{order.order_number.presence || order.id} - Added item during edit (qty #{quantity})",
+        @current_user,
+        order
+      )
+    end
   end
 
   def process_removed_item(menu_item, quantity, order)
-    # Only add back 1 at a time for removed items to prevent double-counting
-    # since the frontend InventoryReversionDialog may have already handled some
-    current_stock = menu_item.stock_quantity.to_i
+    # Check if this item uses option-level tracking
+    if menu_item.option_level_tracking?
+      # For option-level tracking, we need to restore stock to the tracked option
+      # This is complex because we need to know which option was originally tracked
+      Rails.logger.warn("Option-level tracking detected for removed item #{menu_item.name}, manual inventory adjustment may be needed")
+      # Note: Consider implementing a more sophisticated tracking system that stores which option was used
+    else
+      # Menu item level tracking
+      # Only add back 1 at a time for removed items to prevent double-counting
+      # since the frontend InventoryReversionDialog may have already handled some
+      current_stock = menu_item.stock_quantity.to_i
 
-    # Get the count of this item that was in the previous order
-    removed_qty = quantity
+      # Get the count of this item that was in the previous order
+      removed_qty = quantity
 
-    # Add debug logging
-    Rails.logger.debug("Returning item to inventory: #{menu_item.name}, quantity: #{removed_qty}, current stock: #{current_stock}")
+      # Add debug logging
+      Rails.logger.debug("Returning item to inventory: #{menu_item.name}, quantity: #{removed_qty}, current stock: #{current_stock}")
 
-    new_stock = current_stock + removed_qty
+      new_stock = current_stock + removed_qty
 
-    menu_item.update_stock_quantity(
-      new_stock,
-      "adjustment",
-      "Order ##{order.order_number.presence || order.id} - Removed item during edit (qty #{removed_qty})",
-      @current_user,
-      order
-    )
+      menu_item.update_stock_quantity(
+        new_stock,
+        "adjustment",
+        "Order ##{order.order_number.presence || order.id} - Removed item during edit (qty #{removed_qty})",
+        @current_user,
+        order
+      )
+    end
   end
 
   def process_quantity_change(menu_item, original_qty, new_qty, qty_diff, order)
-    current_stock = menu_item.stock_quantity.to_i
-    new_stock = current_stock - qty_diff
+    # Check if this item uses option-level tracking
+    if menu_item.option_level_tracking?
+      # For option-level tracking, quantity changes are complex
+      # We would need to track which specific options are affected
+      Rails.logger.warn("Option-level tracking detected for quantity change on #{menu_item.name}, manual inventory adjustment may be needed")
+      # Note: Consider storing tracked_option data in order items for better tracking
+    else
+      # Menu item level tracking
+      current_stock = menu_item.stock_quantity.to_i
+      new_stock = current_stock - qty_diff
 
-    menu_item.update_stock_quantity(
-      [ new_stock, 0 ].max,
-      "adjustment",
-      "Order ##{order.order_number.presence || order.id} - Quantity changed from #{original_qty} to #{new_qty}",
-      @current_user,
-      order
-    )
+      menu_item.update_stock_quantity(
+        [ new_stock, 0 ].max,
+        "adjustment",
+        "Order ##{order.order_number.presence || order.id} - Quantity changed from #{original_qty} to #{new_qty}",
+        @current_user,
+        order
+      )
+    end
   end
 end

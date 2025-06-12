@@ -97,6 +97,35 @@ Rails.application.routes.draw do
       # Location capacity endpoint
       get 'locations/:location_id/available_capacity', to: 'location_capacities#available_capacity'
     end
+    
+    # Admin API endpoints for option-level inventory
+    namespace :admin do
+      # Menu Item Option Groups Inventory
+      resources :menu_items, only: [] do
+        resources :option_groups, only: [] do
+          collection do
+            get :inventory_status
+          end
+        end
+      end
+
+      # Option Group Inventory Management
+      resources :option_groups, only: [:show] do
+        member do
+          patch :configure_inventory, to: 'option_groups#configure_inventory'
+          get :inventory_status, to: 'option_groups#inventory_status'
+        end
+      end
+      
+      # Individual Option Stock Management
+      resources :options, only: [:show] do
+        member do
+          put :stock, to: 'options#update_stock'
+          post :mark_as_damaged, to: 'options#mark_as_damaged'
+          get :stock_audits, to: 'options#stock_audits'
+        end
+      end
+    end
   end
 
   resources :seat_allocations, only: [ :index, :create, :update, :destroy ] do

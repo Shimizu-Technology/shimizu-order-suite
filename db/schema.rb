@@ -76,7 +76,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.index ["restaurant_id", "start_time", "end_time"], name: "idx_blocked_periods_rest_times"
     t.index ["restaurant_id"], name: "index_blocked_periods_on_restaurant_id"
     t.index ["seat_section_id"], name: "index_blocked_periods_on_seat_section_id"
-    t.check_constraint "status::text = ANY (ARRAY['active'::character varying, 'cancelled'::character varying]::text[])", name: "check_blocked_period_status"
+    t.check_constraint "status::text = ANY (ARRAY['active'::character varying::text, 'cancelled'::character varying::text])", name: "check_blocked_period_status"
   end
 
   create_table "categories", force: :cascade do |t|
@@ -180,8 +180,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.bigint "category_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.integer "position", default: 0, null: false
-    t.index ["category_id", "position"], name: "index_menu_item_categories_on_category_id_and_position"
     t.index ["category_id"], name: "index_menu_item_categories_on_category_id"
     t.index ["menu_item_id", "category_id"], name: "index_menu_item_categories_on_menu_item_id_and_category_id", unique: true
     t.index ["menu_item_id"], name: "index_menu_item_categories_on_menu_item_id"
@@ -327,7 +325,29 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "free_option_count", default: 0, null: false
+    t.boolean "enable_option_inventory", default: false, null: false
+    t.integer "low_stock_threshold", default: 10, null: false
+    t.integer "tracking_priority", default: 0, null: false
+    t.index ["enable_option_inventory"], name: "index_option_groups_on_enable_option_inventory"
+    t.index ["menu_item_id", "tracking_priority"], name: "idx_option_groups_primary_tracking", unique: true, where: "(tracking_priority = 1)"
     t.index ["menu_item_id"], name: "index_option_groups_on_menu_item_id"
+    t.index ["tracking_priority"], name: "index_option_groups_on_tracking_priority"
+  end
+
+  create_table "option_stock_audits", force: :cascade do |t|
+    t.bigint "option_id", null: false
+    t.bigint "user_id"
+    t.bigint "order_id"
+    t.integer "previous_quantity", null: false
+    t.integer "new_quantity", null: false
+    t.text "reason", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_option_stock_audits_on_created_at"
+    t.index ["option_id", "created_at"], name: "index_option_stock_audits_on_option_id_and_created_at"
+    t.index ["option_id"], name: "index_option_stock_audits_on_option_id"
+    t.index ["order_id"], name: "index_option_stock_audits_on_order_id"
+    t.index ["user_id"], name: "index_option_stock_audits_on_user_id"
   end
 
   create_table "options", force: :cascade do |t|
@@ -340,9 +360,12 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.boolean "is_preselected", default: false, null: false
     t.boolean "is_available", default: true, null: false
     t.integer "position", default: 0
+    t.integer "stock_quantity", default: 0, null: false
+    t.integer "damaged_quantity", default: 0, null: false
     t.index ["is_available"], name: "index_options_on_is_available"
     t.index ["option_group_id", "position"], name: "index_options_on_option_group_id_and_position"
     t.index ["option_group_id"], name: "index_options_on_option_group_id"
+    t.index ["stock_quantity"], name: "index_options_on_stock_quantity"
   end
 
   create_table "order_acknowledgments", force: :cascade do |t|
@@ -575,7 +598,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.string "category", default: "standard"
     t.index ["category"], name: "index_seats_on_category"
     t.index ["seat_section_id"], name: "index_seats_on_seat_section_id"
-    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying, 'booth'::character varying, 'outdoor'::character varying, 'bar'::character varying, 'private'::character varying, 'high_top'::character varying]::text[])", name: "check_seat_category_values"
+    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying::text, 'booth'::character varying::text, 'outdoor'::character varying::text, 'bar'::character varying::text, 'private'::character varying::text, 'high_top'::character varying::text])", name: "check_seat_category_values"
     t.check_constraint "max_capacity IS NULL OR min_capacity <= max_capacity", name: "check_min_max_capacity"
   end
 
@@ -745,6 +768,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
   add_foreign_key "notifications", "users", column: "acknowledged_by_id"
   add_foreign_key "operating_hours", "restaurants"
   add_foreign_key "option_groups", "menu_items"
+  add_foreign_key "option_stock_audits", "options"
+  add_foreign_key "option_stock_audits", "orders"
+  add_foreign_key "option_stock_audits", "users"
   add_foreign_key "options", "option_groups"
   add_foreign_key "order_acknowledgments", "orders"
   add_foreign_key "order_acknowledgments", "users"
