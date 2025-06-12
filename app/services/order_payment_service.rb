@@ -71,6 +71,8 @@ class OrderPaymentService < TenantScopedService
           'is_staff_order' => staff_params['is_staff_order'].to_s == 'true' || staff_params['is_staff_order'] == true ? 'true' : 'false',
           'staff_member_id' => staff_params['staff_member_id'].to_s,
           'staff_on_duty' => staff_params['staff_on_duty'].to_s == 'true' || staff_params['staff_on_duty'] == true ? 'true' : 'false',
+          'discount_type' => staff_params['discount_type'].to_s,
+          'no_discount' => staff_params['no_discount'].to_s == 'true' || staff_params['no_discount'] == true ? 'true' : 'false',
           'use_house_account' => staff_params['use_house_account'].to_s == 'true' || staff_params['use_house_account'] == true ? 'true' : 'false',
           'created_by_staff_id' => staff_params['created_by_staff_id'].to_s,
           'pre_discount_total' => staff_params['pre_discount_total'].to_s

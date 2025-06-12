@@ -88,8 +88,34 @@ class ReportsController < ApplicationController
     # Calculate total pages
     total_pages = (total_count.to_f / per_page).ceil
     
+    # Enhance orders with discount_type information
+    orders_with_discount_type = @orders.map do |order|
+      # Get discount type from payment_details, with fallback to staff_on_duty
+      discount_type = order.get_discount_type_from_params || 
+                     (order.staff_on_duty? ? 'on_duty' : 'off_duty')
+      
+      # Add additional computed fields for the frontend
+      order_hash = order.as_json
+      order_hash['discount_type'] = discount_type
+      order_hash['discount_rate'] = case discount_type
+                                   when 'on_duty' then 0.5  # 50%
+                                   when 'off_duty' then 0.3  # 30%
+                                   when 'no_discount' then 0.0  # 0%
+                                   else 0.3  # fallback to 30%
+                                   end
+      order_hash['discount_amount'] = (order.pre_discount_total || order.total) * order_hash['discount_rate']
+      order_hash['discount_percentage'] = (order_hash['discount_rate'] * 100).to_i
+      
+      # Add staff member name if available
+      if order.staff_member
+        order_hash['staff_member_name'] = order.staff_member.name
+      end
+      
+      order_hash
+    end
+
     render json: {
-      orders: @orders,
+      orders: orders_with_discount_type,
       total_count: total_count,
       page: page,
       per_page: per_page,
@@ -138,85 +164,136 @@ class ReportsController < ApplicationController
     
     total_discount_amount = total_retail_value - total_discounted_value
     
-    # Calculate breakdown by duty status
-    on_duty_orders = staff_orders.where(staff_on_duty: true)
-    off_duty_orders = staff_orders.where(staff_on_duty: false)
-    
+    # Calculate breakdown by discount type (with backward compatibility)
     on_duty_retail = 0
     on_duty_discounted = 0
+    off_duty_retail = 0
+    off_duty_discounted = 0
+    no_discount_retail = 0
+    no_discount_discounted = 0
     
-    on_duty_orders.each do |order|
+    staff_orders.each do |order|
+      # Get discount type from payment_details, with fallback to staff_on_duty
+      discount_type = order.get_discount_type_from_params || 
+                     (order.staff_on_duty? ? 'on_duty' : 'off_duty')
+      
+      # Get pre-discount total
+      pre_discount = 0
       if order.payment_details && order.payment_details['staffOrderParams'] && 
          order.payment_details['staffOrderParams']['pre_discount_total'].present?
-        on_duty_retail += order.payment_details['staffOrderParams']['pre_discount_total'].to_f
+        pre_discount = order.payment_details['staffOrderParams']['pre_discount_total'].to_f
       end
-      on_duty_discounted += order.total
+      
+      case discount_type
+      when 'on_duty'
+        on_duty_retail += pre_discount
+        on_duty_discounted += order.total
+      when 'off_duty'
+        off_duty_retail += pre_discount
+        off_duty_discounted += order.total
+      when 'no_discount'
+        no_discount_retail += pre_discount
+        no_discount_discounted += order.total
+      else
+        # Default fallback to off_duty for unknown types
+        off_duty_retail += pre_discount
+        off_duty_discounted += order.total
+      end
     end
     
     on_duty_discount = on_duty_retail - on_duty_discounted
-    
-    off_duty_retail = 0
-    off_duty_discounted = 0
-    
-    off_duty_orders.each do |order|
-      if order.payment_details && order.payment_details['staffOrderParams'] && 
-         order.payment_details['staffOrderParams']['pre_discount_total'].present?
-        off_duty_retail += order.payment_details['staffOrderParams']['pre_discount_total'].to_f
-      end
-      off_duty_discounted += order.total
-    end
-    
     off_duty_discount = off_duty_retail - off_duty_discounted
+    no_discount_discount = no_discount_retail - no_discount_discounted
     
-    # Calculate breakdown by staff member
-    by_staff_member = []
-    
-    staff_members = StaffMember.where(id: staff_orders.pluck(:staff_member_id).uniq)
-    staff_members.each do |staff|
-      member_orders = staff_orders.where(staff_member_id: staff.id)
-      member_on_duty = member_orders.where(staff_on_duty: true)
-      member_off_duty = member_orders.where(staff_on_duty: false)
+          # Calculate breakdown by staff member (with new discount types)
+      by_staff_member = []
       
-      # Calculate on-duty metrics
-      on_duty_retail = 0
-      on_duty_discounted = 0
-      
-      member_on_duty.each do |order|
-        if order.payment_details && order.payment_details['staffOrderParams'] && 
-           order.payment_details['staffOrderParams']['pre_discount_total'].present?
-          on_duty_retail += order.payment_details['staffOrderParams']['pre_discount_total'].to_f
+      staff_members = StaffMember.where(id: staff_orders.pluck(:staff_member_id).uniq)
+      staff_members.each do |staff|
+        member_orders = staff_orders.where(staff_member_id: staff.id)
+        
+        # Initialize counters for this staff member
+        member_on_duty_retail = 0
+        member_on_duty_discounted = 0
+        member_off_duty_retail = 0
+        member_off_duty_discounted = 0
+        member_no_discount_retail = 0
+        member_no_discount_discounted = 0
+        
+        member_on_duty_count = 0
+        member_off_duty_count = 0
+        member_no_discount_count = 0
+        
+        member_orders.each do |order|
+          # Get discount type from payment_details, with fallback to staff_on_duty
+          discount_type = order.get_discount_type_from_params || 
+                         (order.staff_on_duty? ? 'on_duty' : 'off_duty')
+          
+          # Get pre-discount total
+          pre_discount = 0
+          if order.payment_details && order.payment_details['staffOrderParams'] && 
+             order.payment_details['staffOrderParams']['pre_discount_total'].present?
+            pre_discount = order.payment_details['staffOrderParams']['pre_discount_total'].to_f
+          end
+          
+          case discount_type
+          when 'on_duty'
+            member_on_duty_retail += pre_discount
+            member_on_duty_discounted += order.total
+            member_on_duty_count += 1
+          when 'off_duty'
+            member_off_duty_retail += pre_discount
+            member_off_duty_discounted += order.total
+            member_off_duty_count += 1
+          when 'no_discount'
+            member_no_discount_retail += pre_discount
+            member_no_discount_discounted += order.total
+            member_no_discount_count += 1
+          else
+            # Default fallback to off_duty
+            member_off_duty_retail += pre_discount
+            member_off_duty_discounted += order.total
+            member_off_duty_count += 1
+          end
         end
-        on_duty_discounted += order.total
+        
+        member_on_duty_discount = member_on_duty_retail - member_on_duty_discounted
+        member_off_duty_discount = member_off_duty_retail - member_off_duty_discounted
+        member_no_discount_discount = member_no_discount_retail - member_no_discount_discounted
+        
+        # Add to staff breakdown with the new format
+        by_staff_member << {
+          staff_id: staff.id,
+          staff_name: staff.name,
+          on_duty_count: member_on_duty_count,
+          off_duty_count: member_off_duty_count,
+          no_discount_count: member_no_discount_count,
+          on_duty_discount: member_on_duty_discount,
+          off_duty_discount: member_off_duty_discount,
+          no_discount_discount: member_no_discount_discount,
+          total_discount: member_on_duty_discount + member_off_duty_discount + member_no_discount_discount
+        }
       end
-      
-      on_duty_discount = on_duty_retail - on_duty_discounted
-      
-      # Calculate off-duty metrics
-      off_duty_retail = 0
-      off_duty_discounted = 0
-      
-      member_off_duty.each do |order|
-        if order.payment_details && order.payment_details['staffOrderParams'] && 
-           order.payment_details['staffOrderParams']['pre_discount_total'].present?
-          off_duty_retail += order.payment_details['staffOrderParams']['pre_discount_total'].to_f
-        end
-        off_duty_discounted += order.total
-      end
-      
-      off_duty_discount = off_duty_retail - off_duty_discounted
-      
-      # Add to staff breakdown with the exact format expected by the frontend
-      by_staff_member << {
-        staff_id: staff.id,
-        staff_name: staff.name,
-        on_duty_count: member_on_duty.count,
-        off_duty_count: member_off_duty.count,
-        on_duty_discount: on_duty_discount,
-        off_duty_discount: off_duty_discount,
-        total_discount: on_duty_discount + off_duty_discount
-      }
-    end
     
+    # Count orders by discount type for the breakdown
+    on_duty_count = staff_orders.count { |order| 
+      discount_type = order.get_discount_type_from_params || 
+                     (order.staff_on_duty? ? 'on_duty' : 'off_duty')
+      discount_type == 'on_duty'
+    }
+    
+    off_duty_count = staff_orders.count { |order| 
+      discount_type = order.get_discount_type_from_params || 
+                     (order.staff_on_duty? ? 'on_duty' : 'off_duty')
+      discount_type == 'off_duty'
+    }
+    
+    no_discount_count = staff_orders.count { |order| 
+      discount_type = order.get_discount_type_from_params || 
+                     (order.staff_on_duty? ? 'on_duty' : 'off_duty')
+      discount_type == 'no_discount'
+    }
+
     render json: {
       date_range: {
         from: date_range.begin,
@@ -229,18 +306,25 @@ class ReportsController < ApplicationController
       discount_percentage: total_retail_value > 0 ? (total_discount_amount / total_retail_value * 100).round(2) : 0,
       duty_breakdown: {
         on_duty: {
-          order_count: on_duty_orders.count,
+          order_count: on_duty_count,
           retail_value: on_duty_retail,
           discounted_value: on_duty_discounted,
           discount_amount: on_duty_discount,
           discount_percentage: on_duty_retail > 0 ? (on_duty_discount / on_duty_retail * 100).round(2) : 0
         },
         off_duty: {
-          order_count: off_duty_orders.count,
+          order_count: off_duty_count,
           retail_value: off_duty_retail,
           discounted_value: off_duty_discounted,
           discount_amount: off_duty_discount,
           discount_percentage: off_duty_retail > 0 ? (off_duty_discount / off_duty_retail * 100).round(2) : 0
+        },
+        no_discount: {
+          order_count: no_discount_count,
+          retail_value: no_discount_retail,
+          discounted_value: no_discount_discounted,
+          discount_amount: no_discount_discount,
+          discount_percentage: no_discount_retail > 0 ? (no_discount_discount / no_discount_retail * 100).round(2) : 0
         }
       },
       by_staff_member: by_staff_member

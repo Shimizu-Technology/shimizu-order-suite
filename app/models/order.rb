@@ -174,10 +174,57 @@ class Order < ApplicationRecord
   
   # Staff order helper methods
   
-  # Calculate the appropriate discount rate based on duty status
+  # Calculate the appropriate discount rate based on discount type or duty status
   def staff_discount_rate
     return 0 unless is_staff_order
-    staff_on_duty ? STAFF_ON_DUTY_DISCOUNT : STAFF_OFF_DUTY_DISCOUNT
+    
+    # First, check if we have the new discount_type field from payment_details
+    discount_type = get_discount_type_from_params
+    
+    if discount_type.present?
+      case discount_type
+      when 'on_duty'
+        STAFF_ON_DUTY_DISCOUNT    # 50% discount
+      when 'off_duty'
+        STAFF_OFF_DUTY_DISCOUNT   # 30% discount  
+      when 'no_discount'
+        0.0                       # No discount (full price)
+      else
+        # Fallback to legacy logic if discount_type is unrecognized
+        staff_on_duty ? STAFF_ON_DUTY_DISCOUNT : STAFF_OFF_DUTY_DISCOUNT
+      end
+    else
+      # Legacy logic: use staff_on_duty boolean for backward compatibility
+      staff_on_duty ? STAFF_ON_DUTY_DISCOUNT : STAFF_OFF_DUTY_DISCOUNT
+    end
+  end
+  
+  # Helper method to extract discount_type from various possible sources
+  def get_discount_type_from_params
+    # Try to get discount_type from payment_details if available
+    if payment_details.present? && payment_details['staffOrderParams'].present?
+      return payment_details['staffOrderParams']['discount_type']
+    end
+    
+    # Try to get from the current params if available (during order creation)
+    if defined?(params) && params.is_a?(ActionController::Parameters)
+      if params.dig(:order, :discount_type).present?
+        return params.dig(:order, :discount_type)
+      elsif params.dig(:order, :payment_details, :staffOrderParams, :discount_type).present?
+        return params.dig(:order, :payment_details, :staffOrderParams, :discount_type)
+      end
+    end
+    
+    # Check for the explicit no_discount flag as a fallback
+    if payment_details.present? && payment_details['staffOrderParams'].present?
+      no_discount = payment_details['staffOrderParams']['no_discount']
+      if no_discount.to_s == 'true' || no_discount == true
+        return 'no_discount'
+      end
+    end
+    
+    # No discount_type found, will use legacy logic
+    nil
   end
   
   # Calculate the pre-discount total if not already set
@@ -319,6 +366,8 @@ class Order < ApplicationRecord
         'is_staff_order' => staff_params['is_staff_order'].to_s == 'true' || staff_params['is_staff_order'] == true ? 'true' : 'false',
         'staff_member_id' => staff_params['staff_member_id'].to_s,
         'staff_on_duty' => staff_params['staff_on_duty'].to_s == 'true' || staff_params['staff_on_duty'] == true ? 'true' : 'false',
+        'discount_type' => staff_params['discount_type'].to_s,
+        'no_discount' => staff_params['no_discount'].to_s == 'true' || staff_params['no_discount'] == true ? 'true' : 'false',
         'use_house_account' => staff_params['use_house_account'].to_s == 'true' || staff_params['use_house_account'] == true ? 'true' : 'false',
         'created_by_staff_id' => staff_params['created_by_staff_id'].to_s,
         'pre_discount_total' => staff_params['pre_discount_total'].to_s

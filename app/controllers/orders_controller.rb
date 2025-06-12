@@ -578,6 +578,8 @@ class OrdersController < ApplicationController
             'is_staff_order' => @order.is_staff_order ? 'true' : 'false',
             'staff_member_id' => @order.staff_member_id.to_s,
             'staff_on_duty' => @order.staff_on_duty ? 'true' : 'false',
+            'discount_type' => staff_params['discount_type'].to_s,
+            'no_discount' => staff_params['no_discount'].to_s,
             'use_house_account' => @order.use_house_account ? 'true' : 'false',
             'created_by_staff_id' => @order.created_by_staff_id.to_s,
             'pre_discount_total' => @order.pre_discount_total.to_s
@@ -611,10 +613,31 @@ class OrdersController < ApplicationController
           # Log the values for debugging
           Rails.logger.info("OrderPayment staffOrderParams: Using pre_discount_total #{pre_discount_value} (from params: #{original_pre_discount_total}, from order: #{@order.pre_discount_total})")
           
+          # Get discount_type from original parameters if available
+          original_discount_type = if params.dig(:order, :discount_type).present?
+            params.dig(:order, :discount_type)
+          elsif params.dig(:order, :payment_details, :staffOrderParams, :discount_type).present?
+            params.dig(:order, :payment_details, :staffOrderParams, :discount_type)
+          else
+            # Fallback: infer from staff_on_duty for backward compatibility
+            @order.staff_on_duty ? 'on_duty' : 'off_duty'
+          end
+          
+          # Get no_discount flag from original parameters if available
+          original_no_discount = if params.dig(:order, :no_discount).present?
+            params.dig(:order, :no_discount)
+          elsif params.dig(:order, :payment_details, :staffOrderParams, :no_discount).present?
+            params.dig(:order, :payment_details, :staffOrderParams, :no_discount)
+          else
+            'false'
+          end
+          
           payment_details['staffOrderParams'] = {
             'is_staff_order' => 'true',
             'staff_member_id' => @order.staff_member_id.to_s,
             'staff_on_duty' => @order.staff_on_duty ? 'true' : 'false',
+            'discount_type' => original_discount_type.to_s,
+            'no_discount' => original_no_discount.to_s,
             'use_house_account' => @order.use_house_account ? 'true' : 'false',
             'created_by_staff_id' => @order.created_by_staff_id.to_s,
             'pre_discount_total' => pre_discount_value
