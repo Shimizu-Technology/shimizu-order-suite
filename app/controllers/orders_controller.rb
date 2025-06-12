@@ -320,15 +320,16 @@ class OrdersController < ApplicationController
 
     # Check for VIP-only restrictions
     if restaurant.vip_only_checkout?
-      # Skip VIP validation for admin/staff users
+      # Skip VIP validation for admin/staff users OR when using staff modal
       # This allows staff to create orders through StaffOrderModal even when VIP mode is enabled
-      is_admin_user = @current_user && @current_user.role.in?(%w[admin super_admin])
+      is_admin_user = @current_user && @current_user.role.in?(%w[admin super_admin staff])
+      is_staff_modal = params[:order][:staff_modal] == true || params[:order][:staff_modal] == 'true'
       
       # Log the VIP mode bypass for debugging
-      Rails.logger.info("VIP Mode Check - User: #{@current_user&.id}, Is Admin: #{is_admin_user}, Restaurant: #{restaurant.id}")
+      Rails.logger.info("VIP Mode Check - User: #{@current_user&.id}, Is Admin/Staff: #{is_admin_user}, Is Staff Modal: #{is_staff_modal}, Restaurant: #{restaurant.id}")
       
-      # Only enforce VIP code for non-admin users
-      if !is_admin_user
+      # Only enforce VIP code for non-admin/staff users AND non-staff modal orders
+      if !is_admin_user && !is_staff_modal
         vip_code = params[:order][:vip_code]
 
         if vip_code.blank?
