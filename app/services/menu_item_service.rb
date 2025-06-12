@@ -124,10 +124,17 @@ class MenuItemService < TenantScopedService
       # Handle image upload if present
       file = menu_item_params[:image]
       if file.present? && file.respond_to?(:original_filename)
-        ext = File.extname(file.original_filename)
-        new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
-        public_url = S3Uploader.upload(file, new_filename)
-        menu_item.update!(image_url: public_url)
+        begin
+          ext = File.extname(file.original_filename)
+          new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
+          public_url = S3Uploader.upload(file, new_filename)
+          menu_item.update!(image_url: public_url)
+        rescue => e
+          Rails.logger.error "[MenuItemService] Image upload failed for menu_item #{menu_item.id}: #{e.message}"
+          Rails.logger.error "[MenuItemService] Backtrace: #{e.backtrace.join("\n")}"
+          # Don't fail the entire operation, just log the error
+          # The menu item was already created successfully
+        end
       end
 
       { success: true, menu_item: menu_item, status: :created }
@@ -167,10 +174,17 @@ class MenuItemService < TenantScopedService
       # Handle image if present
       file = menu_item_params[:image]
       if file.present? && file.respond_to?(:original_filename)
-        ext = File.extname(file.original_filename)
-        new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
-        public_url = S3Uploader.upload(file, new_filename)
-        menu_item.update!(image_url: public_url)
+        begin
+          ext = File.extname(file.original_filename)
+          new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
+          public_url = S3Uploader.upload(file, new_filename)
+          menu_item.update!(image_url: public_url)
+        rescue => e
+          Rails.logger.error "[MenuItemService] Image upload failed for menu_item #{menu_item.id}: #{e.message}"
+          Rails.logger.error "[MenuItemService] Backtrace: #{e.backtrace.join("\n")}"
+          # Don't fail the entire operation, just log the error
+          # The menu item was already updated successfully
+        end
       end
 
       { success: true, menu_item: menu_item }
@@ -203,12 +217,18 @@ class MenuItemService < TenantScopedService
       return { success: false, errors: ["No image file uploaded"], status: :unprocessable_entity }
     end
 
-    ext = File.extname(image_file.original_filename)
-    new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
-    public_url = S3Uploader.upload(image_file, new_filename)
-    menu_item.update!(image_url: public_url)
+    begin
+      ext = File.extname(image_file.original_filename)
+      new_filename = "menu_item_#{menu_item.id}_#{Time.now.to_i}#{ext}"
+      public_url = S3Uploader.upload(image_file, new_filename)
+      menu_item.update!(image_url: public_url)
 
-    { success: true, menu_item: menu_item }
+      { success: true, menu_item: menu_item }
+    rescue => e
+      Rails.logger.error "[MenuItemService] Standalone image upload failed for menu_item #{id}: #{e.message}"
+      Rails.logger.error "[MenuItemService] Backtrace: #{e.backtrace.join("\n")}"
+      { success: false, errors: ["Image upload failed: #{e.message}"], status: :unprocessable_entity }
+    end
   rescue ActiveRecord::RecordNotFound
     { success: false, errors: ["Menu item not found"], status: :not_found }
   end

@@ -79,7 +79,7 @@ class MenuItemsController < ApplicationController
     Rails.logger.info "=== MenuItemsController#create ==="
     
     result = menu_item_service.create_item(
-      menu_item_params.except(:image),
+      menu_item_params,
       params[:menu_item][:category_ids],
       params[:menu_item][:available_days]
     )
@@ -103,7 +103,7 @@ class MenuItemsController < ApplicationController
     
     result = menu_item_service.update_item(
       params[:id],
-      menu_item_params.except(:image),
+      menu_item_params,
       params[:menu_item][:category_ids],
       params[:menu_item][:available_days]
     )
