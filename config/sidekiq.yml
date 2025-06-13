@@ -12,7 +12,7 @@
 # Queue configuration with priorities
 :queues:
   - [critical, 5]  # Highest priority queue for time-sensitive jobs
-  - [default, 3]
+  - [sms, 4]       # SMS notifications are time-sensitive customer communications
   - [mailers, 3]   # Keep email delivery prioritized
-  - [sms, 2]       # SMS notifications are important
+  - [default, 3]
   - [notifications, 1]  # Web push notifications can be handled last

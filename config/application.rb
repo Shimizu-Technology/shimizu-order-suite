@@ -24,6 +24,9 @@ module ShimizuOrderSuite
     # Use Sidekiq for background jobs
     config.active_job.queue_adapter = :sidekiq
     
+    # Configure ActionMailer to use the mailers queue
+    config.action_mailer.deliver_later_queue_name = :mailers
+    
     # Preload TenantContext concern for multi-tenant support
     config.to_prepare do
       require_dependency Rails.root.join('app', 'models', 'concerns', 'tenant_context.rb')
