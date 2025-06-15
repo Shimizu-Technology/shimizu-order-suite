@@ -294,6 +294,47 @@ class OrdersController < ApplicationController
     end
   end
 
+  # POST /orders/:id/notify
+  def notify
+    order = Order.find(params[:id])
+    
+    # Only allow staff or above to send notifications
+    unless current_user&.role.in?(%w[admin super_admin staff])
+      return render json: { error: "Forbidden" }, status: :forbidden
+    end
+
+    notification_type = params[:notification_type] || 'order_ready'
+    
+    begin
+      case notification_type
+      when 'order_ready'
+        if order.status == 'ready'
+          send_order_ready_notifications(order)
+          render json: { 
+            success: true, 
+            message: 'Order ready notification sent successfully' 
+          }, status: :ok
+        else
+          render json: { 
+            success: false, 
+            message: 'Order must be in ready status to send notification' 
+          }, status: :unprocessable_entity
+        end
+      else
+        render json: { 
+          success: false, 
+          message: 'Invalid notification type' 
+        }, status: :bad_request
+      end
+    rescue StandardError => e
+      Rails.logger.error "Failed to send notification for order #{order.id}: #{e.message}"
+      render json: { 
+        success: false, 
+        message: "Failed to send notification: #{e.message}" 
+      }, status: :internal_server_error
+    end
+  end
+
   # POST /orders
   #
   # Creates a new order with the following behavior:
@@ -909,30 +950,7 @@ class OrdersController < ApplicationController
 
       # If status changed to 'ready'
       if old_status != "ready" && order.status == "ready"
-        if notification_channels["email"] != false && order.contact_email.present?
-          OrderMailer.order_ready(order).deliver_later
-        end
-        if notification_channels["sms"] == true && order.contact_phone.present?
-          msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.order_number.presence || order.id} "\
-                "is now ready for pickup! Thank you for choosing #{restaurant_name}."
-          SendSmsJob.perform_later(to: order.contact_phone, body: msg, from: sms_sender)
-        end
-        
-        # Send Pushover notification for order ready status
-        if order.restaurant.pushover_enabled?
-          message = "Order ##{order.order_number.presence || order.id} is now ready for pickup!\n\n"
-          message += "Customer: #{order.contact_name}\n" if order.contact_name.present?
-          message += "Phone: #{order.contact_phone}" if order.contact_phone.present?
-          
-          order.restaurant.send_pushover_notification(
-            message,
-            "Order Ready for Pickup",
-            { 
-              priority: 1,  # High priority to bypass quiet hours
-              sound: "siren"  # Attention-grabbing sound for ready orders
-            }
-          )
-        end
+        send_order_ready_notifications(order)
       end
 
       render json: order
@@ -1124,5 +1142,40 @@ class OrdersController < ApplicationController
       @current_user,
       order
     )
+  end
+
+  # Send order ready notifications via email, SMS, and Pushover
+  def send_order_ready_notifications(order)
+    notification_channels = order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
+    restaurant_name = order.restaurant.name
+    sms_sender = order.restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+
+    # Send email notification
+    if notification_channels["email"] != false && order.contact_email.present?
+      OrderMailer.order_ready(order).deliver_later
+    end
+
+    # Send SMS notification
+    if notification_channels["sms"] == true && order.contact_phone.present?
+      msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.order_number.presence || order.id} "\
+            "is now ready for pickup! Thank you for choosing #{restaurant_name}."
+      SendSmsJob.perform_later(to: order.contact_phone, body: msg, from: sms_sender)
+    end
+    
+    # Send Pushover notification
+    if order.restaurant.pushover_enabled?
+      message = "Order ##{order.order_number.presence || order.id} is now ready for pickup!\n\n"
+      message += "Customer: #{order.contact_name}\n" if order.contact_name.present?
+      message += "Phone: #{order.contact_phone}" if order.contact_phone.present?
+      
+      order.restaurant.send_pushover_notification(
+        message,
+        "Order Ready for Pickup",
+        { 
+          priority: 1,  # High priority to bypass quiet hours
+          sound: "siren"  # Attention-grabbing sound for ready orders
+        }
+      )
+    end
   end
 end

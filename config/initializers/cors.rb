@@ -6,6 +6,9 @@ Rails.application.config.middleware.insert_before 0, Rack::Cors do
 
       # Always allow localhost for development
       return true if request_origin == "http://localhost:5173" || request_origin == "http://localhost:5174" || request_origin == "http://localhost:5175" || request_origin == "http://localhost:5176"
+      
+      # Allow network IP for testing on other devices
+      return true if request_origin == "http://192.168.1.190:5173"
 
       # Check if origin is allowed for any restaurant
       Restaurant.where("allowed_origins @> ARRAY[?]::varchar[]", [ request_origin ]).exists?
