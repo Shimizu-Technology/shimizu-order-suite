@@ -42,24 +42,19 @@ class RestaurantCounter < ApplicationRecord
     order_number = "#{restaurant_prefix}-O-#{counter_str}"
     
     # Check if the order number already exists in the database
-    # If it does, increment the counter and try again
-    attempts = 0
-    max_attempts = 10
-    
-    while Order.exists?(order_number: order_number) && attempts < max_attempts
+    # If it does, keep incrementing the counter until we find a unique one
+    while Order.exists?(order_number: order_number)
       # Increment the counter and try again
       self.daily_order_counter += 1
       self.total_order_counter += 1
       counter_str = daily_order_counter.to_s.rjust(3, '0')
       order_number = "#{restaurant_prefix}-O-#{counter_str}"
-      attempts += 1
-    end
-    
-    # If we've tried too many times, add a unique suffix
-    if attempts >= max_attempts
-      # Add a timestamp-based suffix to ensure uniqueness
-      timestamp_suffix = Time.now.to_i.to_s[-4..-1]
-      order_number = "#{restaurant_prefix}-O-#{counter_str}-#{timestamp_suffix}"
+      
+      # Safety check: if we've gone beyond 999, start using 4-digit numbers
+      if daily_order_counter > 999
+        counter_str = daily_order_counter.to_s.rjust(4, '0')
+        order_number = "#{restaurant_prefix}-O-#{counter_str}"
+      end
     end
     
     # Save the updated counters
