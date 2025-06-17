@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
+ActiveRecord::Schema[7.2].define(version: 2025_06_17_033734) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -180,8 +180,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.bigint "category_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.integer "position", default: 0, null: false
-    t.index ["category_id", "position"], name: "index_menu_item_categories_on_category_id_and_position"
     t.index ["category_id"], name: "index_menu_item_categories_on_category_id"
     t.index ["menu_item_id", "category_id"], name: "index_menu_item_categories_on_menu_item_id_and_category_id", unique: true
     t.index ["menu_item_id"], name: "index_menu_item_categories_on_menu_item_id"
@@ -489,7 +487,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.index ["location_id"], name: "index_reservations_on_location_id"
     t.index ["reservation_number"], name: "index_reservations_on_reservation_number", unique: true
     t.index ["restaurant_id"], name: "index_reservations_on_restaurant_id"
-    t.check_constraint "status::text = ANY (ARRAY['booked'::character varying::text, 'reserved'::character varying::text, 'seated'::character varying::text, 'finished'::character varying::text, 'canceled'::character varying::text, 'no_show'::character varying::text])", name: "check_reservation_status"
+    t.check_constraint "status::text = ANY (ARRAY['booked'::character varying, 'reserved'::character varying, 'seated'::character varying, 'finished'::character varying, 'canceled'::character varying, 'no_show'::character varying]::text[])", name: "check_reservation_status"
   end
 
   create_table "restaurant_counters", force: :cascade do |t|
@@ -584,7 +582,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.string "spinner_image_url"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.bigint "restaurant_id", null: false
+    t.bigint "restaurant_id"
     t.index ["restaurant_id"], name: "index_site_settings_on_restaurant_id"
   end
 
