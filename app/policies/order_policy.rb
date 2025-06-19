@@ -7,7 +7,7 @@ class OrderPolicy < ApplicationPolicy
         # Admins and super admins can see all orders
         scope.all
       when 'staff'
-        # Staff can only see orders they created as employees (via StaffOrderModal)
+        # Staff can only see orders they created via the staff modal (for customers or staff members)
         scope.where(created_by_user_id: user.id, staff_created: true)
       else
         # Regular customers can only see their own orders
@@ -23,7 +23,7 @@ class OrderPolicy < ApplicationPolicy
 
   def show?
     # Admins can see any order
-    # Staff can only see orders they created as employees (staff_created: true)
+    # Staff can only see orders they created via the staff modal (for customers or staff members)
     # Customers can only see their own orders
     user.role.in?(['admin', 'super_admin']) || 
     record.user_id == user.id || 
@@ -42,7 +42,7 @@ class OrderPolicy < ApplicationPolicy
 
   def update?
     # Admins can update any order
-    # Staff can update orders they created as employees (staff_created: true)
+    # Staff can update orders they created via the staff modal (for customers or staff members)
     # Customers cannot update orders
     user.role.in?(['admin', 'super_admin']) || 
     (user.role == 'staff' && record.created_by_user_id == user.id && record.staff_created?)
