@@ -20,20 +20,55 @@ class MenuItemsController < ApplicationController
     Rails.logger.info "[MenuItemsController#index] Params: #{params.inspect}"
     items = menu_item_service.list_items(params)
 
-    # Optimize response based on view_type
+    # Optimize response based on view_type and include_option_groups parameter
     case params[:view_type]
     when 'list'
-      # Minimal data for listings - optimized for performance
-      render json: items.as_json(
-        only: [:id, :name, :price, :image_url, :featured, :seasonal, :hidden, 
-               :category_ids, :menu_id, :available_from, :available_until, 
-               :available_days, :stock_quantity, :damaged_quantity, :stock_status]
-      )
+      # Minimal data for listings - but check if option groups are explicitly requested
+      if params[:include_option_groups].present? && params[:include_option_groups].to_s.downcase == 'true'
+        render json: items.as_json(
+          only: [:id, :name, :price, :image_url, :featured, :seasonal, :hidden, 
+                 :category_ids, :menu_id, :available_from, :available_until, 
+                 :available_days, :stock_quantity, :damaged_quantity, :stock_status],
+          include: {
+            option_groups: {
+              include: {
+                options: {
+                  only: [ :id, :name, :available, :is_preselected, :is_available ],
+                  methods: [ :additional_price_float ]
+                }
+              }
+            }
+          }
+        )
+      else
+        render json: items.as_json(
+          only: [:id, :name, :price, :image_url, :featured, :seasonal, :hidden, 
+                 :category_ids, :menu_id, :available_from, :available_until, 
+                 :available_days, :stock_quantity, :damaged_quantity, :stock_status]
+        )
+      end
     when 'admin'
-      # Full data for admin views but without nested option groups
-      render json: items.as_json(
-        methods: [:available_quantity]
-      )
+      # Full data for admin views - include option groups if explicitly requested
+      if params[:include_option_groups].present? && params[:include_option_groups].to_s.downcase == 'true'
+        render json: items.as_json(
+          methods: [:available_quantity],
+          include: {
+            option_groups: {
+              include: {
+                options: {
+                  only: [ :id, :name, :available, :is_preselected, :is_available ],
+                  methods: [ :additional_price_float ]
+                }
+              }
+            }
+          }
+        )
+      else
+        # Original admin behavior without option groups for performance
+        render json: items.as_json(
+          methods: [:available_quantity]
+        )
+      end
     else
       # Full data including options (default)
       render json: items.as_json(
