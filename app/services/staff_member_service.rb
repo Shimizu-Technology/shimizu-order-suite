@@ -186,55 +186,91 @@ class StaffMemberService
   end
   
   # Get transactions for a staff member
-  def get_transactions(id, params)
+  def get_transactions(staff_member_id, options = {})
     begin
-      # Only admin users can view staff member transactions
-      unless params[:current_user]&.role.in?(%w[admin super_admin])
-        return { success: false, errors: ["Unauthorized"], status: :unauthorized }
-      end
-
-      staff_member = StaffMember.find_by(id: id, restaurant_id: current_restaurant.id)
+      staff_member = StaffMember.find_by(id: staff_member_id, restaurant_id: current_restaurant.id)
       
       unless staff_member
         return { success: false, errors: ["Staff member not found"], status: :not_found }
       end
       
-      transactions = staff_member.house_account_transactions.recent
+      # Build the base query
+      query = staff_member.house_account_transactions
       
-      # Filter by transaction type if provided
-      if params[:transaction_type].present?
-        transactions = transactions.where(transaction_type: params[:transaction_type])
+      # Apply date filtering
+      if options[:start_date].present?
+        begin
+          start_date = Date.parse(options[:start_date]).beginning_of_day
+          query = query.where('created_at >= ?', start_date)
+        rescue ArgumentError
+          return { success: false, errors: ["Invalid start date format"], status: :bad_request }
+        end
       end
       
-      # Filter by date range if provided
-      if params[:date_from].present? && params[:date_to].present?
-        date_from = Date.parse(params[:date_from]).beginning_of_day
-        date_to = Date.parse(params[:date_to]).end_of_day
-        transactions = transactions.where(created_at: date_from..date_to)
+      if options[:end_date].present?
+        begin
+          end_date = Date.parse(options[:end_date]).end_of_day
+          query = query.where('created_at <= ?', end_date)
+        rescue ArgumentError
+          return { success: false, errors: ["Invalid end date format"], status: :bad_request }
+        end
       end
       
-      # Add pagination
-      page = (params[:page] || 1).to_i
-      per_page = (params[:per_page] || 20).to_i
+      # Apply transaction type filtering
+      if options[:transaction_type].present? && options[:transaction_type] != 'all'
+        query = query.where(transaction_type: options[:transaction_type])
+      end
       
-      total_count = transactions.count
+      # Calculate statistics for the filtered results
+      total_count = query.count
+      order_total = query.where(transaction_type: ['order', 'charge']).sum(:amount)
+      payment_total = query.where(transaction_type: 'payment').sum('ABS(amount)')
+      period_total = query.sum(:amount)
       
-      transactions = transactions.offset((page - 1) * per_page).limit(per_page)
+      # Apply pagination
+      page = [options[:page].to_i, 1].max
+      per_page = [options[:per_page].to_i, 20].max
+      per_page = [per_page, 100].min # Cap at 100 per page
       
-      # Calculate total pages
-      total_pages = (total_count.to_f / per_page).ceil
+      offset = (page - 1) * per_page
+      transactions = query.order(created_at: :desc)
+                          .limit(per_page)
+                          .offset(offset)
       
-      {
-        success: true,
-        transactions: transactions,
-        total_count: total_count,
-        page: page,
-        per_page: per_page,
-        total_pages: total_pages,
-        staff_member: staff_member
+      # Format transactions for response
+      formatted_transactions = transactions.map do |transaction|
+        {
+          id: transaction.id,
+          amount: transaction.amount.to_f,
+          transaction_type: transaction.transaction_type,
+          description: transaction.description,
+          reference: transaction.reference,
+          created_at: transaction.created_at,
+          created_by_name: transaction.created_by&.full_name || 'System'
+        }
+      end
+      
+      { 
+        success: true, 
+        transactions: formatted_transactions,
+        pagination: {
+          page: page,
+          per_page: per_page,
+          total_count: total_count,
+          total_pages: (total_count.to_f / per_page).ceil
+        },
+        statistics: {
+          total_count: total_count,
+          filtered_count: total_count,
+          period_total: period_total.to_f,
+          order_total: order_total.to_f,
+          payment_total: payment_total.to_f
+        }
       }
     rescue => e
-      { success: false, errors: ["Failed to retrieve transactions: #{e.message}"], status: :internal_server_error }
+      Rails.logger.error "Error getting staff member transactions: #{e.message}"
+      Rails.logger.error e.backtrace.join("\n")
+      { success: false, errors: ["Unable to retrieve transactions"], status: :internal_server_error }
     end
   end
   
@@ -252,61 +288,117 @@ class StaffMemberService
         return { success: false, errors: ["Staff member not found"], status: :not_found }
       end
       
-      # Validate transaction parameters
-      unless transaction_params[:amount].present? && transaction_params[:transaction_type].present?
-        return { success: false, errors: ["Amount and transaction type are required"], status: :unprocessable_entity }
-      end
-      
-      # Process the transaction based on type
-      case transaction_params[:transaction_type]
-      when 'payment'
-        # For payments, amount should be positive but stored as negative
-        amount = -transaction_params[:amount].to_f.abs
-        description = "Payment - #{transaction_params[:description] || 'Manual payment'}"
-        reference = transaction_params[:reference] || "Processed by #{current_user.full_name}"
-      when 'adjustment'
-        # For adjustments, amount can be positive or negative
-        amount = transaction_params[:amount].to_f
-        description = "Adjustment - #{transaction_params[:description] || 'Manual adjustment'}"
-        reference = transaction_params[:reference] || "Processed by #{current_user.full_name}"
-      when 'charge'
-        # For charges, amount should be positive
-        amount = transaction_params[:amount].to_f.abs
-        description = "Charge - #{transaction_params[:description] || 'Manual charge'}"
-        reference = transaction_params[:reference] || "Processed by #{current_user.full_name}"
-      else
-        return { success: false, errors: ["Invalid transaction type"], status: :unprocessable_entity }
-      end
-      
-      # Create the transaction
-      transaction = staff_member.house_account_transactions.new(
-        amount: amount,
-        transaction_type: transaction_params[:transaction_type],
-        description: description,
-        reference: reference,
-        created_by_id: current_user.id
+      # Create transaction using the staff member model method
+      transaction = staff_member.add_house_account_transaction(
+        transaction_params[:amount],
+        transaction_params[:transaction_type],
+        transaction_params[:description],
+        nil, # order
+        current_user
       )
       
-      if transaction.save
-        # Update the staff member's house account balance
-        new_balance = staff_member.house_account_balance + amount
-        staff_member.update(house_account_balance: new_balance)
-        
-        # Track transaction creation
-        analytics.track("staff_member.transaction_added", { 
-          staff_member_id: staff_member.id,
-          transaction_id: transaction.id,
-          amount: transaction.amount,
-          restaurant_id: current_restaurant.id,
-          user_id: current_user.id
-        })
-        
-        { success: true, transaction: transaction, staff_member: staff_member, status: :created }
-      else
-        { success: false, errors: transaction.errors.full_messages, status: :unprocessable_entity }
-      end
+      # Track transaction creation
+      analytics.track("house_account_transaction.created", { 
+        staff_member_id: staff_member.id,
+        transaction_id: transaction.id,
+        amount: transaction_params[:amount],
+        transaction_type: transaction_params[:transaction_type],
+        restaurant_id: current_restaurant.id,
+        user_id: current_user.id
+      })
+      
+      { success: true, transaction: transaction }
     rescue => e
       { success: false, errors: ["Failed to add transaction: #{e.message}"], status: :internal_server_error }
+    end
+  end
+  
+  # Link a user to a staff member
+  def link_user(staff_id, user_id, current_user)
+    begin
+      # Only admin users can link users
+      unless current_user&.role.in?(%w[admin super_admin])
+        return { success: false, errors: ["Unauthorized"], status: :unauthorized }
+      end
+      
+      staff_member = StaffMember.find_by(id: staff_id, restaurant_id: current_restaurant.id)
+      unless staff_member
+        return { success: false, errors: ["Staff member not found"], status: :not_found }
+      end
+      
+      user = User.find_by(id: user_id, restaurant_id: current_restaurant.id)
+      unless user
+        return { success: false, errors: ["User not found"], status: :not_found }
+      end
+      
+      # Check if user is already linked to another staff member
+      existing_staff = StaffMember.find_by(user_id: user_id, restaurant_id: current_restaurant.id)
+      if existing_staff && existing_staff.id != staff_member.id
+        return { success: false, errors: ["User is already linked to another staff member: #{existing_staff.name}"], status: :unprocessable_entity }
+      end
+      
+      # Check if staff member is already linked to another user
+      if staff_member.user_id.present? && staff_member.user_id != user_id.to_i
+        current_user_name = User.find_by(id: staff_member.user_id)&.full_name || "Unknown User"
+        return { success: false, errors: ["Staff member is already linked to another user: #{current_user_name}"], status: :unprocessable_entity }
+      end
+      
+      # Link the user to the staff member
+      if staff_member.update(user_id: user_id)
+        # Track user linking
+        analytics.track("staff_member.user_linked", { 
+          staff_member_id: staff_member.id,
+          user_id: user_id,
+          restaurant_id: current_restaurant.id,
+          linked_by_user_id: current_user.id
+        })
+        
+        { success: true, staff_member: staff_member.reload }
+      else
+        { success: false, errors: staff_member.errors.full_messages, status: :unprocessable_entity }
+      end
+    rescue => e
+      { success: false, errors: ["Failed to link user: #{e.message}"], status: :internal_server_error }
+    end
+  end
+  
+  # Unlink a user from a staff member
+  def unlink_user(staff_id, current_user)
+    begin
+      # Only admin users can unlink users
+      unless current_user&.role.in?(%w[admin super_admin])
+        return { success: false, errors: ["Unauthorized"], status: :unauthorized }
+      end
+      
+      staff_member = StaffMember.find_by(id: staff_id, restaurant_id: current_restaurant.id)
+      unless staff_member
+        return { success: false, errors: ["Staff member not found"], status: :not_found }
+      end
+      
+      # Check if staff member has a user linked
+      unless staff_member.user_id.present?
+        return { success: false, errors: ["Staff member is not linked to any user"], status: :unprocessable_entity }
+      end
+      
+      # Store the user_id for analytics before unlinking
+      unlinked_user_id = staff_member.user_id
+      
+      # Unlink the user from the staff member
+      if staff_member.update(user_id: nil)
+        # Track user unlinking
+        analytics.track("staff_member.user_unlinked", { 
+          staff_member_id: staff_member.id,
+          unlinked_user_id: unlinked_user_id,
+          restaurant_id: current_restaurant.id,
+          unlinked_by_user_id: current_user.id
+        })
+        
+        { success: true, staff_member: staff_member.reload }
+      else
+        { success: false, errors: staff_member.errors.full_messages, status: :unprocessable_entity }
+      end
+    rescue => e
+      { success: false, errors: ["Failed to unlink user: #{e.message}"], status: :internal_server_error }
     end
   end
 end

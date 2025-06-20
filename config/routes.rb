@@ -34,6 +34,8 @@ Rails.application.routes.draw do
     member do
       get :transactions
       post :transactions, to: 'staff_members#add_transaction'
+      patch :link_user
+      patch :unlink_user
     end
   end
   

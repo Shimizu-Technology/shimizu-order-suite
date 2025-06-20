@@ -78,7 +78,18 @@ class StaffMember < ApplicationRecord
     super(options).merge(
       total_orders: staff_orders.count,
       house_account_balance: house_account_balance.to_f,
-      user_name: user ? "#{user.first_name} #{user.last_name}" : nil
+      user_name: user ? "#{user.first_name} #{user.last_name}" : nil,
+      user_email: user&.email,
+      user_role: user&.role,
+      user_full_info: user ? {
+        id: user.id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        full_name: user.full_name,
+        role: user.role
+      } : nil,
+      has_user_link: user_id.present?
     )
   end
 end

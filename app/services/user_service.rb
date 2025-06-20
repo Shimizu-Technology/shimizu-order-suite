@@ -7,8 +7,29 @@ class UserService < TenantScopedService
     begin
       query = scope_query(User)
       
-      # Apply role filter if provided
-      if filters[:role].present?
+      # Special handling for staff assignment filtering
+      if filters[:available_for_staff]
+        # Get users who are not already assigned to staff members
+        assigned_user_ids = StaffMember.where(restaurant_id: restaurant.id)
+                                      .where.not(user_id: nil)
+                                      .pluck(:user_id)
+        
+        # If we need to include a specific user_id (for editing), add it to the query
+        if filters[:include_user_id].present?
+          query = query.where("id NOT IN (?) OR id = ?", assigned_user_ids, filters[:include_user_id])
+        else
+          query = query.where.not(id: assigned_user_ids) if assigned_user_ids.any?
+        end
+        
+        # Exclude specific roles if requested
+        if filters[:exclude_role].present?
+          exclude_roles = filters[:exclude_role].is_a?(Array) ? filters[:exclude_role] : [filters[:exclude_role]]
+          query = query.where.not(role: exclude_roles)
+        end
+      end
+      
+      # Apply role filter if provided (and not in staff assignment mode)
+      if filters[:role].present? && !filters[:available_for_staff]
         query = query.where(role: filters[:role])
       end
       
@@ -20,7 +41,7 @@ class UserService < TenantScopedService
       # Apply search filter if provided
       if filters[:search].present?
         search_term = "%#{filters[:search]}%"
-        query = query.where("name ILIKE ? OR email ILIKE ?", search_term, search_term)
+        query = query.where("first_name ILIKE ? OR last_name ILIKE ? OR email ILIKE ?", search_term, search_term, search_term)
       end
       
       # Apply pagination

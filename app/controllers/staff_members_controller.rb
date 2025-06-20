@@ -66,21 +66,35 @@ class StaffMembersController < ApplicationController
   
   # GET /staff_members/:id/transactions
   def transactions
-    # Add current_user to params for authorization in the service
-    params_with_user = params.merge(current_user: current_user)
-    result = staff_member_service.get_transactions(params[:id], params_with_user)
+    # Only admin users can view staff member transactions
+    unless current_user&.role.in?(%w[admin super_admin])
+      render json: { errors: ["Unauthorized"] }, status: :unauthorized
+      return
+    end
+    
+    # Extract filtering options from params
+    filter_options = {
+      start_date: params[:start_date],
+      end_date: params[:end_date],
+      transaction_type: params[:transaction_type],
+      page: params[:page],
+      per_page: params[:per_page]
+    }.compact
+    
+    result = staff_member_service.get_transactions(params[:id], filter_options)
     
     if result[:success]
       render json: {
         transactions: result[:transactions],
-        total_count: result[:total_count],
-        page: result[:page],
-        per_page: result[:per_page],
-        total_pages: result[:total_pages],
-        staff_member: result[:staff_member]
+        pagination: result[:pagination],
+        total_count: result[:pagination][:total_count],
+        filtered_count: result[:statistics][:filtered_count],
+        period_total: result[:statistics][:period_total],
+        order_total: result[:statistics][:order_total],
+        payment_total: result[:statistics][:payment_total]
       }, status: :ok
     else
-      render json: { error: result[:errors].join(", ") }, status: result[:status] || :not_found
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
   
@@ -90,6 +104,28 @@ class StaffMembersController < ApplicationController
     
     if result[:success]
       render json: result[:transaction], status: :created
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
+    end
+  end
+  
+  # PATCH /staff_members/:id/link_user
+  def link_user
+    result = staff_member_service.link_user(params[:id], params[:user_id], current_user)
+    
+    if result[:success]
+      render json: result[:staff_member], status: :ok
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
+    end
+  end
+  
+  # PATCH /staff_members/:id/unlink_user
+  def unlink_user
+    result = staff_member_service.unlink_user(params[:id], current_user)
+    
+    if result[:success]
+      render json: result[:staff_member], status: :ok
     else
       render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end

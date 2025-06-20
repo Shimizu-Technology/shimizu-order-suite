@@ -178,6 +178,13 @@ class UsersController < ApplicationController
     filters[:page] = params[:page] || 1
     filters[:per_page] = params[:per_page] || 20
     
+    # Special filtering for staff assignment
+    if params[:available_for_staff] == 'true'
+      filters[:available_for_staff] = true
+      filters[:exclude_role] = params[:exclude_role] if params[:exclude_role].present?
+      filters[:include_user_id] = params[:include_user_id] if params[:include_user_id].present?
+    end
+    
     # Get users from service
     result = user_service.list_users(filters)
     

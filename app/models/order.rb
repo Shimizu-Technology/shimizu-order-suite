@@ -345,7 +345,7 @@ class Order < ApplicationRecord
     return unless is_staff_order && use_house_account && staff_member.present?
     
     # Add a transaction to the staff member's house account
-    transaction = staff_member.charge_order_to_house_account(self, created_by_staff)
+    transaction = staff_member.charge_order_to_house_account(self, created_by_user)
     
     # Mark the payment as completed via house account
     self.payment_method = 'house_account'
