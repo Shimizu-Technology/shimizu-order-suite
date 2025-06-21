@@ -1,6 +1,4 @@
 class StaffDiscountConfigurationsController < ApplicationController
-  include TenantScoped
-  
   before_action :optional_authorize, only: [:index]
   before_action :authorize_request, except: [:index]
   before_action :require_admin!, except: [:index]
