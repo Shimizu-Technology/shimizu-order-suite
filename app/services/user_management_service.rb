@@ -57,17 +57,23 @@ class UserManagementService < TenantScopedService
       return { success: false, errors: ["Only Super Admins can create Super Admin accounts"], status: :forbidden }
     end
 
-    # If admin didn't supply a password => generate random
+    # Track whether admin provided a password
+    password_provided = user_params[:password].present?
+    
+    # If admin didn't supply a password => generate random and prepare for invite email
     if user_params[:password].blank?
       user.password = SecureRandom.hex(10)  # random 20-char hex
       user.skip_password_validation = true
     end
 
     if user.save
-      # Now send them an invite link (re-using your reset-password flow).
-      raw_token = user.generate_reset_password_token!
-      PasswordMailer.reset_password(user, raw_token).deliver_later
-
+      # Only send invite email if no password was provided by admin
+      if !password_provided
+        # Send them an invite link (re-using your reset-password flow)
+        raw_token = user.generate_reset_password_token!
+        PasswordMailer.reset_password(user, raw_token).deliver_later
+      end
+      
       { success: true, user: user, status: :created }
     else
       { success: false, errors: user.errors.full_messages, status: :unprocessable_entity }

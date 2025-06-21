@@ -102,17 +102,17 @@ module Admin
       end
     end
 
-    # Admin can't directly set user password => no :password param
+    # Allow admin to set user password during creation for immediate login
     def user_params
       # Explicitly permit all parameters to avoid unpermitted parameters warning
       # This doesn't affect security as we're still filtering what goes into the final permitted hash
       params.permit!  # This permits all parameters to avoid the warning
       
       # Handle both direct parameters and nested user parameters
-      user_attributes = params[:user].present? ? params[:user].to_h.slice(:email, :first_name, :last_name, :phone, :role, :restaurant_id) : {}
+      user_attributes = params[:user].present? ? params[:user].to_h.slice(:email, :first_name, :last_name, :phone, :role, :restaurant_id, :password) : {}
       
       # Merge with direct parameters (direct parameters take precedence)
-      permitted = params.to_h.slice(:email, :first_name, :last_name, :phone, :restaurant_id)
+      permitted = params.to_h.slice(:email, :first_name, :last_name, :phone, :restaurant_id, :password)
       permitted.merge!(user_attributes.select { |k, v| permitted[k.to_sym].nil? })
 
       # For role, ensure we're not creating a user with higher privileges than the current user
