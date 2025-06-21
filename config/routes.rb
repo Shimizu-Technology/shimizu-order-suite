@@ -40,7 +40,11 @@ Rails.application.routes.draw do
   end
   
   # Staff Discount Configurations
-  resources :staff_discount_configurations, only: [:index, :show, :create, :update, :destroy]
+  resources :staff_discount_configurations, only: [:index, :show, :create, :update, :destroy] do
+    collection do
+      get :admin, to: 'staff_discount_configurations#admin_index'
+    end
+  end
   
   # Reports routes
   namespace :reports do
