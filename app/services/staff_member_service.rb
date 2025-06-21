@@ -194,14 +194,15 @@ class StaffMemberService
         return { success: false, errors: ["Staff member not found"], status: :not_found }
       end
       
-      # Build the base query
+      # Build the base query with order associations for discount information
       query = staff_member.house_account_transactions
+                          .includes(:order => :staff_discount_configuration)
       
-      # Apply date filtering
+      # Apply date filtering (specify table name to avoid ambiguity)
       if options[:start_date].present?
         begin
           start_date = Date.parse(options[:start_date]).beginning_of_day
-          query = query.where('created_at >= ?', start_date)
+          query = query.where('house_account_transactions.created_at >= ?', start_date)
         rescue ArgumentError
           return { success: false, errors: ["Invalid start date format"], status: :bad_request }
         end
@@ -210,7 +211,7 @@ class StaffMemberService
       if options[:end_date].present?
         begin
           end_date = Date.parse(options[:end_date]).end_of_day
-          query = query.where('created_at <= ?', end_date)
+          query = query.where('house_account_transactions.created_at <= ?', end_date)
         rescue ArgumentError
           return { success: false, errors: ["Invalid end date format"], status: :bad_request }
         end
@@ -237,9 +238,9 @@ class StaffMemberService
                           .limit(per_page)
                           .offset(offset)
       
-      # Format transactions for response
+      # Enhanced transaction formatting with order details
       formatted_transactions = transactions.map do |transaction|
-        {
+        transaction_data = {
           id: transaction.id,
           amount: transaction.amount.to_f,
           transaction_type: transaction.transaction_type,
@@ -248,6 +249,56 @@ class StaffMemberService
           created_at: transaction.created_at,
           created_by_name: transaction.created_by&.full_name || 'System'
         }
+        
+        # Add order details for order transactions
+        if transaction.transaction_type == 'order' && transaction.order.present?
+          order = transaction.order
+          
+          # Build discount information
+          discount_info = if order.staff_discount_configuration.present?
+            # Use configurable discount information
+            config = order.staff_discount_configuration
+            {
+              discount_name: config.name,
+              discount_type: config.discount_type,
+              discount_percentage: config.discount_percentage,
+              discount_code: config.code,
+              discount_amount: (order.pre_discount_total || order.total) - order.total,
+              pre_discount_total: order.pre_discount_total || order.total
+            }
+          elsif order.is_staff_order?
+            # Fallback to legacy discount calculation
+            discount_rate = order.staff_on_duty? ? 0.5 : 0.3
+            discount_name = order.staff_on_duty? ? 'On Duty Staff' : 'Off Duty Staff'
+            discount_code = order.staff_on_duty? ? 'on_duty' : 'off_duty'
+            pre_discount_total = order.pre_discount_total || (order.total / (1 - discount_rate))
+            
+            {
+              discount_name: discount_name,
+              discount_type: 'percentage',
+              discount_percentage: (discount_rate * 100).to_i,
+              discount_code: discount_code,
+              discount_amount: pre_discount_total - order.total,
+              pre_discount_total: pre_discount_total
+            }
+          else
+            nil
+          end
+          
+          # Add order details to transaction data
+          transaction_data.merge!({
+            order_details: {
+              order_id: order.id,
+              order_number: order.order_number || order.id.to_s,
+              is_staff_order: order.is_staff_order?,
+              staff_on_duty: order.staff_on_duty?,
+              total: order.total,
+              discount_info: discount_info
+            }
+          })
+        end
+        
+        transaction_data
       end
       
       { 

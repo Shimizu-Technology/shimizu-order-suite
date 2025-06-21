@@ -81,6 +81,7 @@ class Order < ApplicationRecord
   belongs_to :created_by_staff, class_name: 'StaffMember', foreign_key: 'created_by_staff_id', optional: true
   belongs_to :created_by_user, class_name: 'User', foreign_key: 'created_by_user_id', optional: true
   belongs_to :location, optional: true  # Will be set to non-optional after migration
+  belongs_to :staff_discount_configuration, optional: true
 
   # Payment helper methods
   def initial_payment
@@ -174,13 +175,27 @@ class Order < ApplicationRecord
   
   # Staff order helper methods
   
-  # Calculate the appropriate discount rate based on discount type or duty status
+  # Calculate the appropriate discount rate based on staff discount configuration
   def staff_discount_rate
     return 0 unless is_staff_order
     
-    # First, check if we have the new discount_type field from payment_details
-    discount_type = get_discount_type_from_params
+    # Try to use the staff discount configuration first (new system)
+    if staff_discount_configuration.present?
+      return staff_discount_configuration.discount_rate
+    end
     
+    # Fallback: try to find configuration by discount_type from params
+    discount_type = get_discount_type_from_params
+    if discount_type.present? && restaurant.present?
+      config = restaurant.staff_discount_configurations.active.find_by(code: discount_type)
+      if config.present?
+        # Assign the configuration to this order for future reference
+        self.staff_discount_configuration = config
+        return config.discount_rate
+      end
+    end
+    
+    # Legacy fallback - use hardcoded constants
     if discount_type.present?
       case discount_type
       when 'on_duty'
@@ -252,6 +267,13 @@ class Order < ApplicationRecord
   # Calculate the discount amount
   def discount_amount
     return 0 unless is_staff_order
+    
+    # Use the staff discount configuration's calculation method if available
+    if staff_discount_configuration.present?
+      return staff_discount_configuration.calculate_discount(calculate_pre_discount_total)
+    end
+    
+    # Fallback to rate-based calculation
     calculate_pre_discount_total * staff_discount_rate
   end
   

@@ -76,7 +76,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.index ["restaurant_id", "start_time", "end_time"], name: "idx_blocked_periods_rest_times"
     t.index ["restaurant_id"], name: "index_blocked_periods_on_restaurant_id"
     t.index ["seat_section_id"], name: "index_blocked_periods_on_seat_section_id"
-    t.check_constraint "status::text = ANY (ARRAY['active'::character varying, 'cancelled'::character varying]::text[])", name: "check_blocked_period_status"
+    t.check_constraint "status::text = ANY (ARRAY['active'::character varying::text, 'cancelled'::character varying::text])", name: "check_blocked_period_status"
   end
 
   create_table "categories", force: :cascade do |t|
@@ -180,8 +180,6 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.bigint "category_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.integer "position", default: 0, null: false
-    t.index ["category_id", "position"], name: "index_menu_item_categories_on_category_id_and_position"
     t.index ["category_id"], name: "index_menu_item_categories_on_category_id"
     t.index ["menu_item_id", "category_id"], name: "index_menu_item_categories_on_menu_item_id_and_category_id", unique: true
     t.index ["menu_item_id"], name: "index_menu_item_categories_on_menu_item_id"
@@ -413,6 +411,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.bigint "created_by_user_id"
     t.string "order_number"
     t.bigint "location_id", null: false
+    t.bigint "staff_discount_configuration_id"
     t.index ["created_by_staff_id"], name: "index_orders_on_created_by_staff_id"
     t.index ["created_by_user_id"], name: "index_orders_on_created_by_user_id"
     t.index ["global_last_acknowledged_at"], name: "index_orders_on_global_last_acknowledged_at"
@@ -425,6 +424,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.index ["restaurant_id", "order_number"], name: "index_orders_on_restaurant_id_and_order_number"
     t.index ["restaurant_id", "status"], name: "index_orders_on_restaurant_id_and_status"
     t.index ["restaurant_id"], name: "index_orders_on_restaurant_id"
+    t.index ["staff_discount_configuration_id"], name: "index_orders_on_staff_discount_configuration_id"
     t.index ["staff_member_id"], name: "index_orders_on_staff_member_id"
     t.index ["user_id", "created_at"], name: "index_orders_on_user_id_and_created_at"
     t.index ["user_id"], name: "index_orders_on_user_id"
@@ -575,7 +575,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.string "category", default: "standard"
     t.index ["category"], name: "index_seats_on_category"
     t.index ["seat_section_id"], name: "index_seats_on_seat_section_id"
-    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying, 'booth'::character varying, 'outdoor'::character varying, 'bar'::character varying, 'private'::character varying, 'high_top'::character varying]::text[])", name: "check_seat_category_values"
+    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying::text, 'booth'::character varying::text, 'outdoor'::character varying::text, 'bar'::character varying::text, 'private'::character varying::text, 'high_top'::character varying::text])", name: "check_seat_category_values"
     t.check_constraint "max_capacity IS NULL OR min_capacity <= max_capacity", name: "check_min_max_capacity"
   end
 
@@ -603,6 +603,27 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.string "code_prefix"
     t.index ["restaurant_id", "event_date"], name: "index_special_events_on_restaurant_id_and_event_date", unique: true
     t.index ["restaurant_id"], name: "index_special_events_on_restaurant_id"
+  end
+
+  create_table "staff_discount_configurations", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.string "name", limit: 100, null: false
+    t.string "code", limit: 50, null: false
+    t.decimal "discount_percentage", precision: 5, scale: 2, null: false
+    t.string "discount_type", limit: 20, default: "percentage", null: false
+    t.boolean "is_active", default: true, null: false
+    t.boolean "is_default", default: false, null: false
+    t.integer "display_order", default: 0, null: false
+    t.text "description"
+    t.string "ui_color", limit: 7
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["restaurant_id", "code"], name: "idx_staff_discounts_restaurant_code", unique: true
+    t.index ["restaurant_id", "display_order"], name: "idx_staff_discounts_display_order"
+    t.index ["restaurant_id", "is_active"], name: "idx_staff_discounts_restaurant_active"
+    t.index ["restaurant_id"], name: "index_staff_discount_configurations_on_restaurant_id"
+    t.check_constraint "discount_percentage >= 0::numeric AND discount_percentage <= 100::numeric", name: "chk_discount_percentage_range"
+    t.check_constraint "discount_type::text = ANY (ARRAY['percentage'::character varying, 'fixed_amount'::character varying]::text[])", name: "chk_discount_type_values"
   end
 
   create_table "staff_members", force: :cascade do |t|
@@ -751,6 +772,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
   add_foreign_key "order_payments", "orders"
   add_foreign_key "orders", "locations"
   add_foreign_key "orders", "restaurants"
+  add_foreign_key "orders", "staff_discount_configurations"
   add_foreign_key "orders", "staff_members", column: "created_by_staff_id", on_delete: :nullify
   add_foreign_key "orders", "staff_members", on_delete: :nullify
   add_foreign_key "orders", "users"
@@ -774,6 +796,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
   add_foreign_key "seats", "seat_sections"
   add_foreign_key "site_settings", "restaurants"
   add_foreign_key "special_events", "restaurants"
+  add_foreign_key "staff_discount_configurations", "restaurants"
   add_foreign_key "staff_members", "restaurants"
   add_foreign_key "tenant_events", "restaurants", on_delete: :cascade
   add_foreign_key "users", "restaurants"

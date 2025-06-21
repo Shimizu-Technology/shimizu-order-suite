@@ -111,6 +111,7 @@ class Restaurant < ApplicationRecord
   has_many :merchandise_collections, dependent: :destroy
   has_many :push_subscriptions, dependent: :destroy
   has_many :locations,        dependent: :destroy
+  has_many :staff_discount_configurations, dependent: :destroy
 
   # Layout-related associations
   has_many :layouts,          dependent: :destroy

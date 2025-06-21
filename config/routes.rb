@@ -39,6 +39,9 @@ Rails.application.routes.draw do
     end
   end
   
+  # Staff Discount Configurations
+  resources :staff_discount_configurations, only: [:index, :show, :create, :update, :destroy]
+  
   # Reports routes
   namespace :reports do
     get 'house_account_balances'
