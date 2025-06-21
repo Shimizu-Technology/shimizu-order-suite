@@ -988,6 +988,7 @@ class OrdersController < ApplicationController
       :pickup_time, :is_staff_order, :staff_member_id, :staff_on_duty, 
       :use_house_account, :created_by_staff_id, :created_by_user_id, 
       :pre_discount_total, :vip_code, :vip_access_code_id, :staff_modal, :location_id,
+      :staff_discount_configuration_id, # Add support for configurable staff discounts
       # Handle nested attributes properly
       items: [:id, :name, :price, :quantity, :notes, :menu_id, :category_id, { customizations: {} }],
       merchandise_items: [:id, :name, :price, :quantity, :merchandise_variant_id, :notes],

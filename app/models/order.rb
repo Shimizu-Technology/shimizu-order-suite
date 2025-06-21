@@ -179,12 +179,23 @@ class Order < ApplicationRecord
   def staff_discount_rate
     return 0 unless is_staff_order
     
-    # Try to use the staff discount configuration first (new system)
+    # First, check if we have a staff_discount_configuration_id and load the configuration
+    if staff_discount_configuration_id.present?
+      # Load the configuration if not already loaded
+      config = staff_discount_configuration || restaurant.staff_discount_configurations.find_by(id: staff_discount_configuration_id)
+      if config.present?
+        # Assign the configuration to this order for future reference if not already assigned
+        self.staff_discount_configuration = config unless staff_discount_configuration.present?
+        return config.discount_rate
+      end
+    end
+    
+    # Second, try to use the staff discount configuration association if present
     if staff_discount_configuration.present?
       return staff_discount_configuration.discount_rate
     end
     
-    # Fallback: try to find configuration by discount_type from params
+    # Third, fallback: try to find configuration by discount_type from params
     discount_type = get_discount_type_from_params
     if discount_type.present? && restaurant.present?
       config = restaurant.staff_discount_configurations.active.find_by(code: discount_type)
@@ -268,7 +279,15 @@ class Order < ApplicationRecord
   def discount_amount
     return 0 unless is_staff_order
     
-    # Use the staff discount configuration's calculation method if available
+    # First, check if we have a staff_discount_configuration_id and load the configuration
+    if staff_discount_configuration_id.present?
+      config = staff_discount_configuration || restaurant.staff_discount_configurations.find_by(id: staff_discount_configuration_id)
+      if config.present?
+        return config.calculate_discount(calculate_pre_discount_total)
+      end
+    end
+    
+    # Second, use the staff discount configuration's calculation method if available
     if staff_discount_configuration.present?
       return staff_discount_configuration.calculate_discount(calculate_pre_discount_total)
     end
@@ -287,7 +306,6 @@ class Order < ApplicationRecord
     
     if params_pre_discount_total.present?
       original_pre_discount = params_pre_discount_total.to_f
-      Rails.logger.info("Using pre_discount_total from params: #{original_pre_discount}")
       
       # Store the original pre-discount total from params
       self.pre_discount_total = original_pre_discount
@@ -302,17 +320,14 @@ class Order < ApplicationRecord
       
       # If there's a significant discrepancy, log it but trust the explicit pre_discount_total
       if (pre_discount_total.to_f - calculated_pre_discount).abs > 0.01
-        Rails.logger.info("Note: pre_discount_total (#{pre_discount_total}) differs from sum of item pre_discount_prices (#{calculated_pre_discount})")
         
         # If we have the original pre-discount total from params, use that as the source of truth
         if original_pre_discount.present?
-          Rails.logger.info("Overriding with original pre_discount_total from params: #{original_pre_discount}")
           self.pre_discount_total = original_pre_discount
         end
       end
       
       # If total is already discounted, don't apply discount again
-      Rails.logger.info("Staff discount already applied in frontend. Pre-discount total: #{pre_discount_total}, Current total: #{total}")
       
       # Ensure payment_amount reflects the actual amount charged
       self.payment_amount = total if payment_amount.nil? || payment_amount.to_f.zero?
@@ -323,7 +338,9 @@ class Order < ApplicationRecord
       self.pre_discount_total ||= calculate_pre_discount_total
       
       # Calculate the discounted total
-      discounted_total = pre_discount_total * (1 - staff_discount_rate)
+      discount_rate = staff_discount_rate
+      
+      discounted_total = pre_discount_total * (1 - discount_rate)
       
       # Update the total
       self.total = discounted_total.round(2)
@@ -335,7 +352,7 @@ class Order < ApplicationRecord
           item_price = item['price'].to_f
           item.merge({
             'pre_discount_price' => item_price,
-            'price' => (item_price * (1 - staff_discount_rate)).round(2)
+            'price' => (item_price * (1 - discount_rate)).round(2)
           })
         end
         self.items = items_with_pre_discount
