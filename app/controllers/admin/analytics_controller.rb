@@ -8,14 +8,15 @@ module Admin
     before_action :require_admin!
     before_action :ensure_tenant_context
 
-    # GET /admin/analytics/customer_orders?start=YYYY-MM-DD&end=YYYY-MM-DD
+    # GET /admin/analytics/customer_orders?start=YYYY-MM-DD&end=YYYY-MM-DD&staff_member_id=123
     def customer_orders
       # Use Time.zone.parse to respect any timezone information in the input
       start_date = params[:start].present? ? Time.zone.parse(params[:start]) : (Time.zone.today - 30)
       end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.today
       
       # Use the AdminAnalyticsService to get tenant-scoped data
-      report = analytics_service.customer_orders_report(start_date, end_date)
+      # Note: staff_member_id parameter is actually a user_id for filtering by who created the order
+      report = analytics_service.customer_orders_report(start_date, end_date, params[:staff_member_id])
       
       render json: report
     end
@@ -78,6 +79,29 @@ module Admin
       report = analytics_service.user_activity_heatmap_report(start_date, end_date)
       
       render json: report
+    end
+
+    # GET /admin/analytics/staff_users
+    def staff_users
+      # Get users with staff-like roles who have created orders for the current restaurant
+      staff_users = User.where(role: ['staff', 'admin', 'super_admin'])
+                       .where(restaurant_id: @current_restaurant.id)
+                       .joins(:created_orders)
+                       .where(orders: { staff_created: true, restaurant_id: @current_restaurant.id })
+                       .distinct
+                       .select(:id, :first_name, :last_name, :email, :role)
+                       .order(:first_name, :last_name)
+
+      formatted_users = staff_users.map do |user|
+        {
+          id: user.id,
+          name: user.full_name,
+          email: user.email,
+          role: user.role
+        }
+      end
+
+      render json: { staff_users: formatted_users }
     end
 
     private

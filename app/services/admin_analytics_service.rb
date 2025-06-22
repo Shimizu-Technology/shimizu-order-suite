@@ -7,71 +7,64 @@ class AdminAnalyticsService < TenantScopedService
   # Get customer orders report with tenant isolation
   # @param start_date [Time] Start date for the report
   # @param end_date [Time] End date for the report
+  # @param created_by_user_id [String, nil] Optional filter for staff orders by user who created them
   # @return [Hash] Customer orders report data
-  def customer_orders_report(start_date, end_date)
+  def customer_orders_report(start_date, end_date, created_by_user_id = nil)
     # Ensure end_date includes the full day
     end_date = end_date.end_of_day
     
-    # Get orders with tenant isolation
+    # Get orders with tenant isolation, including staff member and user associations
     orders = scope_query(Order)
-      .includes(:user)
+      .includes(:user, :staff_member)
       .where(created_at: start_date..end_date)
       .where.not(status: "cancelled")
     
-    # Group them by user or by guest contact info
-    grouped_orders = orders.group_by do |order|
-      if order.user_id.present?
-        "USER_#{order.user_id}"
-      else
-        name_str  = order.contact_name.to_s.strip.downcase
-        phone_str = order.contact_phone.to_s.strip.downcase
-        email_str = order.contact_email.to_s.strip.downcase
-        "GUEST_#{name_str}_#{phone_str}_#{email_str}"
-      end
+    # Separate orders into three categories based on staff_created flag
+    customer_orders = orders.where(staff_created: [false, nil]).where.not(user_id: nil)
+    guest_orders = orders.where(staff_created: [false, nil]).where(user_id: nil)
+    staff_orders = orders.where(staff_created: true)
+    
+    # Apply user filter if provided
+    if created_by_user_id.present?
+      staff_orders = staff_orders.where(created_by_user_id: created_by_user_id)
     end
     
-    # Generate the report
-    report = grouped_orders.map do |_group_key, orders_in_group|
-      total_spent = orders_in_group.sum(&:total)
-      order_count = orders_in_group.size
-      
-      all_items = orders_in_group.flat_map(&:items)
-      item_details = all_items.group_by { |i| i["name"] || "Unknown" }.map do |item_name, lines|
-        {
-          name: item_name,
-          quantity: lines.sum { |ln| ln["quantity"] || 1 }
-        }
-      end
-      
-      first_order = orders_in_group.first
-      if first_order.user_id.present?
-        user_obj  = first_order.user
-        user_name = user_obj&.full_name.presence || user_obj&.email || "Unknown User"
-        user_id   = user_obj.id
-      else
-        fallback_name = first_order.contact_name.presence ||
-                        first_order.contact_phone.presence ||
-                        first_order.contact_email.presence ||
-                        "Unknown Guest"
-        user_name = "Guest (#{fallback_name})"
-        user_id   = nil
-      end
-      
-      {
-        user_id: user_id,
-        user_name: user_name,
-        total_spent: total_spent.to_f.round(2),
-        order_count: order_count,
-        items: item_details
-      }
+    # Process Customer Orders (registered users, not staff-created)
+    customer_grouped = customer_orders.group_by(&:user_id)
+    customer_report = customer_grouped.map do |user_id, orders_in_group|
+      generate_order_group_data(orders_in_group, 'customer')
+    end
+    
+    # Process Guest Orders (no user_id, not staff-created)
+    guest_grouped = guest_orders.group_by do |order|
+      name_str  = order.contact_name.to_s.strip.downcase
+      phone_str = order.contact_phone.to_s.strip.downcase
+      email_str = order.contact_email.to_s.strip.downcase
+      "GUEST_#{name_str}_#{phone_str}_#{email_str}"
+    end
+    guest_report = guest_grouped.map do |_group_key, orders_in_group|
+      generate_order_group_data(orders_in_group, 'guest')
+    end
+    
+    # Process Staff Orders (staff_created = true)
+    # Group by created_by_user_id to track which employee made the orders
+    staff_grouped = staff_orders.group_by(&:created_by_user_id)
+    staff_report = staff_grouped.map do |created_by_user_id, orders_in_group|
+      generate_order_group_data(orders_in_group, 'staff', created_by_user_id)
     end
     
     {
       start_date: start_date,
       end_date: end_date,
-      results: report,
+      customer_orders: customer_report,
+      guest_orders: guest_report,
+      staff_orders: staff_report,
       restaurant_id: @restaurant.id,
-      restaurant_name: @restaurant.name
+      restaurant_name: @restaurant.name,
+      # Keep legacy format for backward compatibility
+      results: customer_report + guest_report + staff_report,
+      # Include filter info
+      staff_member_filter: created_by_user_id
     }
   end
   
@@ -298,5 +291,89 @@ class AdminAnalyticsService < TenantScopedService
       restaurant_id: @restaurant.id,
       restaurant_name: @restaurant.name
     }
+  end
+
+  private
+
+  # Generate standardized order group data for different order types
+  def generate_order_group_data(orders_in_group, order_type, created_by_user_id = nil)
+    total_spent = orders_in_group.sum(&:total)
+    order_count = orders_in_group.size
+    
+    all_items = orders_in_group.flat_map(&:items)
+    
+    # Group by both name and customizations to handle items with different customizations separately
+    item_details = all_items.group_by do |item|
+      customizations_key = item["customizations"]&.to_s || ""
+      "#{item["name"] || "Unknown"}|#{customizations_key}"
+    end.map do |_group_key, lines|
+      first_item = lines.first
+      
+      {
+        name: first_item["name"] || "Unknown",
+        quantity: lines.sum { |ln| ln["quantity"] || 1 },
+        customizations: first_item["customizations"]
+      }
+    end
+    
+    first_order = orders_in_group.first
+    
+    case order_type
+    when 'customer'
+      user_obj = first_order.user
+      user_name = user_obj&.full_name.presence || user_obj&.email || "Unknown User"
+      user_id = user_obj.id
+      
+      {
+        user_id: user_id,
+        user_name: user_name,
+        total_spent: total_spent.to_f.round(2),
+        order_count: order_count,
+        items: item_details,
+        order_type: 'customer'
+      }
+      
+    when 'guest'
+      fallback_name = first_order.contact_name.presence ||
+                      first_order.contact_phone.presence ||
+                      first_order.contact_email.presence ||
+                      "Unknown Guest"
+      
+      {
+        user_id: nil,
+        user_name: "Guest (#{fallback_name})",
+        total_spent: total_spent.to_f.round(2),
+        order_count: order_count,
+        items: item_details,
+        order_type: 'guest'
+      }
+      
+    when 'staff'
+      # For staff orders, we want to show who created them (the employee)
+      created_by_user = created_by_user_id ? User.find_by(id: created_by_user_id) : nil
+      
+      if created_by_user
+        creator_name = "Staff: #{created_by_user.full_name || created_by_user.email}"
+      else
+        creator_name = "Staff: Unknown Employee"
+      end
+      
+      {
+        user_id: created_by_user_id,
+        user_name: creator_name,
+        total_spent: total_spent.to_f.round(2),
+        order_count: order_count,
+        items: item_details,
+        order_type: 'staff',
+        created_by_user_id: created_by_user_id,
+        # Include additional staff order info
+        staff_order_details: {
+          total_orders_for_staff: order_count,
+          average_order_value: (total_spent.to_f / order_count).round(2),
+          employee_name: created_by_user&.full_name,
+          employee_email: created_by_user&.email
+        }
+      }
+    end
   end
 end

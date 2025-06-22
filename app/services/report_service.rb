@@ -27,6 +27,7 @@ class ReportService < TenantScopedService
         item_name = item['name']
         quantity = item['quantity'].to_i
         price = item['price'].to_f
+        customizations = item['customizations']
         
         # Look up the menu item's categories if not already cached
         if !menu_item_categories[item_id]
@@ -84,19 +85,24 @@ class ReportService < TenantScopedService
         # Get the category name from our cache
         category = menu_item_categories[item_id]
         
+        # Create a unique key that includes customizations to handle items with different customizations separately
+        customizations_key = customizations&.to_s || ""
+        unique_item_key = "#{item_id}|#{customizations_key}"
+        
         # Update item stats
-        if !item_data[item_id]
-          item_data[item_id] = {
+        if !item_data[unique_item_key]
+          item_data[unique_item_key] = {
             id: item_id.to_i,
             name: item_name,
             category: category,
             quantity_sold: 0,
-            revenue: 0
+            revenue: 0,
+            customizations: customizations
           }
         end
         
-        item_data[item_id][:quantity_sold] += quantity
-        item_data[item_id][:revenue] += quantity * price
+        item_data[unique_item_key][:quantity_sold] += quantity
+        item_data[unique_item_key][:revenue] += quantity * price
         
         # Update category stats
         if !category_data[category]

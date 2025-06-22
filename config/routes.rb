@@ -202,6 +202,7 @@ Rails.application.routes.draw do
     get "analytics/income_statement",  to: "analytics#income_statement"
     get "analytics/user_signups",      to: "analytics#user_signups"
     get "analytics/user_activity_heatmap", to: "analytics#user_activity_heatmap"
+    get "analytics/staff_users",       to: "analytics#staff_users"
     
     # VIP Reports
     get "reports/menu_items",         to: "reports#menu_items"
