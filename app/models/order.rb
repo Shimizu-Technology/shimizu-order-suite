@@ -58,14 +58,14 @@ class Order < ApplicationRecord
   def assign_order_number
     return if order_number.present? # Skip if already assigned
     
-    # Make sure we have a restaurant_id
-    unless restaurant_id.present?
-      Rails.logger.error("Cannot assign order number: restaurant_id is missing for order")
+    # Make sure we have a restaurant_id AND location_id
+    unless restaurant_id.present? && location_id.present?
+      Rails.logger.error("Cannot assign order number: restaurant_id or location_id is missing for order")
       return
     end
     
-    # Generate a new order number using the RestaurantCounter
-    self.order_number = RestaurantCounter.next_order_number(restaurant_id)
+    # Generate a new order number using the RestaurantCounter with restaurant and location IDs
+    self.order_number = RestaurantCounter.next_order_number(restaurant_id, location_id)
     
     # Log for debugging
     Rails.logger.info("Assigned order number #{order_number} to order for restaurant #{restaurant_id}")

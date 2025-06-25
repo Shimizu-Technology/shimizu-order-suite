@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_06_17_033734) do
+ActiveRecord::Schema[7.2].define(version: 2025_06_23_031353) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -76,7 +76,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_06_17_033734) do
     t.index ["restaurant_id", "start_time", "end_time"], name: "idx_blocked_periods_rest_times"
     t.index ["restaurant_id"], name: "index_blocked_periods_on_restaurant_id"
     t.index ["seat_section_id"], name: "index_blocked_periods_on_seat_section_id"
-    t.check_constraint "status::text = ANY (ARRAY['active'::character varying, 'cancelled'::character varying]::text[])", name: "check_blocked_period_status"
+    t.check_constraint "status::text = ANY (ARRAY['active'::character varying::text, 'cancelled'::character varying::text])", name: "check_blocked_period_status"
   end
 
   create_table "categories", force: :cascade do |t|
@@ -487,7 +487,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_06_17_033734) do
     t.index ["location_id"], name: "index_reservations_on_location_id"
     t.index ["reservation_number"], name: "index_reservations_on_reservation_number", unique: true
     t.index ["restaurant_id"], name: "index_reservations_on_restaurant_id"
-    t.check_constraint "status::text = ANY (ARRAY['booked'::character varying, 'reserved'::character varying, 'seated'::character varying, 'finished'::character varying, 'canceled'::character varying, 'no_show'::character varying]::text[])", name: "check_reservation_status"
+    t.check_constraint "status::text = ANY (ARRAY['booked'::character varying::text, 'reserved'::character varying::text, 'seated'::character varying::text, 'finished'::character varying::text, 'canceled'::character varying::text, 'no_show'::character varying::text])", name: "check_reservation_status"
   end
 
   create_table "restaurant_counters", force: :cascade do |t|
@@ -497,6 +497,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_06_17_033734) do
     t.date "last_reset_date", default: -> { "CURRENT_DATE" }, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "location_id"
+    t.index ["location_id"], name: "index_restaurant_counters_on_location_id"
+    t.index ["restaurant_id", "location_id"], name: "index_restaurant_counters_on_restaurant_id_and_location_id", unique: true
     t.index ["restaurant_id"], name: "index_restaurant_counters_on_restaurant_id", unique: true
   end
 
@@ -573,7 +576,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_06_17_033734) do
     t.string "category", default: "standard"
     t.index ["category"], name: "index_seats_on_category"
     t.index ["seat_section_id"], name: "index_seats_on_seat_section_id"
-    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying, 'booth'::character varying, 'outdoor'::character varying, 'bar'::character varying, 'private'::character varying, 'high_top'::character varying]::text[])", name: "check_seat_category_values"
+    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying::text, 'booth'::character varying::text, 'outdoor'::character varying::text, 'bar'::character varying::text, 'private'::character varying::text, 'high_top'::character varying::text])", name: "check_seat_category_values"
     t.check_constraint "max_capacity IS NULL OR min_capacity <= max_capacity", name: "check_min_max_capacity"
   end
 
@@ -582,7 +585,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_06_17_033734) do
     t.string "spinner_image_url"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.bigint "restaurant_id"
+    t.bigint "restaurant_id", null: false
     t.index ["restaurant_id"], name: "index_site_settings_on_restaurant_id"
   end
 
@@ -759,6 +762,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_06_17_033734) do
   add_foreign_key "reservation_counters", "restaurants"
   add_foreign_key "reservations", "locations"
   add_foreign_key "reservations", "restaurants"
+  add_foreign_key "restaurant_counters", "locations"
   add_foreign_key "restaurant_counters", "restaurants"
   add_foreign_key "restaurants", "layouts", column: "current_layout_id", on_delete: :nullify
   add_foreign_key "restaurants", "menus", column: "current_menu_id"
