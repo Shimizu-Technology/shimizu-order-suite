@@ -92,17 +92,26 @@ class MenuItemsController < ApplicationController
     begin
       item = menu_item_service.find_item(params[:id])
       
+      # Enhanced JSON response to include option inventory information
       render json: item.as_json(
         include: {
           option_groups: {
             include: {
               options: {
-                only: [ :id, :name, :available, :is_preselected, :is_available ],
-                methods: [ :additional_price_float ]
+                only: [ :id, :name, :available, :is_preselected, :is_available, :stock_quantity, :damaged_quantity ],
+                methods: [ :additional_price_float, :available_stock, :in_stock?, :out_of_stock?, :low_stock?, :inventory_tracking_enabled? ]
               }
-            }
+            },
+            methods: [:inventory_tracking_enabled?, :total_option_stock, :available_option_stock, :has_option_stock?]
           }
-        }
+        },
+        methods: [
+          :has_option_inventory_tracking?, 
+          :uses_option_level_inventory?, 
+          :effective_available_quantity, 
+          :effectively_out_of_stock?,
+          :option_inventory_matches_item_inventory?
+        ]
       )
     rescue ActiveRecord::RecordNotFound
       render json: { error: "Item not found" }, status: :not_found
@@ -186,6 +195,19 @@ class MenuItemsController < ApplicationController
   def mark_as_damaged
     Rails.logger.info "=== MenuItemsController#mark_as_damaged ==="
     
+    menu_item = menu_item_service.find_item(params[:id])
+    return render json: { errors: ["Menu item not found"] }, status: :not_found unless menu_item
+    
+    # Check if this menu item uses option-level inventory
+    if menu_item.uses_option_level_inventory?
+      # For option-level inventory, delegate to OptionInventoryService
+      return render json: { 
+        errors: ["This menu item uses option-level inventory tracking. Please mark individual options as damaged instead."],
+        suggestion: "Use POST /options/:option_id/mark_damaged for individual options or POST /option_groups/:group_id/mark_options_damaged for bulk operations."
+      }, status: :unprocessable_entity
+    end
+    
+    # For regular inventory, use the existing service
     result = menu_item_service.mark_as_damaged(params[:id], params)
     
     if result[:success]
@@ -203,6 +225,19 @@ class MenuItemsController < ApplicationController
   def update_stock
     Rails.logger.info "=== MenuItemsController#update_stock ==="
     
+    menu_item = menu_item_service.find_item(params[:id])
+    return render json: { errors: ["Menu item not found"] }, status: :not_found unless menu_item
+    
+    # Check if this menu item uses option-level inventory
+    if menu_item.uses_option_level_inventory?
+      # For option-level inventory, delegate to OptionInventoryService
+      return render json: { 
+        errors: ["This menu item uses option-level inventory tracking. Please update individual option quantities instead."],
+        suggestion: "Use PATCH /options/:option_id/update_stock for individual options or PATCH /option_groups/:group_id/update_option_quantities for bulk updates."
+      }, status: :unprocessable_entity
+    end
+    
+    # For regular inventory, use the existing service
     result = menu_item_service.update_stock(params[:id], params)
     
     if result[:success]
@@ -238,6 +273,74 @@ class MenuItemsController < ApplicationController
       Rails.logger.info "Failed to copy menu item => #{result[:errors].inspect}"
       render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
+  end
+
+  # POST /menu_items/:id/force_synchronize_option_inventory
+  def force_synchronize_option_inventory
+    menu_item = menu_item_service.find_item(params[:id])
+    return render json: { errors: ["Menu item not found"] }, status: :not_found unless menu_item
+
+    unless menu_item.uses_option_level_inventory?
+      return render json: { error: "This menu item does not use option-level inventory tracking" }, status: :unprocessable_entity
+    end
+
+    distribution_strategy = params[:distribution_strategy]&.to_sym || :proportional
+
+    if OptionInventoryService.force_synchronize_inventory(menu_item, distribution_strategy)
+      tracking_group = menu_item.option_inventory_tracking_group
+      render json: { 
+        success: true, 
+        message: "Option inventory synchronized successfully",
+        menu_item_stock: menu_item.reload.stock_quantity,
+        total_option_stock: tracking_group.reload.total_option_stock,
+        option_breakdown: tracking_group.options.pluck(:id, :name, :stock_quantity).map do |id, name, stock|
+          { option_id: id, name: name, stock: stock }
+        end
+      }
+    else
+      render json: { error: "Failed to synchronize option inventory" }, status: :internal_server_error
+    end
+  end
+
+  # GET /menu_items/:id/validate_option_inventory_sync
+  def validate_option_inventory_sync
+    menu_item = menu_item_service.find_item(params[:id])
+    return render json: { errors: ["Menu item not found"] }, status: :not_found unless menu_item
+
+    unless menu_item.uses_option_level_inventory?
+      return render json: { 
+        synchronized: true, 
+        message: "This menu item does not use option-level inventory tracking" 
+      }
+    end
+
+    is_synchronized = OptionInventoryService.validate_inventory_synchronization(menu_item)
+    tracking_group = menu_item.option_inventory_tracking_group
+    
+    total_option_stock = tracking_group.total_option_stock
+    menu_item_stock = menu_item.stock_quantity.to_i
+
+    render json: {
+      synchronized: is_synchronized,
+      menu_item_stock: menu_item_stock,
+      total_option_stock: total_option_stock,
+      difference: menu_item_stock - total_option_stock,
+      option_breakdown: tracking_group.options.pluck(:id, :name, :stock_quantity).map do |id, name, stock|
+        { option_id: id, name: name, stock: stock }
+      end
+    }
+  end
+
+  # GET /menu_items/audit_inventory_synchronization
+  def audit_inventory_synchronization
+    restaurant_id = current_restaurant&.id
+    issues = OptionInventoryService.audit_inventory_synchronization(restaurant_id)
+    
+    render json: {
+      total_issues: issues.count,
+      synchronized: issues.empty?,
+      issues: issues
+    }
   end
 
   private

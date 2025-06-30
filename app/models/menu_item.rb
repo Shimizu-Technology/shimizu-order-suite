@@ -228,6 +228,68 @@ class MenuItem < ApplicationRecord
   def required_groups_with_unavailable_options
     option_groups.select { |group| group.required_but_unavailable? }
   end
+
+  # Option-level inventory tracking methods
+  def has_option_inventory_tracking?
+    option_groups.any?(&:inventory_tracking_enabled?)
+  end
+
+  def option_inventory_tracking_group
+    option_groups.find(&:inventory_tracking_enabled?)
+  end
+
+  def uses_option_level_inventory?
+    enable_stock_tracking && has_option_inventory_tracking?
+  end
+
+  # Check if option inventory totals match menu item inventory
+  def option_inventory_matches_item_inventory?
+    return true unless uses_option_level_inventory?
+    
+    tracking_group = option_inventory_tracking_group
+    return true unless tracking_group
+    
+    tracking_group.total_option_stock == stock_quantity.to_i
+  end
+
+  # Sync option inventory with menu item inventory
+  def sync_option_inventory_with_item!
+    return false unless uses_option_level_inventory?
+    
+    tracking_group = option_inventory_tracking_group
+    return false unless tracking_group
+    
+    current_total = tracking_group.total_option_stock
+    target_total = stock_quantity.to_i
+    
+    if current_total != target_total
+      difference = target_total - current_total
+      # Distribute the difference proportionally across options
+      distribute_stock_difference_to_options(tracking_group, difference)
+    end
+    
+    true
+  end
+
+  # Get effective available quantity (considers both item and option inventory)
+  def effective_available_quantity
+    if uses_option_level_inventory?
+      tracking_group = option_inventory_tracking_group
+      tracking_group&.available_option_stock || 0
+    else
+      available_quantity
+    end
+  end
+
+  # Check if effectively out of stock (considers both item and option inventory)
+  def effectively_out_of_stock?
+    if uses_option_level_inventory?
+      tracking_group = option_inventory_tracking_group
+      tracking_group ? !tracking_group.has_option_stock? : true
+    else
+      enable_stock_tracking && available_quantity <= 0
+    end
+  end
   
   # as_json => only expose category_ids, not full objects
   def as_json(options = {})
@@ -258,7 +320,12 @@ class MenuItem < ApplicationRecord
         "stock_quantity" => stock_quantity.to_i,
         "damaged_quantity" => damaged_quantity.to_i,
         "available_quantity" => available_quantity,
-        "low_stock_threshold" => actual_low_stock_threshold
+        "low_stock_threshold" => actual_low_stock_threshold,
+        # Add option inventory information
+        "has_option_inventory_tracking" => has_option_inventory_tracking?,
+        "uses_option_level_inventory" => uses_option_level_inventory?,
+        "effective_available_quantity" => effective_available_quantity,
+        "effectively_out_of_stock" => effectively_out_of_stock?
       )
     end
 
@@ -266,6 +333,22 @@ class MenuItem < ApplicationRecord
   end
 
   private
+
+  # Distribute stock difference across options proportionally
+  def distribute_stock_difference_to_options(tracking_group, difference)
+    options_with_stock = tracking_group.options.where('stock_quantity > 0')
+    return if options_with_stock.empty?
+    
+    # Simple proportional distribution
+    per_option = difference / options_with_stock.count
+    remainder = difference % options_with_stock.count
+    
+    options_with_stock.each_with_index do |option, index|
+      additional = index < remainder ? 1 : 0
+      new_quantity = [option.stock_quantity + per_option + additional, 0].max
+      option.update_column(:stock_quantity, new_quantity)
+    end
+  end
 
   # Reset inventory tracking fields when tracking is turned off
   def reset_inventory_fields_if_tracking_disabled

@@ -14,6 +14,7 @@ Rails.application.config.indirect_tenant_models = %w[
   Option
   MenuItemCategory
   MenuItemStockAudit
+  OptionStockAudit
   OrderPayment
   OrderAcknowledgment
   Category
@@ -41,6 +42,7 @@ Rails.application.config.tenant_relationships = {
   'Option' => { through: [:option_group, :menu_item, :menu], foreign_key: 'restaurant_id' },
   'MenuItemCategory' => { through: [:menu_item, :menu], foreign_key: 'restaurant_id' },
   'MenuItemStockAudit' => { through: [:menu_item, :menu], foreign_key: 'restaurant_id' },
+  'OptionStockAudit' => { through: [:option, :option_group, :menu_item, :menu], foreign_key: 'restaurant_id' },
   'Order' => { direct: true, foreign_key: 'restaurant_id' },
   'OrderPayment' => { through: :order, foreign_key: 'restaurant_id' },
   'OrderAcknowledgment' => { through: :order, foreign_key: 'restaurant_id' },

@@ -343,6 +343,14 @@ Rails.application.routes.draw do
       post :update_stock
       get :stock_audits
       post :copy
+      # Option inventory synchronization
+      post :force_synchronize_option_inventory
+      get :validate_option_inventory_sync
+    end
+    
+    collection do
+      # Global inventory synchronization audit
+      get :audit_inventory_synchronization
     end
 
     # For listing or creating option groups under a given menu item:
@@ -351,12 +359,34 @@ Rails.application.routes.draw do
 
   # For updating or deleting an option group (requires just the group ID):
   resources :option_groups, only: [ :update, :destroy ] do
+    member do
+      # Option inventory management endpoints
+      post :enable_inventory_tracking
+      delete :disable_inventory_tracking
+      patch :update_option_quantities
+      post :mark_options_damaged
+      get :inventory_status
+      get :audit_history
+      # Inventory synchronization endpoints
+      post :force_synchronize_inventory
+      get :validate_synchronization
+    end
+    
     # For creating options under a specific option group:
     resources :options, only: [ :create ]
   end
 
   # For updating or deleting a specific option (requires just the option ID)
   resources :options, only: [ :update, :destroy ] do
+    member do
+      # Individual option inventory management endpoints
+      get :inventory_status
+      patch :update_stock
+      post :mark_damaged
+      post :restock
+      get :audit_history
+    end
+    
     collection do
       patch :batch_update
       patch :batch_update_positions

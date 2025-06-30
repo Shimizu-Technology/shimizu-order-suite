@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
+ActiveRecord::Schema[7.2].define(version: 2025_06_27_004634) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -194,9 +194,11 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.bigint "order_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "tracking_method", default: "menu_item"
     t.index ["created_at"], name: "index_menu_item_stock_audits_on_created_at"
     t.index ["menu_item_id"], name: "index_menu_item_stock_audits_on_menu_item_id"
     t.index ["order_id"], name: "index_menu_item_stock_audits_on_order_id"
+    t.index ["tracking_method"], name: "index_menu_item_stock_audits_on_tracking_method"
     t.index ["user_id"], name: "index_menu_item_stock_audits_on_user_id"
   end
 
@@ -325,7 +327,24 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "free_option_count", default: 0, null: false
+    t.boolean "enable_inventory_tracking", default: false, null: false
+    t.index ["enable_inventory_tracking"], name: "index_option_groups_on_enable_inventory_tracking"
     t.index ["menu_item_id"], name: "index_option_groups_on_menu_item_id"
+  end
+
+  create_table "option_stock_audits", force: :cascade do |t|
+    t.bigint "option_id", null: false
+    t.bigint "user_id"
+    t.bigint "order_id"
+    t.integer "previous_quantity", null: false
+    t.integer "new_quantity", null: false
+    t.string "reason"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["created_at"], name: "index_option_stock_audits_on_created_at"
+    t.index ["option_id"], name: "index_option_stock_audits_on_option_id"
+    t.index ["order_id"], name: "index_option_stock_audits_on_order_id"
+    t.index ["user_id"], name: "index_option_stock_audits_on_user_id"
   end
 
   create_table "options", force: :cascade do |t|
@@ -338,9 +357,14 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
     t.boolean "is_preselected", default: false, null: false
     t.boolean "is_available", default: true, null: false
     t.integer "position", default: 0
+    t.integer "stock_quantity", default: 0
+    t.integer "damaged_quantity", default: 0
     t.index ["is_available"], name: "index_options_on_is_available"
     t.index ["option_group_id", "position"], name: "index_options_on_option_group_id_and_position"
     t.index ["option_group_id"], name: "index_options_on_option_group_id"
+    t.index ["stock_quantity"], name: "index_options_on_stock_quantity"
+    t.check_constraint "damaged_quantity >= 0", name: "check_options_damaged_quantity_non_negative"
+    t.check_constraint "stock_quantity >= 0", name: "check_options_stock_quantity_non_negative"
   end
 
   create_table "order_acknowledgments", force: :cascade do |t|
@@ -766,6 +790,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_05_05_150138) do
   add_foreign_key "notifications", "users", column: "acknowledged_by_id"
   add_foreign_key "operating_hours", "restaurants"
   add_foreign_key "option_groups", "menu_items"
+  add_foreign_key "option_stock_audits", "options"
+  add_foreign_key "option_stock_audits", "orders"
+  add_foreign_key "option_stock_audits", "users"
   add_foreign_key "options", "option_groups"
   add_foreign_key "order_acknowledgments", "orders"
   add_foreign_key "order_acknowledgments", "users"

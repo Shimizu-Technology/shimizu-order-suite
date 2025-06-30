@@ -554,6 +554,22 @@ def create_refund
         @order.update(status: Order::STATUS_REFUNDED)
       end
 
+      # Restore inventory for refunded items using OrderService
+      if refunded_items.present?
+        Rails.logger.info("Restoring inventory for refunded items: #{refunded_items.inspect}")
+        
+        order_service = OrderService.new(@order.restaurant)
+        inventory_result = order_service.revert_order_inventory(refunded_items, @order, current_user)
+        
+        if inventory_result[:success]
+          Rails.logger.info("Successfully restored inventory for refund: #{inventory_result[:inventory_changes].length} changes")
+        else
+          Rails.logger.error("Inventory restoration failed for refund: #{inventory_result[:errors]}")
+          # Note: We don't fail the refund if inventory restoration fails - the refund is still valid
+          # but we log the error for investigation
+        end
+      end
+
       render json: { refund: @refund }
     else
       render json: { error: result[:error] }, status: :unprocessable_entity

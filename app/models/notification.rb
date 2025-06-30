@@ -83,6 +83,14 @@ class Notification < ApplicationRecord
       "/admin/orders?order=#{resource_id}"
     when "Reservation"
       "/admin/reservations?reservation=#{resource_id}"
+    when "Option"
+      # For options, link to the menu item's inventory page
+      option = Option.find_by(id: resource_id)
+      if option&.option_group&.menu_item
+        "/admin/menu/items/#{option.option_group.menu_item.id}/inventory"
+      else
+        "/admin/menu"
+      end
     else
       "/admin"
     end

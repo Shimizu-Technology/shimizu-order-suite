@@ -43,8 +43,14 @@ module Broadcastable
     # First try direct restaurant_id field
     if self.respond_to?(:restaurant_id) && self.restaurant_id.present?
       restaurant_id = self.restaurant_id
-    # Then try direct restaurant association
-    elsif self.respond_to?(:restaurant) && self.restaurant.present?
+    # Try through option_group for Option
+    elsif self.class.name == 'Option' && self.respond_to?(:option_group) && self.option_group.present?
+      restaurant_id = self.option_group.menu_item&.menu&.restaurant_id
+    # Try through menu_item for OptionGroup
+    elsif self.class.name == 'OptionGroup' && self.respond_to?(:menu_item) && self.menu_item.present?
+      restaurant_id = self.menu_item.menu&.restaurant_id
+    # Then try direct restaurant association (avoid for Option and OptionGroup)
+    elsif !['Option', 'OptionGroup'].include?(self.class.name) && self.respond_to?(:restaurant) && self.restaurant.present?
       restaurant_id = self.restaurant.id
     # Then try through menu for MenuItem
     elsif self.class.name == 'MenuItem' && self.respond_to?(:menu) && self.menu.present?
@@ -78,6 +84,10 @@ module Broadcastable
       broadcast_order_update(new_record: is_new_record)
     when 'Notification'
       broadcast_notification
+    when 'Option'
+      broadcast_option_inventory_update if option_inventory_changed?
+    when 'OptionGroup'
+      broadcast_option_group_update if option_group_changed?
     end
   end
 
@@ -93,11 +103,30 @@ module Broadcastable
       broadcast_order_update(destroyed: true)
     when 'Notification'
       broadcast_notification(destroyed: true)
+    when 'Option'
+      broadcast_option_inventory_update(destroyed: true)
+    when 'OptionGroup'
+      broadcast_option_group_update(destroyed: true)
     end
   end
 
   def inventory_changed?
     changed_attributes.keys.any? { |attr| ['stock_quantity', 'damaged_quantity', 'low_stock_threshold', 'enable_stock_tracking'].include?(attr) }
+  end
+
+  # Check if option inventory has changed
+  def option_inventory_changed?
+    return false unless self.class.name == 'Option'
+    return false unless inventory_tracking_enabled?
+    
+    changed_attributes.keys.any? { |attr| ['stock_quantity', 'damaged_quantity', 'is_available'].include?(attr) }
+  end
+
+  # Check if option group has changed
+  def option_group_changed?
+    return false unless self.class.name == 'OptionGroup'
+    
+    changed_attributes.keys.any? { |attr| ['enable_inventory_tracking'].include?(attr) }
   end
 
   def broadcast_menu_item_update(options = {})
@@ -126,6 +155,57 @@ module Broadcastable
     
     Rails.logger.info("Broadcasting inventory_update to #{channel_name} - Item: #{id}")
     ActionCable.server.broadcast(channel_name, payload)
+  end
+
+  # Broadcast option inventory updates
+  def broadcast_option_inventory_update(options = {})
+    restaurant_id = get_restaurant_id
+    return unless restaurant_id.present?
+    
+    menu_item = self.option_group&.menu_item
+    return unless menu_item
+    
+    # Broadcast to both inventory and menu channels for maximum compatibility
+    channel_names = ["inventory_channel_#{restaurant_id}", "menu_channel_#{restaurant_id}"]
+    
+    payload = {
+      type: 'option_inventory_update',
+      menu_item_id: menu_item.id,
+      option_group_id: self.option_group.id,
+      option_id: self.id,
+      option_group: options[:destroyed] ? { id: self.option_group.id, destroyed: true } : option_group_json,
+      menu_item: options[:destroyed] ? { id: menu_item.id } : menu_item_inventory_json(menu_item)
+    }
+    
+    channel_names.each do |channel_name|
+      Rails.logger.info("Broadcasting option_inventory_update to #{channel_name} - Option: #{id}, Group: #{self.option_group.id}, Item: #{menu_item.id}")
+      ActionCable.server.broadcast(channel_name, payload)
+    end
+  end
+
+  # Broadcast option group updates (mainly for inventory tracking changes)
+  def broadcast_option_group_update(options = {})
+    restaurant_id = get_restaurant_id
+    return unless restaurant_id.present?
+    
+    menu_item = self.menu_item
+    return unless menu_item
+    
+    # Broadcast to both inventory and menu channels for maximum compatibility
+    channel_names = ["inventory_channel_#{restaurant_id}", "menu_channel_#{restaurant_id}"]
+    
+    payload = {
+      type: 'option_inventory_update',
+      menu_item_id: menu_item.id,
+      option_group_id: self.id,
+      option_group: options[:destroyed] ? { id: self.id, destroyed: true } : option_group_json,
+      menu_item: options[:destroyed] ? { id: menu_item.id } : menu_item_inventory_json(menu_item)
+    }
+    
+    channel_names.each do |channel_name|
+      Rails.logger.info("Broadcasting option_group_update to #{channel_name} - Group: #{id}, Item: #{menu_item.id}")
+      ActionCable.server.broadcast(channel_name, payload)
+    end
   end
 
   def broadcast_menu_update(options = {})
@@ -220,6 +300,36 @@ module Broadcastable
       enable_stock_tracking: enable_stock_tracking,
       available_quantity: stock_quantity.to_i - damaged_quantity.to_i,
       updated_at: updated_at
+    }
+  end
+
+  # Helper method for option group JSON (includes all options with inventory data)
+  def option_group_json
+    case self.class.name
+    when 'Option'
+      option_group = self.option_group
+    when 'OptionGroup'
+      option_group = self
+    else
+      return {}
+    end
+    
+    option_group.as_json(include: {
+      options: {
+        methods: [:additional_price_float, :available_stock, :in_stock?, :out_of_stock?, :low_stock?, :inventory_tracking_enabled?]
+      }
+    })
+  end
+
+  # Helper method for menu item inventory JSON (for option inventory updates)
+  def menu_item_inventory_json(menu_item)
+    {
+      id: menu_item.id,
+      stock_quantity: menu_item.stock_quantity,
+      damaged_quantity: menu_item.damaged_quantity,
+      available_quantity: menu_item.available_quantity,
+      enable_stock_tracking: menu_item.enable_stock_tracking,
+      updated_at: menu_item.updated_at
     }
   end
 end

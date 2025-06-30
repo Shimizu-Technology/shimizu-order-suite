@@ -563,6 +563,78 @@ class OrdersController < ApplicationController
       end
     end
 
+    # Validate option inventory stock levels for menu items with option-level tracking
+    if @order.items.present?
+      insufficient_options = []
+      
+      @order.items.each do |item|
+        menu_item = menu_items_by_id[item[:id]]
+        next unless menu_item&.uses_option_level_inventory?
+        
+        # Get the option inventory tracking group
+        tracking_group = menu_item.option_inventory_tracking_group
+        next unless tracking_group
+        
+        # Extract customizations to find selected options for inventory tracking
+        customizations = item[:customizations] || {}
+        quantity_ordered = (item[:quantity] || 1).to_i
+        
+        # Check inventory for each customization that maps to tracked options
+        customizations.each do |key, value|
+          # Check if this customization corresponds to the tracking group
+          if key.to_s == tracking_group.id.to_s || key.to_s == tracking_group.name
+            # Find the selected option
+            selected_option = tracking_group.options.find_by(id: value) || tracking_group.options.find_by(name: value)
+            
+            if selected_option
+              available_stock = selected_option.available_stock
+              
+              if available_stock < quantity_ordered
+                insufficient_options << {
+                  item_name: menu_item.name,
+                  option_name: selected_option.name,
+                  option_group: tracking_group.name,
+                  available: available_stock,
+                  requested: quantity_ordered
+                }
+              end
+            end
+          end
+        end
+        
+        # Also check selected_options array format (alternative format)
+        if item[:selected_options].is_a?(Array)
+          item[:selected_options].each do |selected_option_data|
+            option_id = selected_option_data[:id] || selected_option_data["id"]
+            next unless option_id
+            
+            # Check if this option belongs to the tracking group
+            tracked_option = tracking_group.options.find_by(id: option_id)
+            if tracked_option
+              available_stock = tracked_option.available_stock
+              
+              if available_stock < quantity_ordered
+                insufficient_options << {
+                  item_name: menu_item.name,
+                  option_name: tracked_option.name,
+                  option_group: tracking_group.name,
+                  available: available_stock,
+                  requested: quantity_ordered
+                }
+              end
+            end
+          end
+        end
+      end
+      
+      if insufficient_options.any?
+        return render json: {
+          error: "Some selected options have insufficient inventory",
+          insufficient_options: insufficient_options
+        }, status: :unprocessable_entity
+      end
+    end
+
     # Validate merchandise stock levels before accepting the order
     if @order.merchandise_items.present?
       insufficient_items = []
@@ -723,49 +795,27 @@ class OrdersController < ApplicationController
           end
         end
 
-        # Process menu item stock adjustments
+        # Process menu item stock adjustments using OrderService
         if @order.items.present?
           Rails.logger.debug("Order items: #{@order.items.inspect}")
 
-          @order.items.each do |item|
-            item_id = nil
-            if item.is_a?(Hash)
-              item_id = item["id"] || item[:id]
-            elsif item.respond_to?(:id)
-              item_id = item.id
-            elsif item.respond_to?(:with_indifferent_access)
-              item_id = item.with_indifferent_access[:id]
+          order_service = OrderService.new(@order.restaurant)
+          inventory_result = order_service.process_order_inventory(@order.items, @order, @current_user, 'order')
+          
+          unless inventory_result[:success]
+            Rails.logger.error("Order creation inventory processing failed: #{inventory_result[:errors]}")
+            # Rollback the transaction if inventory processing failed
+            raise ActiveRecord::Rollback
             end
 
-            Rails.logger.debug("Extracted menu item ID: #{item_id.inspect}")
-            next unless item_id.present?
-
-            menu_item = MenuItem.find_by(id: item_id)
-            next unless menu_item&.enable_stock_tracking
-
-            quantity = 0
-            if item.is_a?(Hash)
-              quantity = (item["quantity"] || item[:quantity] || 1).to_i
-            elsif item.respond_to?(:quantity)
-              quantity = item.quantity.to_i
-            elsif item.respond_to?(:with_indifferent_access)
-              quantity = item.with_indifferent_access[:quantity].to_i
-            end
-
-            Rails.logger.debug("Extracted quantity: #{quantity.inspect} for menu item #{menu_item.name}")
-
-            current_stock = menu_item.stock_quantity.to_i
-            new_stock = [ current_stock - quantity, 0 ].max
-
-            menu_item.update_stock_quantity(
-              new_stock,
-              "order",
-              "Order ##{@order.order_number.presence || @order.id} - #{quantity} items",
-              @current_user,
-              @order
-            )
-
-            if menu_item.stock_status == "low_stock" && !Rails.env.test? && !test_mode
+          Rails.logger.info("Successfully processed inventory for order #{@order.id}: #{inventory_result[:inventory_changes].length} changes")
+          
+          # Check for low stock notifications (preserved from original logic)
+          inventory_result[:inventory_changes].each do |change|
+            next unless change[:type] == 'item_level'
+            
+            menu_item = MenuItem.find_by(id: change[:menu_item_id])
+            if menu_item&.stock_status == "low_stock" && !Rails.env.test? && !test_mode
               # TODO: implement menu item low-stock notifications if needed
             end
           end
@@ -845,13 +895,98 @@ class OrdersController < ApplicationController
       permitted_params.delete(:status)
     end
 
+    # Pre-validate option inventory if items are being updated
+    if permitted_params[:items].present?
+      insufficient_options = []
+      
+      # Get updated item list
+      new_items = permitted_params[:items]
+      
+      # Load menu items for validation
+      item_ids = new_items.map { |i| i[:id] || i["id"] }.compact.uniq
+      menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
+      
+      new_items.each do |item|
+        item_id = item[:id] || item["id"]
+        menu_item = menu_items_by_id[item_id]
+        next unless menu_item&.uses_option_level_inventory?
+        
+        # Get the option inventory tracking group
+        tracking_group = menu_item.option_inventory_tracking_group
+        next unless tracking_group
+        
+        # Extract customizations and quantity
+        customizations = item[:customizations] || item["customizations"] || {}
+        quantity_ordered = (item[:quantity] || item["quantity"] || 1).to_i
+        
+        # Check inventory for customizations
+        customizations.each do |key, value|
+          if key.to_s == tracking_group.id.to_s || key.to_s == tracking_group.name
+            selected_option = tracking_group.options.find_by(id: value) || tracking_group.options.find_by(name: value)
+            
+            if selected_option
+              available_stock = selected_option.available_stock
+              
+              if available_stock < quantity_ordered
+                insufficient_options << {
+                  item_name: menu_item.name,
+                  option_name: selected_option.name,
+                  option_group: tracking_group.name,
+                  available: available_stock,
+                  requested: quantity_ordered
+                }
+              end
+            end
+          end
+        end
+        
+        # Check selected_options array format
+        selected_options = item[:selected_options] || item["selected_options"]
+        if selected_options.is_a?(Array)
+          selected_options.each do |selected_option_data|
+            option_id = selected_option_data[:id] || selected_option_data["id"]
+            next unless option_id
+            
+            tracked_option = tracking_group.options.find_by(id: option_id)
+            if tracked_option
+              available_stock = tracked_option.available_stock
+              
+              if available_stock < quantity_ordered
+                insufficient_options << {
+                  item_name: menu_item.name,
+                  option_name: tracked_option.name,
+                  option_group: tracking_group.name,
+                  available: available_stock,
+                  requested: quantity_ordered
+                }
+              end
+            end
+          end
+        end
+      end
+      
+      if insufficient_options.any?
+        return render json: {
+          error: "Some selected options have insufficient inventory for this update",
+          insufficient_options: insufficient_options
+        }, status: :unprocessable_entity
+      end
+    end
+
     if order.update(permitted_params)
       # Broadcast the order update via WebSockets
       WebsocketBroadcastService.broadcast_order_update(order)
       
       # 2) If items changed, process inventory diffs
-      if permitted_params[:items].present?
-        process_inventory_changes(original_items, order.items, order)
+      # Skip inventory processing if order has refunds (refunds handle their own inventory)
+      if permitted_params[:items].present? && !order.has_refunds?
+        inventory_success = process_inventory_changes(original_items, order.items, order)
+        unless inventory_success
+          Rails.logger.error("Inventory processing failed for order update #{order.id}")
+          return render json: { error: "Failed to update inventory. Please try again." }, status: :unprocessable_entity
+        end
+      elsif permitted_params[:items].present? && order.has_refunds?
+        Rails.logger.info("Skipping inventory processing for order #{order.id} because it has refunds (refunds handle their own inventory)")
       end
 
       # -- Existing notification logic below --
@@ -946,6 +1081,23 @@ class OrdersController < ApplicationController
             { priority: 0, sound: "pushover" }
           )
         end
+
+      # If status changed to 'cancelled', restore inventory for all items
+      elsif old_status != "cancelled" && order.status == "cancelled"
+        Rails.logger.info("Order #{order.id} was cancelled, restoring inventory for all items")
+        
+        if order.items.present?
+          order_service = OrderService.new(order.restaurant)
+          inventory_result = order_service.revert_order_inventory(order.items, order, current_user, 'cancel')
+          
+          if inventory_result[:success]
+            Rails.logger.info("Successfully restored inventory for cancelled order #{order.id}: #{inventory_result[:inventory_changes].length} changes")
+          else
+            Rails.logger.error("Inventory restoration failed for cancelled order #{order.id}: #{inventory_result[:errors]}")
+            # Note: We don't fail the cancellation if inventory restoration fails
+            # but we log the error for investigation
+          end
+        end
       end
 
       # If status changed to 'ready'
@@ -1020,130 +1172,52 @@ class OrdersController < ApplicationController
   end
 
   # ----------------------------------------------------
-  # The key new method: process_inventory_changes
+  # Enhanced inventory change processing using OrderService
   # ----------------------------------------------------
   def process_inventory_changes(original_items, new_items, order)
-    # Calculate totals by menu item ID to properly handle duplicates
-    original_totals = {}
-    original_items.each do |item|
-      item_id = extract_item_id(item).to_s
-      quantity = extract_quantity(item)
-      original_totals[item_id] ||= 0
-      original_totals[item_id] += quantity
-    end
+    Rails.logger.debug("Processing inventory changes for order #{order.id}")
+    Rails.logger.debug("Original items: #{original_items.inspect}")
+    Rails.logger.debug("New items: #{new_items.inspect}")
 
-    new_totals = {}
-    tracked_items = {}  # To keep track of inventory-tracked items
-
-    new_items.each do |item|
-      item_id = extract_item_id(item).to_s
-      quantity = extract_quantity(item)
-      new_totals[item_id] ||= 0
-      new_totals[item_id] += quantity
-
-      # Store reference to first item with this ID for enable_stock_tracking check
-      tracked_items[item_id] ||= item
-    end
-
-    Rails.logger.debug("Original totals: #{original_totals}")
-    Rails.logger.debug("New totals: #{new_totals}")
-
-    # Process inventory adjustments for each unique menu item ID
-    (original_totals.keys | new_totals.keys).uniq.each do |item_id|
-      menu_item = MenuItem.find_by(id: item_id)
-      next unless menu_item&.enable_stock_tracking
-
-      original_qty = original_totals[item_id] || 0
-      new_qty = new_totals[item_id] || 0
-      qty_diff = new_qty - original_qty
-
-      # Skip if no change in quantity
-      next if qty_diff == 0
-
-      # If item is new to the order (wasn't in original)
-      if original_qty == 0
-        process_new_item(menu_item, new_qty, order)
-      # If item was removed from the order
-      elsif new_qty == 0
-        process_removed_item(menu_item, original_qty, order)
-      # If quantity changed
-      else
-        process_quantity_change(menu_item, original_qty, new_qty, qty_diff, order)
+    order_service = OrderService.new(order.restaurant)
+    
+    begin
+      # Step 1: Revert inventory for original items
+      if original_items.present?
+        revert_result = order_service.revert_order_inventory(original_items, order, @current_user)
+        unless revert_result[:success]
+          Rails.logger.error("Failed to revert original inventory: #{revert_result[:errors]}")
+          return false
+        end
+        Rails.logger.info("Reverted inventory for #{revert_result[:inventory_changes].length} original items")
       end
+      
+      # Step 2: Process inventory for new items
+      if new_items.present?
+        process_result = order_service.process_order_inventory(new_items, order, @current_user, 'order')
+        unless process_result[:success]
+          Rails.logger.error("Failed to process new inventory: #{process_result[:errors]}")
+          # If processing new items fails, we need to restore the original items
+          if original_items.present?
+            restore_result = order_service.process_order_inventory(original_items, order, @current_user, 'order')
+            Rails.logger.warn("Attempted to restore original inventory: #{restore_result[:success] ? 'success' : 'failed'}")
+          end
+          return false
+        end
+        Rails.logger.info("Processed inventory for #{process_result[:inventory_changes].length} new items")
+      end
+      
+      Rails.logger.info("Successfully processed inventory changes for order #{order.id}")
+      true
+      
+    rescue StandardError => e
+      Rails.logger.error("Error processing inventory changes: #{e.message}")
+      Rails.logger.error(e.backtrace.join("\n"))
+      false
     end
   end
 
-  # Helper methods for inventory processing
-
-  def extract_item_id(item)
-    if item.is_a?(Hash)
-      item[:id] || item["id"]
-    elsif item.respond_to?(:id)
-      item.id
-    elsif item.respond_to?(:with_indifferent_access)
-      item.with_indifferent_access[:id]
-    end
-  end
-
-  def extract_quantity(item)
-    quantity = 1 # Default
-    if item.is_a?(Hash)
-      quantity = (item[:quantity] || item["quantity"] || 1).to_i
-    elsif item.respond_to?(:quantity)
-      quantity = item.quantity.to_i
-    elsif item.respond_to?(:with_indifferent_access)
-      quantity = item.with_indifferent_access[:quantity].to_i
-    end
-    quantity
-  end
-
-  def process_new_item(menu_item, quantity, order)
-    current_stock = menu_item.stock_quantity.to_i
-    new_stock = [ current_stock - quantity, 0 ].max
-
-    menu_item.update_stock_quantity(
-      new_stock,
-      "order",
-      "Order ##{order.order_number.presence || order.id} - Added item during edit (qty #{quantity})",
-      @current_user,
-      order
-    )
-  end
-
-  def process_removed_item(menu_item, quantity, order)
-    # Only add back 1 at a time for removed items to prevent double-counting
-    # since the frontend InventoryReversionDialog may have already handled some
-    current_stock = menu_item.stock_quantity.to_i
-
-    # Get the count of this item that was in the previous order
-    removed_qty = quantity
-
-    # Add debug logging
-    Rails.logger.debug("Returning item to inventory: #{menu_item.name}, quantity: #{removed_qty}, current stock: #{current_stock}")
-
-    new_stock = current_stock + removed_qty
-
-    menu_item.update_stock_quantity(
-      new_stock,
-      "adjustment",
-      "Order ##{order.order_number.presence || order.id} - Removed item during edit (qty #{removed_qty})",
-      @current_user,
-      order
-    )
-  end
-
-  def process_quantity_change(menu_item, original_qty, new_qty, qty_diff, order)
-    current_stock = menu_item.stock_quantity.to_i
-    new_stock = current_stock - qty_diff
-
-    menu_item.update_stock_quantity(
-      [ new_stock, 0 ].max,
-      "adjustment",
-      "Order ##{order.order_number.presence || order.id} - Quantity changed from #{original_qty} to #{new_qty}",
-      @current_user,
-      order
-    )
-  end
+  # Helper methods for inventory processing (moved to OrderService)
 
   # Send order ready notifications via email, SMS, and Pushover
   def send_order_ready_notifications(order)
