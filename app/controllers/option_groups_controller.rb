@@ -115,7 +115,8 @@ class OptionGroupsController < ApplicationController
     return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
 
     quantities = params.require(:quantities).permit!.to_h
-    result = OptionInventoryService.update_option_quantities(option_group, quantities, current_user)
+    reason = params[:reason] # Optional reason for the adjustment
+    result = OptionInventoryService.update_option_quantities(option_group, quantities, current_user, reason)
     
     if result[:success]
       render json: { 
@@ -130,6 +131,36 @@ class OptionGroupsController < ApplicationController
         updated_options: result[:updated_options].map { |option|
           option.as_json(methods: [:additional_price_float, :available_stock, :in_stock?, :out_of_stock?])
         }
+      }
+    else
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
+    end
+  end
+
+  # PATCH /option_groups/:id/update_single_option_quantity
+  def update_single_option_quantity
+    option_group = find_option_group_with_tenant_scope(params[:id])
+    return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
+
+    option_id = params.require(:option_id)
+    quantity = params.require(:quantity)
+    reason = params[:reason] # Optional reason for the adjustment
+    
+    result = OptionInventoryService.update_single_option_quantity(option_group, option_id, quantity, current_user, reason)
+    
+    if result[:success]
+      render json: { 
+        message: "Option quantity updated successfully",
+        option_group: option_group.reload.as_json(
+          include: {
+            options: {
+              methods: [:additional_price_float, :available_stock, :in_stock?, :out_of_stock?]
+            }
+          }
+        ),
+        menu_item: option_group.menu_item.reload.as_json(
+          only: [:id, :name, :stock_quantity]
+        )
       }
     else
       render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity

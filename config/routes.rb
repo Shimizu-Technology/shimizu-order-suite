@@ -364,6 +364,7 @@ Rails.application.routes.draw do
       post :enable_inventory_tracking
       delete :disable_inventory_tracking
       patch :update_option_quantities
+      patch :update_single_option_quantity
       post :mark_options_damaged
       get :inventory_status
       get :audit_history

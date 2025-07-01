@@ -75,7 +75,7 @@ class OptionInventoryService
   end
 
   # Update stock quantities for multiple options
-  def self.update_option_quantities(option_group, quantities_hash, current_user = nil)
+  def self.update_option_quantities(option_group, quantities_hash, current_user = nil, reason = nil)
     begin
       return { success: false, errors: ["Option group not found"], status: :not_found } unless option_group
       return { success: false, errors: ["Option inventory tracking not enabled"], status: :unprocessable_entity } unless option_group.inventory_tracking_enabled?
@@ -88,10 +88,11 @@ class OptionInventoryService
       # Auto-sync menu item stock to match option quantities total for option-level tracking
       if total_option_stock != current_menu_item_stock
         Rails.logger.info("Auto-syncing menu item #{menu_item.id} stock from #{current_menu_item_stock} to #{total_option_stock} to match option quantities")
+        adjustment_reason = reason || "Auto-sync: Updated menu item stock to match option quantities total (#{total_option_stock})"
         menu_item.update_stock_quantity(
           total_option_stock,
           "option_sync", 
-          "Auto-sync: Updated menu item stock to match option quantities total (#{total_option_stock})",
+          adjustment_reason,
           current_user
         )
       end
@@ -110,10 +111,11 @@ class OptionInventoryService
           option.update_column(:stock_quantity, quantity.to_i)
           updated_options << option
 
-          # Create audit record
-          OptionStockAudit.create_stock_record(option, quantity.to_i, :adjustment, "Manual stock update (#{option.name})", current_user)
+          # Create audit record with proper reason
+          audit_reason = reason || "Manual stock update (#{option.name})"
+          OptionStockAudit.create_stock_record(option, quantity.to_i, :adjustment, audit_reason, current_user)
 
-          Rails.logger.info("Updated option #{option_id} stock from #{old_quantity} to #{quantity} by user #{current_user&.id}")
+          Rails.logger.info("Updated option #{option_id} stock from #{old_quantity} to #{quantity} by user #{current_user&.id} - Reason: #{audit_reason}")
         end
 
         # Reload options to get fresh data
@@ -131,6 +133,65 @@ class OptionInventoryService
     rescue => e
       Rails.logger.error("Failed to update option quantities: #{e.message}")
       { success: false, errors: ["Failed to update option quantities"], status: :internal_server_error }
+    end
+  end
+
+  # Update a single option quantity without affecting other options
+  def self.update_single_option_quantity(option_group, option_id, quantity, current_user = nil, reason = nil)
+    begin
+      return { success: false, errors: ["Option group not found"], status: :not_found } unless option_group
+      return { success: false, errors: ["Option inventory tracking not enabled"], status: :unprocessable_entity } unless option_group.inventory_tracking_enabled?
+
+      option = option_group.options.find_by(id: option_id)
+      return { success: false, errors: ["Option not found"], status: :not_found } unless option
+
+      old_quantity = option.stock_quantity
+      new_quantity = quantity.to_i
+
+      # Validate the new quantity
+      if new_quantity < 0
+        return { success: false, errors: ["Quantity cannot be negative"], status: :unprocessable_entity }
+      end
+
+      ActiveRecord::Base.transaction do
+        # Calculate the difference in stock for this option
+        quantity_difference = new_quantity - old_quantity
+        
+        # Update the specific option
+        option.update_column(:stock_quantity, new_quantity)
+
+        # Adjust menu item stock by the same difference (no redistribution)
+        menu_item = option_group.menu_item
+        current_menu_item_stock = menu_item.stock_quantity&.to_i || 0
+        new_menu_item_stock = current_menu_item_stock + quantity_difference
+
+        # Ensure menu item stock doesn't go negative
+        if new_menu_item_stock < 0
+          raise "Menu item stock would become negative (#{new_menu_item_stock}). Cannot reduce option below available menu item stock."
+        end
+
+        # Update menu item stock with proper reason
+        menu_item_reason = reason || "Single option update: #{option.name} changed from #{old_quantity} to #{new_quantity}"
+        menu_item.update_stock_quantity(
+          new_menu_item_stock,
+          "option_update", 
+          menu_item_reason,
+          current_user
+        )
+
+        # Create audit record for the option with proper reason
+        audit_reason = reason || "Single option inventory adjustment (#{option.name})"
+        OptionStockAudit.create_stock_record(option, new_quantity, :adjustment, audit_reason, current_user)
+
+        Rails.logger.info("Updated single option #{option_id} stock from #{old_quantity} to #{new_quantity}, adjusted menu item stock by #{quantity_difference} to #{new_menu_item_stock} - Reason: #{audit_reason}")
+      end
+
+      { success: true, option: option.reload, status: :ok }
+    rescue ActiveRecord::RecordInvalid => e
+      { success: false, errors: e.record.errors.full_messages, status: :unprocessable_entity }
+    rescue => e
+      Rails.logger.error("Failed to update single option quantity: #{e.message}")
+      { success: false, errors: [e.message], status: :internal_server_error }
     end
   end
 
