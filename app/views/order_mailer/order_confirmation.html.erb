@@ -44,14 +44,26 @@
                   <strong>Total:</strong> $<%= sprintf("%.2f", @order.total.to_f) %>
                 </td>
               </tr>
-              <% if @order.location.present? %>
+              <% if @order.location.present? || @restaurant&.custom_pickup_location.present? %>
               <tr>
                 <td style="padding: 5px 0;">
-                  <strong>Pickup Location:</strong> <%= @order.location.name %>
-                  <div style="margin-top: 5px; margin-left: 10px; color: #555;">
-                    <%= @order.location.address %><br>
-                    <%= @order.location.phone_number %>
-                  </div>
+                  <strong>Pickup Location:</strong> 
+                  <% if @restaurant&.custom_pickup_location.present? %>
+                    Special Pickup Location
+                    <div style="margin-top: 5px; margin-left: 10px; color: #555;">
+                      <%= @restaurant.custom_pickup_location %><br>
+                      <%= @restaurant.phone_number %>
+                      <div style="margin-top: 5px; color: #d97706; font-weight: bold;">
+                        ⚠️ Please note: This is not our usual address
+                      </div>
+                    </div>
+                  <% else %>
+                    <%= @order.location.name %>
+                    <div style="margin-top: 5px; margin-left: 10px; color: #555;">
+                      <%= @order.location.address %><br>
+                      <%= @order.location.phone_number %>
+                    </div>
+                  <% end %>
                 </td>
               </tr>
               <% end %>
@@ -82,7 +94,28 @@
               <tr>
                 <td style="padding: 5px 0;">
                   <strong>Pickup Time:</strong>
-                  We’ll send you another message with your ETA as soon as we start preparing your order.
+                  We'll send you another message with your ETA as soon as we start preparing your order.
+                </td>
+              </tr>
+              
+              <!-- Pickup Instructions -->
+              <tr>
+                <td style="padding: 5px 0;">
+                  <strong>Pickup Instructions:</strong>
+                  <% if @restaurant&.admin_settings&.dig("custom_pickup_instructions").present? %>
+                    <div style="margin-top: 5px; margin-left: 10px; color: #555; white-space: pre-line;">
+                      <%= @restaurant.admin_settings["custom_pickup_instructions"] %>
+                    </div>
+                    <div style="margin-top: 5px; color: #d97706; font-style: italic; font-size: 14px;">
+                      Special pickup instructions for this order
+                    </div>
+                  <% else %>
+                    <ol style="margin: 8px 0 0 30px; padding: 0; color: #555;">
+                      <li style="margin-bottom: 5px;">Park in the designated pickup spots</li>
+                      <li style="margin-bottom: 5px;">Come inside and show your order number at the counter</li>
+                      <li style="margin-bottom: 5px;">Your order will be ready at the time indicated</li>
+                    </ol>
+                  <% end %>
                 </td>
               </tr>
             </table>
@@ -104,7 +137,10 @@
                      border-top: 1px solid #ddd;">
             <p style="margin: 0;">
               <strong><%= @restaurant&.name || 'Restaurant' %></strong><br/>
-              <% if @order.location.present? %>
+              <% if @restaurant&.custom_pickup_location.present? %>
+                Special Pickup Location<br/>
+                <%= @restaurant.custom_pickup_location %><%= @restaurant.custom_pickup_location.present? && @restaurant.phone_number.present? ? ' | ' : '' %><%= @restaurant.phone_number || '' %>
+              <% elsif @order.location.present? %>
                 <%= @order.location.name %><br/>
                 <%= @order.location.address %><%= @order.location.address.present? && @order.location.phone_number.present? ? ' | ' : '' %><%= @order.location.phone_number || '' %>
               <% else %>

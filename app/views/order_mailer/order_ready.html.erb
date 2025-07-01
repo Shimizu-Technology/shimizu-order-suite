@@ -21,16 +21,48 @@
               Great news! Your <%= @restaurant&.name || 'Restaurant' %> order (<strong>#<%= @order.order_number.presence || @order.id %></strong>) is now ready to be picked up.
             </p>
             
-            <% if @order.location.present? %>
+            <% if @order.location.present? || @restaurant&.custom_pickup_location.present? %>
             <div style="margin: 20px 0; padding: 15px; border: 1px solid #e0e0e0; border-radius: 5px; background-color: #f9f9f9;">
               <p style="margin: 0 0 10px; font-weight: bold; color: #333; font-size: 16px;">
                 Pickup Location:
               </p>
-              <p style="margin: 0 0 5px; color: #333; font-size: 15px;">
-                <strong><%= @order.location.name %></strong><br>
-                <%= @order.location.address %><br>
-                <%= @order.location.phone_number %>
-              </p>
+              <% if @restaurant&.custom_pickup_location.present? %>
+                <p style="margin: 0 0 5px; color: #333; font-size: 15px;">
+                  <strong>Special Pickup Location</strong><br>
+                  <%= @restaurant.custom_pickup_location %><br>
+                  <%= @restaurant.phone_number %>
+                </p>
+                <p style="margin: 5px 0 0 0; color: #d97706; font-weight: bold; font-size: 14px;">
+                  ⚠️ Please note: This is not our usual address
+                </p>
+              <% else %>
+                <p style="margin: 0 0 5px; color: #333; font-size: 15px;">
+                  <strong><%= @order.location.name %></strong><br>
+                  <%= @order.location.address %><br>
+                  <%= @order.location.phone_number %>
+                </p>
+              <% end %>
+              
+              <!-- Pickup Instructions -->
+              <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                <p style="margin: 0 0 10px; font-weight: bold; color: #333; font-size: 16px;">
+                  Pickup Instructions:
+                </p>
+                <% if @restaurant&.admin_settings&.dig("custom_pickup_instructions").present? %>
+                  <div style="margin: 0; color: #333; font-size: 15px; white-space: pre-line;">
+                    <%= @restaurant.admin_settings["custom_pickup_instructions"] %>
+                  </div>
+                  <p style="margin: 5px 0 0 0; color: #d97706; font-style: italic; font-size: 14px;">
+                    Special pickup instructions for this order
+                  </p>
+                <% else %>
+                  <ol style="margin: 0; padding-left: 20px; color: #333; font-size: 15px;">
+                    <li style="margin-bottom: 5px;">Park in the designated pickup spots</li>
+                    <li style="margin-bottom: 5px;">Come inside and show your order number at the counter</li>
+                    <li style="margin-bottom: 5px;">Your order will be ready at the time indicated</li>
+                  </ol>
+                <% end %>
+              </div>
             </div>
             <% end %>
             <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
