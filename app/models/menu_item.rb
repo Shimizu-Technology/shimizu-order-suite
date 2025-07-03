@@ -22,6 +22,12 @@ class MenuItem < ApplicationRecord
 
   # Callback to reset inventory fields when tracking is disabled
   before_save :reset_inventory_fields_if_tracking_disabled
+  # Callback to ensure fresh start when tracking is enabled
+  before_save :reset_damaged_quantity_if_tracking_enabled
+  # Callback to create audit record when tracking is enabled
+  after_save :create_tracking_enabled_audit_record
+  # Callback to create audit record when tracking is disabled
+  after_save :create_tracking_disabled_audit_record
 
   # Many-to-many categories
   has_many :menu_item_categories, dependent: :destroy
@@ -358,8 +364,23 @@ class MenuItem < ApplicationRecord
       self.damaged_quantity = nil
       self.low_stock_threshold = nil
 
+      # Also reset ALL option quantities when menu item tracking is disabled
+      reset_all_option_quantities("Menu item inventory tracking disabled")
+
       # Also ensure stock status is not based on inventory
       self.stock_status = "in_stock" unless stock_status_changed?
+    end
+  end
+
+  # Reset damaged quantity to 0 when tracking is enabled
+  def reset_damaged_quantity_if_tracking_enabled
+    if enable_stock_tracking_changed? && enable_stock_tracking
+      self.damaged_quantity = 0
+      
+      Rails.logger.info("Menu item #{id} (#{name}) - Inventory tracking enabled: damaged_quantity reset to 0 for fresh start")
+      
+      # Also reset ALL option quantities when menu item tracking is enabled for fresh start
+      reset_all_option_quantities("Menu item inventory tracking enabled - fresh start")
     end
   end
 
@@ -379,5 +400,44 @@ class MenuItem < ApplicationRecord
     if categories.empty? && category_ids.blank?
       errors.add(:base, "Menu item must be assigned to at least one category")
     end
+  end
+
+  # Create audit record when tracking is enabled
+  def create_tracking_enabled_audit_record
+    if saved_change_to_enable_stock_tracking? && enable_stock_tracking
+      MenuItemStockAudit.create_stock_record(
+        self,
+        stock_quantity.to_i,
+        "adjustment",
+        "Menu item inventory tracking enabled - fresh start",
+        nil
+      )
+    end
+  end
+
+  # Create audit record when tracking is disabled
+  def create_tracking_disabled_audit_record
+    if saved_change_to_enable_stock_tracking? && !enable_stock_tracking
+      MenuItemStockAudit.create_stock_record(
+        self,
+        0,
+        "adjustment",
+        "Menu item inventory tracking disabled - all quantities reset",
+        nil
+      )
+    end
+  end
+
+  # Reset all option quantities when menu item inventory tracking is disabled
+  def reset_all_option_quantities(reason)
+    return unless option_groups.exists?
+    
+    Rails.logger.info("Menu item #{id} (#{name}) - Resetting all option quantities: #{reason}")
+    
+    option_groups.each do |group|
+      group.reset_quantities(reason)
+    end
+    
+    Rails.logger.info("Menu item #{id} (#{name}) - Completed resetting option quantities for #{option_groups.count} option groups")
   end
 end

@@ -32,6 +32,31 @@ class OptionInventoryService
         # Initialize option stock quantities to match proportions if menu item has stock
         if option_group.menu_item.stock_quantity&.positive?
           initialize_option_stock_quantities(option_group)
+          
+          # Create audit records for the fresh start
+          option_group.options.each do |option|
+            OptionStockAudit.create_stock_record(
+              option,
+              option.stock_quantity,
+              "tracking_enabled",
+              "Inventory tracking enabled - fresh start with stock distributed from menu item (#{option_group.menu_item.stock_quantity} total)",
+              current_user
+            )
+          end
+        else
+          # Reset all option inventory fields to 0 when no menu item stock
+          option_group.options.update_all(stock_quantity: 0, damaged_quantity: 0)
+          
+          # Create audit records for the fresh start
+          option_group.options.each do |option|
+            OptionStockAudit.create_stock_record(
+              option.reload,
+              0,
+              "tracking_enabled",
+              "Inventory tracking enabled - fresh start with no initial stock",
+              current_user
+            )
+          end
         end
 
         # Validate after initialization to ensure everything is correct
@@ -58,6 +83,17 @@ class OptionInventoryService
       return { success: false, errors: ["Option group not found"], status: :not_found } unless option_group
 
       ActiveRecord::Base.transaction do
+        # Create audit records before resetting (to capture the final state)
+        option_group.options.each do |option|
+          OptionStockAudit.create_stock_record(
+            option,
+            0,
+            "tracking_disabled",
+            "Inventory tracking disabled - all quantities reset to 0",
+            current_user
+          )
+        end
+        
         # Reset all option stock quantities to 0
         option_group.options.update_all(stock_quantity: 0, damaged_quantity: 0)
 
@@ -433,7 +469,15 @@ class OptionInventoryService
 
     option_group.options.each_with_index do |option, index|
       additional = index < remainder ? 1 : 0
-      option.update_column(:stock_quantity, per_option + additional)
+      new_quantity = per_option + additional
+      
+      # Reset ALL inventory-related fields for fresh start
+      option.update_columns(
+        stock_quantity: new_quantity,
+        damaged_quantity: 0  # Always start fresh with no damaged items
+      )
+      
+      Rails.logger.info("Initialized option #{option.id} (#{option.name}) - Stock: #{new_quantity}, Damaged: 0 (fresh start)")
     end
   end
 

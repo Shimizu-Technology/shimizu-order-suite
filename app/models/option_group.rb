@@ -125,4 +125,28 @@ class OptionGroup < ApplicationRecord
       end
     end
   end
+
+  # Reset all option quantities in this group (used when menu item tracking is toggled)
+  def reset_quantities(reason)
+    Rails.logger.info("Resetting all option quantities for group #{id} (#{name}): #{reason}")
+    
+    # Create audit records before resetting (to document the reset)
+    options.each do |option|
+      # Only create audit if there was actually some inventory to reset
+      if option.stock_quantity.to_i > 0 || option.damaged_quantity.to_i > 0
+        OptionStockAudit.create_stock_record(
+          option,
+          0,
+          "adjustment",
+          reason,
+          nil
+        )
+      end
+    end
+    
+    # Reset all options in this group to 0 quantities
+    options.update_all(stock_quantity: 0, damaged_quantity: 0)
+    
+    Rails.logger.info("Reset #{options.count} options to 0 quantities in group #{id}")
+  end
 end
