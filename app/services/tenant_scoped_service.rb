@@ -94,8 +94,16 @@ class TenantScopedService
         # Method accepts a restaurant parameter
         return model_class.with_restaurant_scope(@restaurant)
       else
-        # Method doesn't accept parameters (uses ActiveRecord::Base.current_restaurant)
-        return model_class.with_restaurant_scope
+        # Method doesn't accept parameters (uses ApplicationRecord.current_restaurant)
+        # Temporarily set the current restaurant context for IndirectTenantScoped models
+        previous_restaurant = ApplicationRecord.current_restaurant
+        begin
+          ApplicationRecord.current_restaurant = @restaurant
+          return model_class.with_restaurant_scope
+        ensure
+          # Always restore the previous context
+          ApplicationRecord.current_restaurant = previous_restaurant
+        end
       end
     end
     

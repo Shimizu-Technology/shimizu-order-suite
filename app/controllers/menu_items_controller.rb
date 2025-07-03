@@ -33,8 +33,8 @@ class MenuItemsController < ApplicationController
             option_groups: {
               include: {
                 options: {
-                  only: [ :id, :name, :available, :is_preselected, :is_available ],
-                  methods: [ :additional_price_float ]
+                  only: [ :id, :name, :available, :is_preselected, :is_available, :stock_quantity, :damaged_quantity ],
+                  methods: [ :additional_price_float, :available_stock, :in_stock?, :out_of_stock?, :low_stock?, :inventory_tracking_enabled? ]
                 }
               }
             }
@@ -56,8 +56,8 @@ class MenuItemsController < ApplicationController
             option_groups: {
               include: {
                 options: {
-                  only: [ :id, :name, :available, :is_preselected, :is_available ],
-                  methods: [ :additional_price_float ]
+                  only: [ :id, :name, :available, :is_preselected, :is_available, :stock_quantity, :damaged_quantity ],
+                  methods: [ :additional_price_float, :available_stock, :in_stock?, :out_of_stock?, :low_stock?, :inventory_tracking_enabled? ]
                 }
               }
             }
@@ -76,8 +76,8 @@ class MenuItemsController < ApplicationController
           option_groups: {
             include: {
               options: {
-                only: [ :id, :name, :available, :is_preselected, :is_available ],
-                methods: [ :additional_price_float ]
+                only: [ :id, :name, :available, :is_preselected, :is_available, :stock_quantity, :damaged_quantity ],
+                methods: [ :additional_price_float, :available_stock, :in_stock?, :out_of_stock?, :low_stock?, :inventory_tracking_enabled? ]
               }
             }
           }
