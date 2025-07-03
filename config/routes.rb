@@ -343,6 +343,7 @@ Rails.application.routes.draw do
       post :update_stock
       get :stock_audits
       post :copy
+      post :move
       # Option inventory synchronization
       post :force_synchronize_option_inventory
       get :validate_option_inventory_sync

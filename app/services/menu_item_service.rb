@@ -324,6 +324,7 @@ class MenuItemService < TenantScopedService
     target_menu_id = params[:target_menu_id]
     category_ids = params[:category_ids] || []
     new_name = params[:new_name]
+    operation_type = params[:operation_type] || 'clone' # 'clone' or 'move'
     
     unless target_menu_id.present?
       return { success: false, errors: ["Target menu ID is required"], status: :unprocessable_entity }
@@ -333,6 +334,22 @@ class MenuItemService < TenantScopedService
     target_menu = scope_query(Menu).find_by(id: target_menu_id)
     return { success: false, errors: ["Target menu not found"], status: :not_found } unless target_menu
     
+    case operation_type
+    when 'move'
+      move_item_to_menu(source_item, target_menu_id, category_ids)
+    when 'clone'
+      clone_item_to_menu(source_item, target_menu_id, category_ids, new_name)
+    else
+      { success: false, errors: ["Invalid operation type"], status: :unprocessable_entity }
+    end
+  rescue ActiveRecord::RecordNotFound
+    { success: false, errors: ["Menu item not found"], status: :not_found }
+  end
+
+  private
+
+  # Clone item (creates fresh copy with no inventory data)
+  def clone_item_to_menu(source_item, target_menu_id, category_ids, new_name)
     # Create a new item with the same attributes but new menu_id
     new_item = source_item.dup
     new_item.menu_id = target_menu_id
@@ -347,34 +364,34 @@ class MenuItemService < TenantScopedService
     # Assign categories
     new_item.category_ids = category_ids if category_ids.present?
     
-    # Reset inventory audit history while keeping current inventory values
-    if new_item.enable_stock_tracking
-      new_item.stock_quantity = source_item.stock_quantity
-      new_item.damaged_quantity = source_item.damaged_quantity
-      new_item.low_stock_threshold = source_item.low_stock_threshold
-      # Don't copy inventory_audits - they should start fresh
-    end
+    # Reset all inventory-related fields for cloning (fresh start)
+    new_item.enable_stock_tracking = false  # Disable tracking by default
+    new_item.stock_quantity = nil
+    new_item.damaged_quantity = 0
+    new_item.low_stock_threshold = nil
+    new_item.stock_status = 'in_stock'  # Default status
     
     # Keep the same image URL
     new_item.image_url = source_item.image_url
     
-    # Tenant isolation is already handled by the scope_query method
-    # and the tenant context set in the controller
-    
     # Save the new item
     if new_item.save
-      # Copy all option groups and their options
+      # Copy all option groups and their options (without inventory data)
       if source_item.option_groups.present?
         source_item.option_groups.each do |source_group|
           # Create a new option group for the new item
           new_group = source_group.dup
           new_group.menu_item_id = new_item.id
+          new_group.enable_inventory_tracking = false  # Disable option inventory tracking
           
           if new_group.save
-            # Copy all options within the group
+            # Copy all options within the group (without inventory data)
             source_group.options.each do |source_option|
               new_option = source_option.dup
               new_option.option_group_id = new_group.id
+              # Reset option inventory data
+              new_option.stock_quantity = nil
+              new_option.damaged_quantity = 0
               new_option.save
             end
           end
@@ -385,11 +402,22 @@ class MenuItemService < TenantScopedService
     else
       { success: false, errors: new_item.errors.full_messages, status: :unprocessable_entity }
     end
-  rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu item not found"], status: :not_found }
   end
 
-  private
+  # Move item (preserves all data including inventory and audit history)
+  def move_item_to_menu(source_item, target_menu_id, category_ids)
+    # For moving, we update the existing item's menu_id and categories
+    # This preserves all inventory data, audit history, and relationships
+    
+    source_item.menu_id = target_menu_id
+    source_item.category_ids = category_ids if category_ids.present?
+    
+    if source_item.save
+      { success: true, menu_item: source_item, status: :ok }
+    else
+      { success: false, errors: source_item.errors.full_messages, status: :unprocessable_entity }
+    end
+  end
 
   def is_admin?
     current_user && current_user.role.in?(%w[admin super_admin])

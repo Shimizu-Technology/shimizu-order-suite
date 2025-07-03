@@ -275,6 +275,23 @@ class MenuItemsController < ApplicationController
     end
   end
 
+  # POST /menu_items/:id/move
+  def move
+    Rails.logger.info "=== MenuItemsController#move ==="
+    
+    # Add operation_type parameter to indicate this is a move operation
+    move_params = params.merge(operation_type: 'move')
+    result = menu_item_service.copy_item(params[:id], move_params)
+    
+    if result[:success]
+      Rails.logger.info "Moved MenuItem => #{result[:menu_item].inspect}"
+      render json: result[:menu_item], status: :ok
+    else
+      Rails.logger.info "Failed to move menu item => #{result[:errors].inspect}"
+      render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
+    end
+  end
+
   # POST /menu_items/:id/force_synchronize_option_inventory
   def force_synchronize_option_inventory
     menu_item = menu_item_service.find_item(params[:id])
