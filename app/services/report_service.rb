@@ -4,13 +4,14 @@ class ReportService < TenantScopedService
   def menu_items_report(start_date, end_date)
     # Query to get all order items in date range
     orders = scope_query(Order)
-              .includes(:order_payments)
+              .includes(:order_payments, :staff_member, :created_by_staff, :created_by_user, :location)
               .where(created_at: start_date..end_date)
               .where.not(status: 'canceled')
     
     # Process orders to get item data
     item_data = {}
     category_data = {}
+    detailed_item_orders = [] # NEW: Track individual order details for each item
     
     # Create a cache of menu item IDs to their categories
     menu_item_categories = {}
@@ -124,6 +125,52 @@ class ReportService < TenantScopedService
         
         category_data[category][:quantity_sold] += net_quantity
         category_data[category][:revenue] += net_quantity * price
+        
+        # NEW: Add detailed order information for each item sale
+        detailed_item_orders << {
+          # Item information
+          item_id: item_id.to_i,
+          item_name: item_name,
+          category: category,
+          quantity: net_quantity,
+          unit_price: price,
+          total_price: net_quantity * price,
+          customizations: customizations,
+          
+          # Order information
+          order_id: order.id,
+          order_number: order.order_number,
+          order_status: order.status,
+          order_total: order.total.to_f,
+          payment_method: order.payment_method,
+          payment_status: order.payment_status,
+          created_at: order.created_at.iso8601,
+          estimated_pickup_time: order.estimated_pickup_time&.iso8601,
+          special_instructions: order.special_instructions,
+          vip_code: order.vip_code,
+          
+          # Location information
+          location_name: order.location&.name,
+          location_address: order.location&.address,
+          
+          # Customer or Staff information
+          is_staff_order: order.is_staff_order,
+          
+          # For regular customer orders
+          customer_name: order.is_staff_order ? nil : order.contact_name,
+          customer_phone: order.is_staff_order ? nil : order.contact_phone,
+          customer_email: order.is_staff_order ? nil : order.contact_email,
+          
+          # For staff orders
+          staff_member_name: order.is_staff_order ? order.staff_member&.name : nil,
+          created_by_staff_name: order.created_by_staff&.name,
+          created_by_user_name: order.created_by_user&.full_name,
+          
+          # Payment and refund details
+          has_refunds: order.has_refunds?,
+          total_refunded: order.total_refunded.to_f,
+          net_amount: (order.total - order.total_refunded).to_f
+        }
       end
     end
     
@@ -134,7 +181,8 @@ class ReportService < TenantScopedService
     
     {
       items: item_data.values,
-      categories: category_data.values
+      categories: category_data.values,
+      detailed_orders: detailed_item_orders # NEW: Include detailed order information
     }
   end
 
@@ -142,10 +190,12 @@ class ReportService < TenantScopedService
   def payment_methods_report(start_date, end_date)
     # Initialize payment data hash
     payment_data = {}
+    detailed_payment_orders = [] # NEW: Track individual order details for each payment method
     
     # 1. Get payments from OrderPayment table (excluding refunds)
     # Since OrderPayment doesn't have restaurant_id, we need to join with orders and filter by restaurant_id
     payments = OrderPayment.joins(:order)
+                        .includes(order: [:staff_member, :created_by_staff, :created_by_user, :location])
                         .where(orders: { restaurant_id: @restaurant.id })
                         .where(created_at: start_date..end_date)
                         .where.not(payment_type: 'refund')
@@ -153,6 +203,7 @@ class ReportService < TenantScopedService
     # Process OrderPayment records
     payments.each do |payment|
       method = payment.payment_method || 'unknown'
+      order = payment.order
       
       payment_data[method] ||= {
         payment_method: method,
@@ -162,12 +213,61 @@ class ReportService < TenantScopedService
       
       payment_data[method][:count] += 1
       payment_data[method][:amount] += payment.amount.to_f  # Convert to float
+      
+      # NEW: Add detailed order information for each payment
+      detailed_payment_orders << {
+        # Payment information
+        payment_id: payment.id,
+        payment_method: method,
+        payment_amount: payment.amount.to_f,
+        payment_status: payment.status,
+        payment_type: payment.payment_type,
+        payment_description: payment.description,
+        transaction_id: payment.transaction_id,
+        
+        # Order information
+        order_id: order.id,
+        order_number: order.order_number,
+        order_status: order.status,
+        order_total: order.total.to_f,
+        created_at: order.created_at.iso8601,
+        estimated_pickup_time: order.estimated_pickup_time&.iso8601,
+        special_instructions: order.special_instructions,
+        vip_code: order.vip_code,
+        
+        # Location information
+        location_name: order.location&.name,
+        location_address: order.location&.address,
+        
+        # Customer or Staff information
+        is_staff_order: order.is_staff_order,
+        
+        # For regular customer orders
+        customer_name: order.is_staff_order ? nil : order.contact_name,
+        customer_phone: order.is_staff_order ? nil : order.contact_phone,
+        customer_email: order.is_staff_order ? nil : order.contact_email,
+        
+        # For staff orders
+        staff_member_name: order.is_staff_order ? order.staff_member&.name : nil,
+        created_by_staff_name: order.created_by_staff&.name,
+        created_by_user_name: order.created_by_user&.full_name,
+        
+        # Payment and refund details
+        has_refunds: order.has_refunds?,
+        total_refunded: order.total_refunded.to_f,
+        net_amount: (order.total - order.total_refunded).to_f,
+        
+        # Cash payment details
+        cash_received: payment.cash_received&.to_f,
+        change_due: payment.change_due&.to_f
+      }
     end
     
     # 2. Get manual payments directly from Order table
     # Find orders with manual payments that don't have corresponding OrderPayment records
     # Note: We exclude stripe_reader since it's already creating OrderPayment records
     manual_payment_orders = scope_query(Order)
+                              .includes(:staff_member, :created_by_staff, :created_by_user, :location)
                               .where(created_at: start_date..end_date)
                               .where(payment_method: ['cash', 'other', 'clover', 'revel'])
                               .where(payment_status: 'completed')
@@ -188,6 +288,54 @@ class ReportService < TenantScopedService
       
       payment_data[method][:count] += 1
       payment_data[method][:amount] += order.payment_amount.to_f
+      
+      # NEW: Add detailed order information for manual payments
+      detailed_payment_orders << {
+        # Payment information (from order data)
+        payment_id: nil, # No OrderPayment record for manual payments
+        payment_method: method,
+        payment_amount: order.payment_amount.to_f,
+        payment_status: order.payment_status,
+        payment_type: 'manual',
+        payment_description: 'Manual payment entry',
+        transaction_id: order.transaction_id,
+        
+        # Order information
+        order_id: order.id,
+        order_number: order.order_number,
+        order_status: order.status,
+        order_total: order.total.to_f,
+        created_at: order.created_at.iso8601,
+        estimated_pickup_time: order.estimated_pickup_time&.iso8601,
+        special_instructions: order.special_instructions,
+        vip_code: order.vip_code,
+        
+        # Location information
+        location_name: order.location&.name,
+        location_address: order.location&.address,
+        
+        # Customer or Staff information
+        is_staff_order: order.is_staff_order,
+        
+        # For regular customer orders
+        customer_name: order.is_staff_order ? nil : order.contact_name,
+        customer_phone: order.is_staff_order ? nil : order.contact_phone,
+        customer_email: order.is_staff_order ? nil : order.contact_email,
+        
+        # For staff orders
+        staff_member_name: order.is_staff_order ? order.staff_member&.name : nil,
+        created_by_staff_name: order.created_by_staff&.name,
+        created_by_user_name: order.created_by_user&.full_name,
+        
+        # Payment and refund details
+        has_refunds: order.has_refunds?,
+        total_refunded: order.total_refunded.to_f,
+        net_amount: (order.total - order.total_refunded).to_f,
+        
+        # Cash payment details (if available)
+        cash_received: nil, # Not tracked for manual orders
+        change_due: nil
+      }
     end
     
     # 3. Handle ALL refunds from OrderPayment table
@@ -241,7 +389,8 @@ class ReportService < TenantScopedService
     {
       payment_methods: payment_data.values,
       total_amount: total_amount,
-      total_count: total_count
+      total_count: total_count,
+      detailed_orders: detailed_payment_orders # NEW: Include detailed order information
     }
   end
 
