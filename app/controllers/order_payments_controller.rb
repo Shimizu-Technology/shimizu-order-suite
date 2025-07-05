@@ -570,6 +570,75 @@ def create_refund
         end
       end
 
+      # Send refund notification email to customer
+      begin
+        if @order.contact_email.present?
+          Rails.logger.info("Sending refund notification email to #{@order.contact_email} for order #{@order.id}")
+          # Convert ActionController::Parameters to regular hashes for ActiveJob serialization
+          email_safe_refunded_items = serialized_refunded_items.is_a?(Array) ? 
+            serialized_refunded_items.map { |item| 
+              if item.is_a?(ActionController::Parameters)
+                # Use to_unsafe_h to convert unpermitted parameters to hash
+                item.to_unsafe_h
+              elsif item.respond_to?(:to_h)
+                item.to_h
+              else
+                item
+              end
+            } : 
+            serialized_refunded_items
+          OrderMailer.refund_notification(@order, @refund, email_safe_refunded_items).deliver_later
+          Rails.logger.info("Refund notification email queued successfully")
+        else
+          Rails.logger.warn("No contact email found for order #{@order.id}, skipping refund notification email")
+        end
+      rescue => email_error
+        # Don't fail the refund if email sending fails, but log the error
+        Rails.logger.error("Failed to send refund notification email for order #{@order.id}: #{email_error.message}")
+        Rails.logger.error("Email error backtrace: #{email_error.backtrace.join("\n")}")
+      end
+
+      # Send refund notification SMS to customer
+      begin
+        if @order.contact_phone.present?
+          restaurant = @order.restaurant
+          notification_channels = restaurant.admin_settings&.dig("notification_channels", "orders") || {}
+          
+          # Send SMS if enabled (default to true for backward compatibility)
+          if notification_channels["sms"] != false
+            sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant.name
+            
+            # Determine refund type and create appropriate message
+            is_partial_refund = serialized_refunded_items.present? && serialized_refunded_items.any?
+            refund_type = is_partial_refund ? "partial refund" : "full refund"
+            
+            message_body = <<~MSG.squish
+              Hi #{@order.contact_name.presence || 'Customer'}, 
+              we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)} 
+              for your #{restaurant.name} order ##{@order.order_number.presence || @order.id}. 
+              You should receive your refund within 1-3 business days. 
+              #{is_partial_refund ? 'This is a partial refund - some items from your order are not affected.' : 'Thank you for your understanding.'}
+            MSG
+            
+            Rails.logger.info("Sending refund notification SMS to #{@order.contact_phone} for order #{@order.id}")
+            SendSmsJob.perform_later(
+              to: @order.contact_phone,
+              body: message_body,
+              from: sms_sender
+            )
+            Rails.logger.info("Refund notification SMS queued successfully")
+          else
+            Rails.logger.info("SMS notifications disabled for restaurant #{restaurant.id}, skipping refund SMS")
+          end
+        else
+          Rails.logger.warn("No contact phone found for order #{@order.id}, skipping refund notification SMS")
+        end
+      rescue => sms_error
+        # Don't fail the refund if SMS sending fails, but log the error
+        Rails.logger.error("Failed to send refund notification SMS for order #{@order.id}: #{sms_error.message}")
+        Rails.logger.error("SMS error backtrace: #{sms_error.backtrace.join("\n")}")
+      end
+
       render json: { refund: @refund }
     else
       render json: { error: result[:error] }, status: :unprocessable_entity

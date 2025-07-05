@@ -64,6 +64,32 @@ class OrderMailer < ApplicationMailer
          subject: "Your #{@restaurant&.name || 'Restaurant'} Order ##{@order.order_number.presence || @order.id} Pickup Time Has Been Updated"
   end
 
+  def refund_notification(order, refund_payment, refunded_items = [])
+    @order = order
+    @refund_payment = refund_payment
+    @refunded_items = refunded_items
+    @restaurant = get_restaurant_for(@order)
+    @header_color = email_header_color_for(@restaurant)
+    
+    # Determine if this is a full or partial refund
+    @is_partial_refund = refunded_items.present? && refunded_items.any?
+    @refund_amount = refund_payment.amount
+    @original_total = order.total
+    
+    # Calculate non-refunded items for partial refunds
+    if @is_partial_refund
+      @non_refunded_items = calculate_non_refunded_items(order.items, refunded_items)
+    end
+    
+    # Subject line changes based on refund type
+    refund_type = @is_partial_refund ? "Partial Refund" : "Full Refund"
+    subject = "#{refund_type} Processed for #{@restaurant&.name || 'Restaurant'} Order ##{@order.order_number.presence || @order.id}"
+    
+    mail to: @order.contact_email,
+         from: restaurant_from_address(@restaurant),
+         subject: subject
+  end
+
   private
   
   def payment_link(email, payment_url, order, restaurant_name = nil, restaurant_logo = nil, template = nil)
@@ -90,5 +116,38 @@ class OrderMailer < ApplicationMailer
     mail to: email,
          from: restaurant_from_address(@restaurant),
          subject: "Payment Received for #{@restaurant_name} Order ##{@order.id}"
+  end
+  
+  # Helper method to calculate which items were NOT refunded for partial refunds
+  def calculate_non_refunded_items(order_items, refunded_items)
+    return [] unless order_items.present? && refunded_items.present?
+    
+    non_refunded = []
+    
+    # Create a hash of refunded quantities by item ID
+    refunded_quantities = {}
+    refunded_items.each do |item|
+      item_id = item['id'].to_s
+      refunded_quantities[item_id] = (refunded_quantities[item_id] || 0) + item['quantity'].to_i
+    end
+    
+    # Calculate remaining quantities for each order item
+    order_items.each do |item|
+      item_id = item['id'].to_s
+      original_quantity = item['quantity'].to_i
+      refunded_quantity = refunded_quantities[item_id] || 0
+      remaining_quantity = original_quantity - refunded_quantity
+      
+      if remaining_quantity > 0
+        non_refunded << {
+          'id' => item['id'],
+          'name' => item['name'],
+          'quantity' => remaining_quantity,
+          'price' => item['price']
+        }
+      end
+    end
+    
+    non_refunded
   end
 end

@@ -157,21 +157,88 @@ class StripeController < ApplicationController
                   Order.find_by(transaction_id: payment_intent_id))
           if order
             # Check if it's a full or partial refund
+            refund_amount = charge.amount_refunded / 100.0 # Convert from cents
+            
             if charge.amount == charge.amount_refunded
               order.update(
                 payment_status: "refunded",
                 status: Order::STATUS_REFUNDED,
-                refund_amount: charge.amount_refunded / 100.0, # Convert from cents
+                refund_amount: refund_amount,
                 payment_id: payment_intent_id # Ensure payment_id is set
               )
             else
               order.update(
                 payment_status: "refunded",
                 # No longer changing status for partial refunds
-                refund_amount: charge.amount_refunded / 100.0, # Convert from cents
+                refund_amount: refund_amount,
                 payment_id: payment_intent_id # Ensure payment_id is set
               )
             end
+            
+            # Create refund payment record if it doesn't exist
+            existing_refund = order.order_payments.find_by(
+              payment_type: "refund", 
+              transaction_id: charge.latest_refund
+            )
+            
+            unless existing_refund
+              refund_payment = order.order_payments.create(
+                payment_type: "refund",
+                amount: refund_amount,
+                payment_method: "stripe",
+                status: "completed",
+                transaction_id: charge.latest_refund,
+                payment_id: payment_intent_id,
+                description: "Stripe webhook refund"
+              )
+              
+                          # Send refund notification email to customer
+            begin
+              if order.contact_email.present?
+                Rails.logger.info("Sending Stripe webhook refund notification email to #{order.contact_email} for order #{order.id}")
+                OrderMailer.refund_notification(order, refund_payment, []).deliver_later
+                Rails.logger.info("Stripe webhook refund notification email queued successfully")
+              end
+            rescue => email_error
+              Rails.logger.error("Failed to send Stripe webhook refund notification email for order #{order.id}: #{email_error.message}")
+            end
+            
+            # Send refund notification SMS to customer
+            begin
+              if order.contact_phone.present?
+                restaurant = order.restaurant
+                notification_channels = restaurant.admin_settings&.dig("notification_channels", "orders") || {}
+                
+                # Send SMS if enabled (default to true for backward compatibility)
+                if notification_channels["sms"] != false
+                  sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant.name
+                  
+                  # Determine refund type and create appropriate message
+                  is_full_refund = charge.amount == charge.amount_refunded
+                  refund_type = is_full_refund ? "full refund" : "partial refund"
+                  refund_amount = charge.amount_refunded / 100.0
+                  
+                  message_body = <<~MSG.squish
+                    Hi #{order.contact_name.presence || 'Customer'}, 
+                    we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)} 
+                    for your #{restaurant.name} order ##{order.order_number.presence || order.id}. 
+                    You should receive your refund within 1-3 business days. 
+                    #{is_full_refund ? 'Thank you for your understanding.' : 'This is a partial refund - some items from your order are not affected.'}
+                  MSG
+                  
+                  Rails.logger.info("Sending Stripe webhook refund notification SMS to #{order.contact_phone} for order #{order.id}")
+                  SendSmsJob.perform_later(
+                    to: order.contact_phone,
+                    body: message_body,
+                    from: sms_sender
+                  )
+                  Rails.logger.info("Stripe webhook refund notification SMS queued successfully")
+                end
+              end
+            rescue => sms_error
+              Rails.logger.error("Failed to send Stripe webhook refund notification SMS for order #{order.id}: #{sms_error.message}")
+            end
+          end
           end
 
         when "charge.dispute.created"
@@ -443,20 +510,87 @@ class StripeController < ApplicationController
                 Order.find_by(transaction_id: payment_intent_id))
         if order
           # Check if it's a full or partial refund
+          refund_amount = charge.amount_refunded / 100.0 # Convert from cents
+          
           if charge.amount == charge.amount_refunded
             order.update(
               payment_status: "refunded",
               status: Order::STATUS_REFUNDED,
-              refund_amount: charge.amount_refunded / 100.0, # Convert from cents
+              refund_amount: refund_amount,
               payment_id: payment_intent_id # Ensure payment_id is set
             )
           else
             order.update(
               payment_status: "refunded",
               # No longer changing status for partial refunds
-              refund_amount: charge.amount_refunded / 100.0, # Convert from cents
+              refund_amount: refund_amount,
               payment_id: payment_intent_id # Ensure payment_id is set
             )
+          end
+          
+          # Create refund payment record if it doesn't exist
+          existing_refund = order.order_payments.find_by(
+            payment_type: "refund", 
+            transaction_id: charge.latest_refund
+          )
+          
+          unless existing_refund
+            refund_payment = order.order_payments.create(
+              payment_type: "refund",
+              amount: refund_amount,
+              payment_method: "stripe",
+              status: "completed",
+              transaction_id: charge.latest_refund,
+              payment_id: payment_intent_id,
+              description: "Stripe webhook refund"
+            )
+            
+            # Send refund notification email to customer
+            begin
+              if order.contact_email.present?
+                Rails.logger.info("Sending Stripe webhook refund notification email to #{order.contact_email} for order #{order.id}")
+                OrderMailer.refund_notification(order, refund_payment, []).deliver_later
+                Rails.logger.info("Stripe webhook refund notification email queued successfully")
+              end
+            rescue => email_error
+              Rails.logger.error("Failed to send Stripe webhook refund notification email for order #{order.id}: #{email_error.message}")
+            end
+            
+            # Send refund notification SMS to customer
+            begin
+              if order.contact_phone.present?
+                restaurant = order.restaurant
+                notification_channels = restaurant.admin_settings&.dig("notification_channels", "orders") || {}
+                
+                # Send SMS if enabled (default to true for backward compatibility)
+                if notification_channels["sms"] != false
+                  sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant.name
+                  
+                  # Determine refund type and create appropriate message
+                  is_full_refund = charge.amount == charge.amount_refunded
+                  refund_type = is_full_refund ? "full refund" : "partial refund"
+                  refund_amount = charge.amount_refunded / 100.0
+                  
+                  message_body = <<~MSG.squish
+                    Hi #{order.contact_name.presence || 'Customer'}, 
+                    we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)} 
+                    for your #{restaurant.name} order ##{order.order_number.presence || order.id}. 
+                    You should receive your refund within 1-3 business days. 
+                    #{is_full_refund ? 'Thank you for your understanding.' : 'This is a partial refund - some items from your order are not affected.'}
+                  MSG
+                  
+                  Rails.logger.info("Sending Stripe webhook refund notification SMS to #{order.contact_phone} for order #{order.id}")
+                  SendSmsJob.perform_later(
+                    to: order.contact_phone,
+                    body: message_body,
+                    from: sms_sender
+                  )
+                  Rails.logger.info("Stripe webhook refund notification SMS queued successfully")
+                end
+              end
+            rescue => sms_error
+              Rails.logger.error("Failed to send Stripe webhook refund notification SMS for order #{order.id}: #{sms_error.message}")
+            end
           end
         end
 

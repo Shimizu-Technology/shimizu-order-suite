@@ -227,15 +227,61 @@ class PaypalController < ApplicationController
       end
 
       # Create a refund payment record
-      order.order_payments.create(
+      refund_payment = order.order_payments.create(
         payment_type: "refund",
         amount: refund_amount,
         payment_method: "paypal",
         status: "completed",
         transaction_id: transaction_id,
         payment_id: payment_id,
-        description: "Refund"
+        description: "PayPal webhook refund"
       )
+
+      # Send refund notification email to customer
+      begin
+        if order.contact_email.present?
+          Rails.logger.info("Sending PayPal webhook refund notification email to #{order.contact_email} for order #{order.id}")
+          OrderMailer.refund_notification(order, refund_payment, []).deliver_later
+          Rails.logger.info("PayPal webhook refund notification email queued successfully")
+        end
+      rescue => email_error
+        Rails.logger.error("Failed to send PayPal webhook refund notification email for order #{order.id}: #{email_error.message}")
+      end
+      
+      # Send refund notification SMS to customer
+      begin
+        if order.contact_phone.present?
+          restaurant = order.restaurant
+          notification_channels = restaurant.admin_settings&.dig("notification_channels", "orders") || {}
+          
+          # Send SMS if enabled (default to true for backward compatibility)
+          if notification_channels["sms"] != false
+            sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant.name
+            
+            # Determine refund type and create appropriate message
+            is_full_refund = refund_amount >= order.payment_amount.to_f
+            refund_type = is_full_refund ? "full refund" : "partial refund"
+            
+            message_body = <<~MSG.squish
+              Hi #{order.contact_name.presence || 'Customer'}, 
+              we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)} 
+              for your #{restaurant.name} order ##{order.order_number.presence || order.id}. 
+              You should receive your refund within 1-3 business days. 
+              #{is_full_refund ? 'Thank you for your understanding.' : 'This is a partial refund - some items from your order are not affected.'}
+            MSG
+            
+            Rails.logger.info("Sending PayPal webhook refund notification SMS to #{order.contact_phone} for order #{order.id}")
+            SendSmsJob.perform_later(
+              to: order.contact_phone,
+              body: message_body,
+              from: sms_sender
+            )
+            Rails.logger.info("PayPal webhook refund notification SMS queued successfully")
+          end
+        end
+      rescue => sms_error
+        Rails.logger.error("Failed to send PayPal webhook refund notification SMS for order #{order.id}: #{sms_error.message}")
+      end
 
       Rails.logger.info "Updated order #{order.id} as refunded via PayPal webhook"
     else
@@ -343,15 +389,61 @@ class PaypalController < ApplicationController
       end
 
       # Create a refund payment record
-      order.order_payments.create(
+      refund_payment = order.order_payments.create(
         payment_type: "refund",
         amount: refund_amount,
         payment_method: "paypal",
         status: "completed",
         transaction_id: refund_id,
         payment_id: payment_id,
-        description: "Refund"
+        description: "PayPal refund completed webhook"
       )
+
+      # Send refund notification email to customer
+      begin
+        if order.contact_email.present?
+          Rails.logger.info("Sending PayPal refund completed notification email to #{order.contact_email} for order #{order.id}")
+          OrderMailer.refund_notification(order, refund_payment, []).deliver_later
+          Rails.logger.info("PayPal refund completed notification email queued successfully")
+        end
+      rescue => email_error
+        Rails.logger.error("Failed to send PayPal refund completed notification email for order #{order.id}: #{email_error.message}")
+      end
+      
+      # Send refund notification SMS to customer
+      begin
+        if order.contact_phone.present?
+          restaurant = order.restaurant
+          notification_channels = restaurant.admin_settings&.dig("notification_channels", "orders") || {}
+          
+          # Send SMS if enabled (default to true for backward compatibility)
+          if notification_channels["sms"] != false
+            sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant.name
+            
+            # Determine refund type and create appropriate message
+            is_full_refund = refund_amount >= order.payment_amount.to_f
+            refund_type = is_full_refund ? "full refund" : "partial refund"
+            
+            message_body = <<~MSG.squish
+              Hi #{order.contact_name.presence || 'Customer'}, 
+              we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)} 
+              for your #{restaurant.name} order ##{order.order_number.presence || order.id}. 
+              You should receive your refund within 1-3 business days. 
+              #{is_full_refund ? 'Thank you for your understanding.' : 'This is a partial refund - some items from your order are not affected.'}
+            MSG
+            
+            Rails.logger.info("Sending PayPal refund completed notification SMS to #{order.contact_phone} for order #{order.id}")
+            SendSmsJob.perform_later(
+              to: order.contact_phone,
+              body: message_body,
+              from: sms_sender
+            )
+            Rails.logger.info("PayPal refund completed notification SMS queued successfully")
+          end
+        end
+      rescue => sms_error
+        Rails.logger.error("Failed to send PayPal refund completed notification SMS for order #{order.id}: #{sms_error.message}")
+      end
 
       Rails.logger.info "Updated order #{order.id} as refunded via PayPal refund completed webhook"
     else

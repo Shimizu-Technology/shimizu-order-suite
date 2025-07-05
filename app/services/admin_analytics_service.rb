@@ -395,6 +395,43 @@ class AdminAnalyticsService < TenantScopedService
       }
     end
     
+    # Collect detailed order information for admin use
+    detailed_orders = orders_in_group.map do |order|
+      {
+        id: order.id,
+        order_number: order.order_number,
+        status: order.status,
+        total: order.total.to_f,
+        net_amount: (order.total - order.total_refunded).to_f,
+        payment_method: order.payment_method,
+        payment_status: order.payment_status,
+        payment_amount: order.payment_amount&.to_f,
+        transaction_id: order.transaction_id,
+        created_at: order.created_at.iso8601,
+        estimated_pickup_time: order.estimated_pickup_time&.iso8601,
+        contact_name: order.contact_name,
+        contact_phone: order.contact_phone,
+        contact_email: order.contact_email,
+        special_instructions: order.special_instructions,
+        location_name: order.location&.name,
+        location_address: order.location&.address,
+        vip_code: order.vip_code,
+        is_staff_order: order.is_staff_order,
+        staff_member_name: order.staff_member&.name,
+        created_by_staff_name: order.created_by_staff&.name,
+        created_by_user_name: order.created_by_user&.full_name,
+        # Payment details for admin reference
+        has_refunds: order.has_refunds?,
+        total_refunded: order.total_refunded.to_f,
+        # Advanced order details
+        pre_discount_total: order.pre_discount_total&.to_f,
+        discount_amount: order.discount_amount&.to_f,
+        # Item details for this specific order
+        items: order.items,
+        merchandise_items: order.merchandise_items || []
+      }
+    end
+    
     first_order = orders_in_group.first
     
     case order_type
@@ -406,10 +443,21 @@ class AdminAnalyticsService < TenantScopedService
       {
         user_id: user_id,
         user_name: user_name,
+        user_email: user_obj&.email,
         total_spent: total_spent.to_f.round(2),
         order_count: order_count,
         items: item_details,
-        order_type: 'customer'
+        order_type: 'customer',
+        # Add detailed order information
+        detailed_orders: detailed_orders,
+        # Summary contact info (from most recent order)
+        primary_contact_phone: orders_in_group.last.contact_phone,
+        primary_contact_email: orders_in_group.last.contact_email || user_obj&.email,
+        # Order date range
+        first_order_date: orders_in_group.min_by(&:created_at).created_at.iso8601,
+        last_order_date: orders_in_group.max_by(&:created_at).created_at.iso8601,
+        # Payment method summary
+        payment_methods_used: orders_in_group.map(&:payment_method).compact.uniq
       }
       
     when 'guest'
@@ -421,10 +469,22 @@ class AdminAnalyticsService < TenantScopedService
       {
         user_id: nil,
         user_name: "Guest (#{fallback_name})",
+        user_email: nil,
         total_spent: total_spent.to_f.round(2),
         order_count: order_count,
         items: item_details,
-        order_type: 'guest'
+        order_type: 'guest',
+        # Add detailed order information
+        detailed_orders: detailed_orders,
+        # Summary contact info
+        primary_contact_name: fallback_name,
+        primary_contact_phone: first_order.contact_phone,
+        primary_contact_email: first_order.contact_email,
+        # Order date range
+        first_order_date: orders_in_group.min_by(&:created_at).created_at.iso8601,
+        last_order_date: orders_in_group.max_by(&:created_at).created_at.iso8601,
+        # Payment method summary
+        payment_methods_used: orders_in_group.map(&:payment_method).compact.uniq
       }
       
     when 'staff'
@@ -440,11 +500,19 @@ class AdminAnalyticsService < TenantScopedService
       {
         user_id: created_by_user_id,
         user_name: creator_name,
+        user_email: created_by_user&.email,
         total_spent: total_spent.to_f.round(2),
         order_count: order_count,
         items: item_details,
         order_type: 'staff',
         created_by_user_id: created_by_user_id,
+        # Add detailed order information
+        detailed_orders: detailed_orders,
+        # Order date range
+        first_order_date: orders_in_group.min_by(&:created_at).created_at.iso8601,
+        last_order_date: orders_in_group.max_by(&:created_at).created_at.iso8601,
+        # Payment method summary
+        payment_methods_used: orders_in_group.map(&:payment_method).compact.uniq,
         # Include additional staff order info
         staff_order_details: {
           total_orders_for_staff: order_count,

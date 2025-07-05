@@ -1,0 +1,192 @@
+<!-- app/views/order_mailer/refund_notification.html.erb -->
+
+<table width="100%" border="0" cellspacing="0" cellpadding="0"
+       style="background-color: #f8f8f8; padding: 20px 0; font-family: Arial, sans-serif;">
+  <tr>
+    <td align="center">
+      <table width="600" border="0" cellspacing="0" cellpadding="0"
+             style="background-color: #ffffff; border-radius: 6px; overflow: hidden;">
+        
+        <!-- HEADER -->
+        <tr>
+          <td align="center" style="background-color: <%= @header_color %>; padding: 20px;">
+            <h1 style="margin: 0; font-size: 24px; color: #ffffff;
+                       font-family: 'Helvetica Neue', Arial, sans-serif;">
+              <%= @is_partial_refund ? 'Partial Refund' : 'Full Refund' %> Processed
+            </h1>
+          </td>
+        </tr>
+
+        <!-- SPACER -->
+        <tr><td style="height: 20px;">&nbsp;</td></tr>
+
+        <!-- MAIN CONTENT -->
+        <tr>
+          <td style="padding: 0 30px 20px;">
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
+              Hi <strong><%= @order.contact_name.presence || "Valued Customer" %></strong>,
+            </p>
+
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
+              We've processed a <%= @is_partial_refund ? 'partial' : 'full' %> refund for your order. 
+              You should receive your refund within 1-3 business days.
+            </p>
+
+            <!-- Refund Summary -->
+            <table width="100%" border="0" cellspacing="0" cellpadding="0"
+                   style="margin-bottom: 20px; background-color: #f0f9ff; border: 1px solid #e0f2fe; border-radius: 8px;">
+              <tr>
+                <td style="padding: 15px;">
+                  <h3 style="margin: 0 0 10px; color: #0369a1; font-size: 18px;">Refund Summary</h3>
+                  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="font-size: 16px; color: #333;">
+                    <tr>
+                      <td style="padding: 5px 0;">
+                        <strong>Order Number:</strong> <%= @order.order_number.presence || @order.id %>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 5px 0;">
+                        <strong>Original Order Total:</strong> $<%= sprintf("%.2f", @original_total.to_f) %>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 5px 0;">
+                        <strong>Refund Amount:</strong> <span style="color: #dc2626; font-weight: bold;">$<%= sprintf("%.2f", @refund_amount.to_f) %></span>
+                      </td>
+                    </tr>
+                    <% if @is_partial_refund %>
+                    <tr>
+                      <td style="padding: 5px 0;">
+                        <strong>Remaining Balance:</strong> $<%= sprintf("%.2f", @original_total.to_f - @refund_amount.to_f) %>
+                      </td>
+                    </tr>
+                    <% end %>
+                    <tr>
+                      <td style="padding: 5px 0;">
+                        <strong>Refund Method:</strong> <%= @refund_payment.payment_method.humanize %>
+                      </td>
+                    </tr>
+                    <% if @refund_payment.description.present? %>
+                    <tr>
+                      <td style="padding: 5px 0;">
+                        <strong>Reason:</strong> <%= @refund_payment.description %>
+                      </td>
+                    </tr>
+                    <% end %>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <% if @is_partial_refund %>
+              <!-- Refunded Items -->
+              <div style="margin-bottom: 25px;">
+                <h3 style="margin: 0 0 15px; color: #dc2626; font-size: 18px;">Items Refunded</h3>
+                <table width="100%" border="0" cellspacing="0" cellpadding="0"
+                       style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;">
+                  <tr>
+                    <td style="padding: 15px;">
+                      <ul style="margin: 0; padding: 0 0 0 20px;">
+                        <% @refunded_items.each do |item| %>
+                          <li style="margin-bottom: 8px; color: #333; font-size: 16px;">
+                            <strong><%= item['quantity'] %>× <%= item['name'] %></strong>
+                            <span style="color: #dc2626; font-weight: bold;">
+                              - $<%= sprintf("%.2f", item['price'].to_f * item['quantity'].to_i) %>
+                            </span>
+                          </li>
+                        <% end %>
+                      </ul>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+
+              <!-- Non-Refunded Items -->
+              <% if @non_refunded_items.present? %>
+                <div style="margin-bottom: 25px;">
+                  <h3 style="margin: 0 0 15px; color: #059669; font-size: 18px;">Items Not Refunded</h3>
+                  <table width="100%" border="0" cellspacing="0" cellpadding="0"
+                         style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;">
+                    <tr>
+                      <td style="padding: 15px;">
+                        <ul style="margin: 0; padding: 0 0 0 20px;">
+                          <% @non_refunded_items.each do |item| %>
+                            <li style="margin-bottom: 8px; color: #333; font-size: 16px;">
+                              <strong><%= item['quantity'] %>× <%= item['name'] %></strong>
+                              <span style="color: #059669; font-weight: bold;">
+                                $<%= sprintf("%.2f", item['price'].to_f * item['quantity'].to_i) %>
+                              </span>
+                            </li>
+                          <% end %>
+                        </ul>
+                      </td>
+                    </tr>
+                  </table>
+                </div>
+              <% end %>
+            <% else %>
+              <!-- Full Refund - Show All Items -->
+              <div style="margin-bottom: 25px;">
+                <h3 style="margin: 0 0 15px; color: #dc2626; font-size: 18px;">All Items Refunded</h3>
+                <table width="100%" border="0" cellspacing="0" cellpadding="0"
+                       style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;">
+                  <tr>
+                    <td style="padding: 15px;">
+                      <ul style="margin: 0; padding: 0 0 0 20px;">
+                        <% @order.items.each do |item| %>
+                          <li style="margin-bottom: 8px; color: #333; font-size: 16px;">
+                            <strong><%= item['quantity'] %>× <%= item['name'] %></strong>
+                            <span style="color: #dc2626; font-weight: bold;">
+                              - $<%= sprintf("%.2f", item['price'].to_f * item['quantity'].to_i) %>
+                            </span>
+                          </li>
+                        <% end %>
+                      </ul>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            <% end %>
+
+            <!-- Important Information -->
+            <div style="margin-bottom: 20px; background-color: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; padding: 15px;">
+              <h3 style="margin: 0 0 10px; color: #92400e; font-size: 16px;">Important Information</h3>
+              <ul style="margin: 0; padding: 0 0 0 20px; color: #451a03;">
+                <li style="margin-bottom: 8px;">Your refund will be processed back to your original payment method</li>
+                <li style="margin-bottom: 8px;">Please allow 1-3 business days for the refund to appear in your account</li>
+                <li style="margin-bottom: 8px;">Processing times may vary depending on your bank or payment provider</li>
+                <% if @is_partial_refund %>
+                <li style="margin-bottom: 8px;">This is a partial refund - the remaining items from your order are not affected</li>
+                <% end %>
+              </ul>
+            </div>
+
+            <p style="margin: 0 0 15px; color: #333; font-size: 16px; line-height: 24px;">
+              If you have any questions about this refund, please contact us at 
+              <strong><%= @restaurant&.phone_number || @restaurant&.contact_email %></strong>.
+            </p>
+
+            <p style="margin: 0; color: #333; font-size: 16px; line-height: 24px;">
+              Thank you for your understanding, and we appreciate your business!
+            </p>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="padding: 20px 30px; background-color: #f2f2f2;
+                     color: #555; font-size: 14px; line-height: 20px;
+                     border-top: 1px solid #ddd;">
+            <p style="margin: 0;">
+              <strong><%= @restaurant&.name || 'Restaurant' %></strong><br/>
+              <% if @restaurant&.address.present? %>
+                <%= @restaurant.address %><%= @restaurant.address.present? && @restaurant.phone_number.present? ? ' | ' : '' %>
+              <% end %>
+              <%= @restaurant&.phone_number || '' %>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table> 
