@@ -11,11 +11,11 @@ class VipAccessCode < ApplicationRecord
   validates :code, presence: true, uniqueness: { scope: :restaurant_id }
 
   scope :active, -> { where(is_active: true) }
-  scope :available, -> { active.where("expires_at IS NULL OR expires_at > ?", Time.current).where("max_uses IS NULL OR current_uses < max_uses") }
+  scope :available, -> { active.where("expires_at IS NULL OR expires_at > ?", Time.current).where("max_uses IS NULL OR current_uses < max_uses").where(archived: false) }
   scope :by_group, ->(group_id) { where(group_id: group_id) }
 
   def available?
-    is_active && (expires_at.nil? || expires_at > Time.current) &&
+    is_active && !archived && (expires_at.nil? || expires_at > Time.current) &&
       (max_uses.nil? || current_uses < max_uses)
   end
 

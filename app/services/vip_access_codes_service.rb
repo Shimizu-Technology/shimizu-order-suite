@@ -92,6 +92,13 @@ class VipAccessCodesService < TenantScopedService
         max_uses: params[:max_uses].present? ? params[:max_uses].to_i : nil
       }
 
+      # Add custom codes if provided
+      if params[:custom_codes].present?
+        options[:custom_codes] = params[:custom_codes]
+      elsif params[:custom_code].present?
+        options[:custom_code] = params[:custom_code]
+      end
+
       # Add special event reference if needed
       if params[:special_event_id].present?
         special_event = scope_query(SpecialEvent).find_by(id: params[:special_event_id])
@@ -375,6 +382,13 @@ class VipAccessCodesService < TenantScopedService
       code_options[:prefix] = params[:prefix] if params[:prefix].present?
       code_options[:max_uses] = params[:max_uses].to_i if params[:max_uses].present?
       code_options[:one_code_per_batch] = one_code_per_batch
+      
+      # Add custom codes if provided
+      if params[:custom_codes].present?
+        code_options[:custom_codes] = params[:custom_codes]
+      elsif params[:custom_code].present?
+        code_options[:custom_code] = params[:custom_code]
+      end
       
       unless email_list.present?
         return { success: false, errors: ["Email list is required"], status: :bad_request }
