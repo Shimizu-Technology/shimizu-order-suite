@@ -82,45 +82,84 @@ class AdminAnalyticsService < TenantScopedService
       .where.not(status: "cancelled")
       .where(created_at: start_date..end_date)
     
+    # Calculate net revenue for each order (total - refunded amount)
+    # Since we need to account for refunds, we'll process this in Ruby rather than pure SQL
+    order_data = orders.includes(:order_payments).map do |order|
+      net_revenue = order.total - order.total_refunded
+      { order: order, net_revenue: net_revenue }
+    end
+    
     # Group by the specified interval
-    results = case interval
+    case interval
     when "30min"
       # Group by 30-minute intervals
-      orders.select("date_trunc('hour', created_at) +
-                    (date_part('minute', created_at)::integer / 30) * interval '30 minutes' as time_interval,
-                    SUM(total) as revenue")
-            .group("time_interval")
-            .order("time_interval")
+      grouped_data = order_data.group_by do |data|
+        time = data[:order].created_at
+        hour_start = time.beginning_of_hour
+        thirty_min_interval = (time.min >= 30) ? 30 : 0
+        hour_start + thirty_min_interval.minutes
+      end
+      
+      results = grouped_data.map do |time_interval, data_array|
+        revenue = data_array.sum { |d| d[:net_revenue] }
+        { time_interval: time_interval, revenue: revenue }
+      end.sort_by { |r| r[:time_interval] }
+      
     when "hour"
       # Group by hour
-      orders.select("date_trunc('hour', created_at) as time_interval, SUM(total) as revenue")
-            .group("time_interval")
-            .order("time_interval")
+      grouped_data = order_data.group_by do |data|
+        data[:order].created_at.beginning_of_hour
+      end
+      
+      results = grouped_data.map do |time_interval, data_array|
+        revenue = data_array.sum { |d| d[:net_revenue] }
+        { time_interval: time_interval, revenue: revenue }
+      end.sort_by { |r| r[:time_interval] }
+      
     when "week"
-      orders.group("extract(year from created_at), extract(week from created_at)")
-            .select("extract(year from created_at) as yr, extract(week from created_at) as wk, SUM(total) as revenue")
-            .order("yr, wk")
+      grouped_data = order_data.group_by do |data|
+        date = data[:order].created_at
+        [date.year, date.cweek]
+      end
+      
+      results = grouped_data.map do |(year, week), data_array|
+        revenue = data_array.sum { |d| d[:net_revenue] }
+        { yr: year, wk: week, revenue: revenue }
+      end.sort_by { |r| [r[:yr], r[:wk]] }
+      
     when "month"
-      orders.group("extract(year from created_at), extract(month from created_at)")
-            .select("extract(year from created_at) as yr, extract(month from created_at) as mon, SUM(total) as revenue")
-            .order("yr, mon")
+      grouped_data = order_data.group_by do |data|
+        date = data[:order].created_at
+        [date.year, date.month]
+      end
+      
+      results = grouped_data.map do |(year, month), data_array|
+        revenue = data_array.sum { |d| d[:net_revenue] }
+        { yr: year, mon: month, revenue: revenue }
+      end.sort_by { |r| [r[:yr], r[:mon]] }
+      
     else # 'day'
-      orders.group("DATE(created_at)")
-            .select("DATE(created_at) as date, SUM(total) as revenue")
-            .order("DATE(created_at)")
+      grouped_data = order_data.group_by do |data|
+        data[:order].created_at.to_date
+      end
+      
+      results = grouped_data.map do |date, data_array|
+        revenue = data_array.sum { |d| d[:net_revenue] }
+        { date: date, revenue: revenue }
+      end.sort_by { |r| r[:date] }
     end
     
     # Format the data for the frontend
     data = results.map do |row|
       if interval == "30min" || interval == "hour"
-        time_str = row.time_interval.strftime("%Y-%m-%d %H:%M")
-        { label: time_str, revenue: row.revenue.to_f.round(2) }
+        time_str = row[:time_interval].strftime("%Y-%m-%d %H:%M")
+        { label: time_str, revenue: row[:revenue].to_f.round(2) }
       elsif interval == "day"
-        { label: row.date, revenue: row.revenue.to_f.round(2) }
+        { label: row[:date], revenue: row[:revenue].to_f.round(2) }
       elsif interval == "week"
-        { label: "Year #{row.yr.to_i} - Week #{row.wk.to_i}", revenue: row.revenue.to_f.round(2) }
+        { label: "Year #{row[:yr]} - Week #{row[:wk]}", revenue: row[:revenue].to_f.round(2) }
       else
-        { label: "Year #{row.yr.to_i}, Month #{row.mon.to_i}", revenue: row.revenue.to_f.round(2) }
+        { label: "Year #{row[:yr]}, Month #{row[:mon]}", revenue: row[:revenue].to_f.round(2) }
       end
     end
     
@@ -145,11 +184,46 @@ class AdminAnalyticsService < TenantScopedService
     
     # Get orders with tenant isolation
     orders = scope_query(Order)
+      .includes(:order_payments)
       .where.not(status: "cancelled")
       .where(created_at: start_date..end_date)
     
-    # Extract and group items
-    all_items = orders.flat_map(&:items)
+    # Extract and group items, accounting for refunds
+    all_items = []
+    
+    orders.each do |order|
+      # Get refunded items for this order
+      refunded_items_data = order.refunds.flat_map do |refund|
+        refund.get_refunded_items || []
+      end
+      
+      # Create a hash of refunded quantities by item name
+      refunded_quantities = {}
+      refunded_items_data.each do |refunded_item|
+        item_name = refunded_item["name"] || refunded_item[:name]
+        quantity = refunded_item["quantity"] || refunded_item[:quantity] || 0
+        refunded_quantities[item_name] = (refunded_quantities[item_name] || 0) + quantity.to_i
+      end
+      
+      # Process order items, subtracting refunded quantities
+      order.items.each do |item|
+        item_name = item["name"] || "Unknown"
+        total_quantity = item["quantity"] || 1
+        refunded_quantity = refunded_quantities[item_name] || 0
+        net_quantity = [total_quantity.to_i - refunded_quantity, 0].max
+        
+        # Only include items with net positive quantity
+        if net_quantity > 0
+          all_items << {
+            "name" => item_name,
+            "quantity" => net_quantity,
+            "price" => item["price"] || 0
+          }
+        end
+      end
+    end
+    
+    # Group items by name
     grouped = all_items.group_by { |i| i["name"] || "Unknown" }
     
     # Calculate quantities and revenue
@@ -180,23 +254,27 @@ class AdminAnalyticsService < TenantScopedService
     
     # Get orders with tenant isolation
     orders = scope_query(Order)
+      .includes(:order_payments)
       .where.not(status: "cancelled")
       .where(created_at: year_start..year_end)
     
-    # Group by month
-    monthly = orders.group("extract(month from created_at)")
-                    .select("extract(month from created_at) as mon, SUM(total) as revenue")
-                    .order("mon")
+    # Calculate net revenue by month accounting for refunds
+    monthly_data = {}
+    
+    orders.each do |order|
+      month = order.created_at.month
+      net_revenue = order.total - order.total_refunded
+      monthly_data[month] = (monthly_data[month] || 0) + net_revenue
+    end
     
     # Month names for reference
     month_names = %w[January February March April May June July August September October November December]
     
     # Format the data for the frontend
-    data = monthly.map do |row|
-      m_index = row.mon.to_i - 1
+    data = (1..12).map do |month|
       {
-        month: month_names[m_index] || "Month #{row.mon.to_i}",
-        revenue: row.revenue.to_f.round(2)
+        month: month_names[month - 1],
+        revenue: (monthly_data[month] || 0).to_f.round(2)
       }
     end
     
@@ -297,7 +375,8 @@ class AdminAnalyticsService < TenantScopedService
 
   # Generate standardized order group data for different order types
   def generate_order_group_data(orders_in_group, order_type, created_by_user_id = nil)
-    total_spent = orders_in_group.sum(&:total)
+    # Calculate total spent accounting for refunds
+    total_spent = orders_in_group.sum { |order| order.total - order.total_refunded }
     order_count = orders_in_group.size
     
     all_items = orders_in_group.flat_map(&:items)

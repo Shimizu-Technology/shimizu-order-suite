@@ -40,6 +40,17 @@ module Admin
       render json: report_data
     end
 
+    # GET /admin/reports/refunds
+    def refunds
+      start_date = params[:start_date]
+      end_date = params[:end_date]
+      
+      # Use the ReportService to get refunds report with tenant isolation
+      report_data = report_service.refunds_report(start_date, end_date)
+      
+      render json: report_data
+    end
+
     private
 
     def ensure_admin_or_staff

@@ -208,6 +208,7 @@ Rails.application.routes.draw do
     get "reports/menu_items",         to: "reports#menu_items"
     get "reports/payment_methods",     to: "reports#payment_methods"
     get "reports/vip_customers",      to: "reports#vip_customers"
+    get "reports/refunds",            to: "reports#refunds"
     
     # System utilities
     post "test_sms", to: "system#test_sms"

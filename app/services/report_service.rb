@@ -4,6 +4,7 @@ class ReportService < TenantScopedService
   def menu_items_report(start_date, end_date)
     # Query to get all order items in date range
     orders = scope_query(Order)
+              .includes(:order_payments)
               .where(created_at: start_date..end_date)
               .where.not(status: 'canceled')
     
@@ -22,6 +23,23 @@ class ReportService < TenantScopedService
     }
     
     orders.each do |order|
+      # Get refunded items for this order
+      refunded_items_data = order.refunds.flat_map do |refund|
+        refund.get_refunded_items || []
+      end
+      
+      # Create a hash of refunded quantities by item name and customizations
+      refunded_quantities = {}
+      refunded_items_data.each do |refunded_item|
+        item_name = refunded_item["name"] || refunded_item[:name]
+        customizations = refunded_item["customizations"] || refunded_item[:customizations]
+        customizations_key = customizations&.to_s || ""
+        unique_key = "#{item_name}|#{customizations_key}"
+        
+        quantity = refunded_item["quantity"] || refunded_item[:quantity] || 0
+        refunded_quantities[unique_key] = (refunded_quantities[unique_key] || 0) + quantity.to_i
+      end
+      
       order.items.each do |item|
         item_id = item['id'].to_s
         item_name = item['name']
@@ -29,37 +47,29 @@ class ReportService < TenantScopedService
         price = item['price'].to_f
         customizations = item['customizations']
         
+        # Create unique key for this item+customizations combination
+        customizations_key = customizations&.to_s || ""
+        unique_refund_key = "#{item_name}|#{customizations_key}"
+        
+        # Calculate net quantity after refunds
+        refunded_quantity = refunded_quantities[unique_refund_key] || 0
+        net_quantity = [quantity - refunded_quantity, 0].max
+        
+        # Skip items that have been completely refunded
+        next if net_quantity <= 0
+        
         # Look up the menu item's categories if not already cached
-        if !menu_item_categories[item_id]
-          # Try to find the menu item in the database
-          menu_item = scope_query(MenuItem).includes(:categories).find_by(id: item_id.to_i)
-          
+        unless menu_item_categories.key?(item_id)
+          menu_item = scope_query(MenuItem).find_by(id: item_id)
           if menu_item
             # Get the categories for this menu item
-            categories = menu_item.categories
-            
+            categories = menu_item.categories.pluck(:name)
             if categories.any?
-              # Use the first category name, or join multiple categories
-              menu_item_categories[item_id] = categories.map(&:name).join(', ')
-              Rails.logger.info("Menu item #{item_id} (#{item_name}) has categories: #{categories.map(&:name).join(', ')}")
+              menu_item_categories[item_id] = categories.first # Use the first category for simplicity
+              Rails.logger.info("Menu item #{item_id} (#{item_name}) has categories: #{categories.join(', ')}")
             else
-              # Menu item exists but has no categories
-              Rails.logger.info("Menu item #{item_id} (#{item_name}) exists but has no categories")
-              
-              # Check special case mapping
-              if special_case_categories.key?(item_name)
-                menu_item_categories[item_id] = special_case_categories[item_name]
-                Rails.logger.info("Using special case category for #{item_name}: #{menu_item_categories[item_id]}")
-              else
-                # Try to get category from the order data as a fallback
-                if item['category'].present?
-                  menu_item_categories[item_id] = item['category']
-                  Rails.logger.info("Using category from order data: #{item['category']}")
-                else
-                  menu_item_categories[item_id] = 'Uncategorized'
-                  Rails.logger.info("No category found in order data, using 'Uncategorized'")
-                end
-              end
+              menu_item_categories[item_id] = 'Uncategorized'
+              Rails.logger.info("Menu item #{item_id} (#{item_name}) has no categories")
             end
           else
             # Menu item not found in database
@@ -86,10 +96,9 @@ class ReportService < TenantScopedService
         category = menu_item_categories[item_id]
         
         # Create a unique key that includes customizations to handle items with different customizations separately
-        customizations_key = customizations&.to_s || ""
         unique_item_key = "#{item_id}|#{customizations_key}"
         
-        # Update item stats
+        # Update item stats with net quantities
         if !item_data[unique_item_key]
           item_data[unique_item_key] = {
             id: item_id.to_i,
@@ -101,10 +110,10 @@ class ReportService < TenantScopedService
           }
         end
         
-        item_data[unique_item_key][:quantity_sold] += quantity
-        item_data[unique_item_key][:revenue] += quantity * price
+        item_data[unique_item_key][:quantity_sold] += net_quantity
+        item_data[unique_item_key][:revenue] += net_quantity * price
         
-        # Update category stats
+        # Update category stats with net quantities
         if !category_data[category]
           category_data[category] = {
             name: category,
@@ -113,8 +122,8 @@ class ReportService < TenantScopedService
           }
         end
         
-        category_data[category][:quantity_sold] += quantity
-        category_data[category][:revenue] += quantity * price
+        category_data[category][:quantity_sold] += net_quantity
+        category_data[category][:revenue] += net_quantity * price
       end
     end
     
@@ -181,7 +190,25 @@ class ReportService < TenantScopedService
       payment_data[method][:amount] += order.payment_amount.to_f
     end
     
-    # 3. Handle manual refunds from Order table
+    # 3. Handle ALL refunds from OrderPayment table
+    refunds = OrderPayment.joins(:order)
+                        .where(orders: { restaurant_id: @restaurant.id })
+                        .where(created_at: start_date..end_date)
+                        .where(payment_type: 'refund', status: 'completed')
+    
+    # Process OrderPayment refunds
+    refunds.each do |refund|
+      method = refund.payment_method || 'unknown'
+      
+      # Only adjust the amount if we have this payment method in our data
+      if payment_data[method]
+        # Subtract the refund amount from the total
+        payment_data[method][:amount] -= refund.amount.to_f
+        # Note: We don't subtract from count as the transaction still occurred
+      end
+    end
+    
+    # 4. Handle manual refunds from Order table (legacy refunds)
     manual_refunds = scope_query(Order)
                         .where(updated_at: start_date..end_date)
                         .where(payment_method: ['cash', 'other', 'clover', 'revel'])
@@ -298,6 +325,103 @@ class ReportService < TenantScopedService
     {
       vip_customers: vip_customers,
       summary: summary
+    }
+  end
+
+  # GET /admin/reports/refunds
+  def refunds_report(start_date, end_date)
+    # Get all refunds from OrderPayment table
+    refunds = OrderPayment.joins(:order)
+                        .where(orders: { restaurant_id: @restaurant.id })
+                        .where(created_at: start_date..end_date)
+                        .where(payment_type: 'refund')
+                        .includes(:order)
+    
+    # Group refunds by payment method
+    refunds_by_method = {}
+    total_refund_amount = 0
+    refund_details = []
+    
+    refunds.each do |refund|
+      method = refund.payment_method || 'unknown'
+      amount = refund.amount.to_f
+      
+      # Update totals by payment method
+      refunds_by_method[method] ||= {
+        payment_method: method,
+        count: 0,
+        amount: 0.0
+      }
+      
+      refunds_by_method[method][:count] += 1
+      refunds_by_method[method][:amount] += amount
+      total_refund_amount += amount
+      
+      # Collect detailed refund information
+      order = refund.order
+      refund_details << {
+        id: refund.id,
+        order_id: order.id,
+        order_number: order.order_number,
+        amount: amount,
+        payment_method: method,
+        status: refund.status,
+        description: refund.description,
+        created_at: refund.created_at,
+        customer_name: order.contact_name,
+        customer_email: order.contact_email,
+        refunded_items: refund.get_refunded_items || [],
+        original_order_total: order.total
+      }
+    end
+    
+    # Calculate percentages
+    refunds_by_method.each do |_, data|
+      data[:percentage] = total_refund_amount > 0 ? (data[:amount] / total_refund_amount * 100).round(2) : 0.0
+    end
+    
+    # Get refund trends by day
+    daily_refunds = refunds.group("DATE(order_payments.created_at)")
+                          .sum(:amount)
+    
+    daily_trends = daily_refunds.map do |date, amount|
+      {
+        date: date.to_s,
+        amount: amount.to_f.round(2)
+      }
+    end
+    
+    # Calculate summary statistics
+    total_refunds_count = refunds.count
+    average_refund_amount = total_refunds_count > 0 ? (total_refund_amount / total_refunds_count).round(2) : 0.0
+    
+    # Get orders in the same period for refund rate calculation
+    total_orders = scope_query(Order)
+                    .where(created_at: start_date..end_date)
+                    .where.not(status: 'canceled')
+                    .count
+    
+    total_revenue = scope_query(Order)
+                     .where(created_at: start_date..end_date)
+                     .where.not(status: 'canceled')
+                     .sum(:total)
+    
+    refund_rate = total_orders > 0 ? (total_refunds_count.to_f / total_orders * 100).round(2) : 0.0
+    refund_rate_by_amount = total_revenue > 0 ? (total_refund_amount / total_revenue * 100).round(2) : 0.0
+    
+    {
+      summary: {
+        total_refunds_count: total_refunds_count,
+        total_refund_amount: total_refund_amount.round(2),
+        average_refund_amount: average_refund_amount,
+        refund_rate_by_orders: refund_rate,
+        refund_rate_by_amount: refund_rate_by_amount,
+        total_orders_in_period: total_orders,
+        total_revenue_in_period: total_revenue.to_f.round(2)
+      },
+      refunds_by_method: refunds_by_method.values,
+      daily_trends: daily_trends.sort_by { |d| d[:date] },
+      refund_details: refund_details.sort_by { |r| r[:created_at] }.reverse
     }
   end
 end
