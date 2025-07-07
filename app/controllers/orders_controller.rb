@@ -115,23 +115,67 @@ class OrdersController < ApplicationController
     if params[:search].present?
       search_term = "%#{params[:search]}%"
       
-      # Search in basic order fields
+      # Performance optimization: Use different strategies based on search pattern
+      search_queries = []
+      
+      # 1. Order number search with multiple strategies for better UX
+      if params[:search].present?
+        raw_search = params[:search].strip
+        
+        # Strategy 1: Exact order number match (fastest)
+        search_queries << @orders.where("order_number = ?", raw_search)
+        
+        # Strategy 2: Partial order number match (for "HAF-O-123" format)
+        search_queries << @orders.where("order_number ILIKE ?", search_term)
+        
+        # Strategy 3: Handle numeric-only searches (e.g., "123" should match "HAF-O-123")
+        if raw_search.match?(/^\d+$/)
+          # For numeric searches, look for the number part after the last dash
+          numeric_pattern = "%-#{raw_search}"
+          search_queries << @orders.where("order_number ILIKE ?", numeric_pattern)
+          
+          # Also try with leading zeros (e.g., "1" matches "HAF-O-001")
+          if raw_search.length <= 3
+            padded_number = raw_search.rjust(3, '0')
+            padded_pattern = "%-#{padded_number}"
+            search_queries << @orders.where("order_number ILIKE ?", padded_pattern)
+          end
+        end
+        
+        # Strategy 4: Handle partial prefix searches (e.g., "HAF" matches "HAF-O-123")
+        if raw_search.match?(/^[A-Za-z]+$/) && raw_search.length >= 2
+          prefix_pattern = "#{raw_search}%"
+          search_queries << @orders.where("order_number ILIKE ?", prefix_pattern)
+        end
+      end
+      
+      # 2. Basic order fields search (existing functionality)
       basic_search = @orders.where(
         "id::text ILIKE ? OR contact_name ILIKE ? OR contact_email ILIKE ? OR contact_phone ILIKE ? OR special_instructions ILIKE ?",
         search_term, search_term, search_term, search_term, search_term
       )
+      search_queries << basic_search
       
-      # Search in order items using JSON operators and apply the same filters
-      # Since items are stored as JSON, we search within the JSON array
+      # 3. Order items search using JSON operators (existing functionality)
       item_search = @orders.where(
         "EXISTS (
           SELECT 1 FROM jsonb_array_elements(items) as item
           WHERE item->>'name' ILIKE ? OR item->>'notes' ILIKE ?
         )", search_term, search_term
       )
+      search_queries << item_search
       
-      # Combine both search results while maintaining all filters
-      @orders = basic_search.or(item_search)
+      # Combine all search results using UNION for better performance
+      # This is more efficient than multiple OR conditions
+      if search_queries.length > 1
+        combined_query = search_queries.first
+        search_queries[1..-1].each do |query|
+          combined_query = combined_query.or(query)
+        end
+        @orders = combined_query.distinct
+      else
+        @orders = search_queries.first || @orders.none
+      end
     end
 
     # Get total count after filtering but before pagination
