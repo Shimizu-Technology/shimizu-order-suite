@@ -8,15 +8,21 @@ module Admin
     before_action :require_admin!
     before_action :ensure_tenant_context
 
-    # GET /admin/analytics/customer_orders?start=YYYY-MM-DD&end=YYYY-MM-DD&staff_member_id=123
+    # GET /admin/analytics/customer_orders?start=YYYY-MM-DD&end=YYYY-MM-DD&staff_member_id=123&payment_method=cash&menu_item_ids=1,2,3
     def customer_orders
       # Use Time.zone.parse to respect any timezone information in the input
       start_date = params[:start].present? ? Time.zone.parse(params[:start]) : (Time.zone.today - 30)
       end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.today
       
+      # Parse menu item IDs if provided
+      menu_item_ids = nil
+      if params[:menu_item_ids].present?
+        menu_item_ids = params[:menu_item_ids].split(',').map(&:strip).reject(&:blank?)
+      end
+      
       # Use the AdminAnalyticsService to get tenant-scoped data
       # Note: staff_member_id parameter is actually a user_id for filtering by who created the order
-      report = analytics_service.customer_orders_report(start_date, end_date, params[:staff_member_id])
+      report = analytics_service.customer_orders_report(start_date, end_date, params[:staff_member_id], params[:payment_method], menu_item_ids)
       
       render json: report
     end
@@ -102,6 +108,16 @@ module Admin
       end
 
       render json: { staff_users: formatted_users }
+    end
+
+    # GET /admin/analytics/menu_items_with_sales
+    def menu_items_with_sales
+      result = analytics_service.menu_items_with_sales
+      
+      render json: result
+    rescue => e
+      Rails.logger.error("Error in menu_items_with_sales: #{e.message}")
+      render json: { error: 'Failed to load menu items' }, status: :internal_server_error
     end
 
     private

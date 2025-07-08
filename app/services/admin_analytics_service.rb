@@ -8,8 +8,10 @@ class AdminAnalyticsService < TenantScopedService
   # @param start_date [Time] Start date for the report
   # @param end_date [Time] End date for the report
   # @param created_by_user_id [String, nil] Optional filter for staff orders by user who created them
+  # @param payment_method [String, nil] Optional filter for orders by payment method
+  # @param menu_item_ids [Array<String>, nil] Optional filter for orders containing specific menu items
   # @return [Hash] Customer orders report data
-  def customer_orders_report(start_date, end_date, created_by_user_id = nil)
+  def customer_orders_report(start_date, end_date, created_by_user_id = nil, payment_method = nil, menu_item_ids = nil)
     # Ensure end_date includes the full day
     end_date = end_date.end_of_day
     
@@ -27,6 +29,11 @@ class AdminAnalyticsService < TenantScopedService
     # Apply user filter if provided
     if created_by_user_id.present?
       staff_orders = staff_orders.where(created_by_user_id: created_by_user_id)
+    end
+    
+    # Apply payment method filter if provided
+    if payment_method.present?
+      staff_orders = staff_orders.where(payment_method: payment_method)
     end
     
     # Process Customer Orders (registered users, not staff-created)
@@ -49,6 +56,20 @@ class AdminAnalyticsService < TenantScopedService
     # Process Staff Orders (staff_created = true)
     # Group by created_by_user_id to track which employee made the orders
     staff_grouped = staff_orders.group_by(&:created_by_user_id)
+    
+    # Apply menu item filter to staff orders after grouping
+    if menu_item_ids.present? && menu_item_ids.is_a?(Array) && menu_item_ids.any?
+      # Filter each group's orders to only include those with the specified menu items
+      staff_grouped = staff_grouped.transform_values do |orders_in_group|
+        orders_in_group.select do |order|
+          order_item_ids = order.items.map { |item| item['id'].to_s }
+          (order_item_ids & menu_item_ids.map(&:to_s)).any?
+        end
+      end
+      # Remove groups that have no orders after filtering
+      staff_grouped = staff_grouped.reject { |_user_id, orders| orders.empty? }
+    end
+    
     staff_report = staff_grouped.map do |created_by_user_id, orders_in_group|
       generate_order_group_data(orders_in_group, 'staff', created_by_user_id)
     end
@@ -64,7 +85,9 @@ class AdminAnalyticsService < TenantScopedService
       # Keep legacy format for backward compatibility
       results: customer_report + guest_report + staff_report,
       # Include filter info
-      staff_member_filter: created_by_user_id
+      staff_member_filter: created_by_user_id,
+      payment_method_filter: payment_method,
+      menu_item_ids_filter: menu_item_ids
     }
   end
   
@@ -368,6 +391,41 @@ class AdminAnalyticsService < TenantScopedService
       heatmap: heatmap_data,
       restaurant_id: @restaurant.id,
       restaurant_name: @restaurant.name
+    }
+  end
+
+  # Get menu items that have actual sales data for filtering purposes
+  # @return [Hash] Menu items with sales data
+  def menu_items_with_sales
+    # Get all orders from this restaurant to find which menu items have been sold
+    orders = scope_query(Order)
+                  .where.not(status: 'cancelled')
+                  .where('items IS NOT NULL AND items != ?', '[]')
+    
+    # Extract menu item IDs from order items (JSON)
+    menu_item_ids_with_sales = Set.new
+    orders.find_each do |order|
+      order.items.each do |item|
+        menu_item_ids_with_sales.add(item['id'].to_i) if item['id'].present?
+      end
+    end
+    
+    # Get menu items that have been ordered, with their categories
+    menu_items = scope_query(MenuItem)
+                        .joins(:menu, :categories)
+                        .where(id: menu_item_ids_with_sales.to_a)
+                        .select('menu_items.id, menu_items.name, categories.name as category_name')
+                        .group('menu_items.id, menu_items.name, categories.name')
+                        .order('menu_items.name')
+    
+    {
+      menu_items: menu_items.map do |item|
+        {
+          id: item.id,
+          name: item.name,
+          category_name: item.category_name
+        }
+      end
     }
   end
 

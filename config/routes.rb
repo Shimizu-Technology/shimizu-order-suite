@@ -203,6 +203,7 @@ Rails.application.routes.draw do
     get "analytics/user_signups",      to: "analytics#user_signups"
     get "analytics/user_activity_heatmap", to: "analytics#user_activity_heatmap"
     get "analytics/staff_users",       to: "analytics#staff_users"
+    get "analytics/menu_items_with_sales", to: "analytics#menu_items_with_sales"
     
     # VIP Reports
     get "reports/menu_items",         to: "reports#menu_items"
