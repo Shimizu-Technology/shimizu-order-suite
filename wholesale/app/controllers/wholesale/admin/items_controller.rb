@@ -1,0 +1,256 @@
+# app/controllers/wholesale/admin/items_controller.rb
+
+module Wholesale
+  module Admin
+    class ItemsController < Wholesale::ApplicationController
+      before_action :require_admin!
+      before_action :set_fundraiser, only: [:index, :show, :create, :update, :destroy, :toggle_active, :bulk_update], if: :nested_route?
+      before_action :set_item, only: [:show, :update, :destroy, :toggle_active]
+      before_action :set_restaurant_context
+      
+      # GET /wholesale/admin/items
+      # GET /wholesale/admin/fundraisers/:fundraiser_id/items
+      def index
+        items = Wholesale::Item.joins(:fundraiser)
+          .where(wholesale_fundraisers: { restaurant_id: current_restaurant.id })
+          .includes(:fundraiser, :item_images)
+        
+        # Apply fundraiser scoping if present
+        if @fundraiser
+          # Nested route: scope to specific fundraiser
+          items = items.where(fundraiser_id: @fundraiser.id)
+        elsif params[:fundraiser_id].present?
+          # Parameter-based filtering for backward compatibility
+          items = items.where(fundraiser_id: params[:fundraiser_id])
+        end
+        
+        # Add computed fields
+        items_with_stats = items.map do |item|
+          item_with_computed_fields(item)
+        end
+        
+        render_success(items: items_with_stats)
+      end
+      
+      # GET /wholesale/admin/items/:id
+      def show
+        render_success(item: item_with_computed_fields(@item))
+      end
+      
+      # POST /wholesale/admin/items
+      # POST /wholesale/admin/fundraisers/:fundraiser_id/items
+      def create
+        # Use @fundraiser if set (nested route), otherwise verify from params
+        fundraiser = @fundraiser
+        
+        if fundraiser.nil?
+          # Flat route: verify fundraiser belongs to current restaurant
+          fundraiser = Wholesale::Fundraiser.where(restaurant: current_restaurant)
+            .find_by(id: item_params[:fundraiser_id])
+          
+          unless fundraiser
+            render_error('Fundraiser not found or not accessible')
+            return
+          end
+        end
+        
+        # Ensure fundraiser_id is set correctly for nested routes
+        create_params = item_params.except(:images)
+        create_params[:fundraiser_id] = fundraiser.id
+        
+        item = Wholesale::Item.new(create_params)
+        
+        if item.save
+          # Process image uploads if present
+          process_image_uploads(item, item_params[:images]) if item_params[:images].present?
+          
+          # Reload to include any created images
+          item.reload
+          render_success(item: item_with_computed_fields(item), message: 'Item created successfully!', status: :created)
+        else
+          render_error('Failed to create item', errors: item.errors.full_messages)
+        end
+      end
+      
+      # PATCH/PUT /wholesale/admin/items/:id
+      def update
+        if @item.update(item_params)
+          render_success(item: item_with_computed_fields(@item), message: 'Item updated successfully!')
+        else
+          render_error('Failed to update item', errors: @item.errors.full_messages)
+        end
+      end
+      
+      # DELETE /wholesale/admin/items/:id
+      def destroy
+        if @item.destroy
+          render_success(message: 'Item deleted successfully!')
+        else
+          render_error('Failed to delete item', errors: @item.errors.full_messages)
+        end
+      end
+      
+      # PATCH /wholesale/admin/items/:id/toggle_active
+      def toggle_active
+        @item.active = !@item.active
+        
+        if @item.save
+          render_success(item: @item, message: "Item #{@item.active? ? 'activated' : 'deactivated'} successfully!")
+        else
+          render_error('Failed to toggle item status', errors: @item.errors.full_messages)
+        end
+      end
+      
+      # POST /wholesale/admin/items/bulk_update
+      def bulk_update
+        # TODO: Implement bulk update functionality
+        render_success(message: 'Bulk update functionality coming soon')
+      end
+      
+      private
+      
+      def set_item
+        query = Wholesale::Item.joins(:fundraiser)
+          .where(wholesale_fundraisers: { restaurant_id: current_restaurant.id })
+          .includes(:fundraiser, :item_images)
+        
+        # Additional scoping for nested routes
+        if @fundraiser
+          query = query.where(fundraiser_id: @fundraiser.id)
+        end
+        
+        @item = query.find_by(id: params[:id])
+        render_not_found('Item not found') unless @item
+      end
+      
+      def item_params
+        permitted_params = params.require(:item).permit(
+          :fundraiser_id, :name, :description, :price, :price_cents, :sku, :image_url,
+          :stock_quantity, :low_stock_threshold, :track_inventory, :active,
+          :position, :sort_order, :options,
+          images: []
+        )
+        
+        # Convert price to price_cents if price is provided instead of price_cents
+        if permitted_params[:price].present? && permitted_params[:price_cents].blank?
+          permitted_params[:price_cents] = (permitted_params[:price].to_f * 100).round
+          permitted_params.delete(:price)
+        end
+        
+        # Convert string values to proper types (FormData sends everything as strings)
+        # Integer conversions
+        [:fundraiser_id, :position, :sort_order, :stock_quantity, :low_stock_threshold, :price_cents].each do |field|
+          if permitted_params[field].present?
+            permitted_params[field] = permitted_params[field].to_i
+          end
+        end
+        
+        # Boolean conversions  
+        [:track_inventory, :active].each do |field|
+          if permitted_params[field].present?
+            permitted_params[field] = permitted_params[field].to_s.downcase.in?(['true', '1', 'yes', 'on'])
+          end
+        end
+        
+        # Parse options JSON if it's a string
+        if permitted_params[:options].is_a?(String)
+          begin
+            permitted_params[:options] = JSON.parse(permitted_params[:options])
+          rescue JSON::ParserError
+            permitted_params[:options] = {}
+          end
+        end
+        
+        # Clear inventory fields when track_inventory is false (model validation requirement)
+        unless permitted_params[:track_inventory]
+          permitted_params[:stock_quantity] = nil
+          permitted_params[:low_stock_threshold] = nil
+        end
+        
+        permitted_params
+      end
+      
+
+      
+      def process_image_uploads(item, image_files)
+        return unless image_files.is_a?(Array)
+        
+        image_files.each_with_index do |file, index|
+          next unless file.present? && file.respond_to?(:original_filename)
+          
+          begin
+            # Generate unique filename
+            ext = File.extname(file.original_filename)
+            timestamp = Time.now.to_i
+            new_filename = "wholesale_item_#{item.id}_#{timestamp}_#{index + 1}#{ext}"
+            
+            # Upload to S3
+            public_url = S3Uploader.upload(file, new_filename)
+            
+            # Create ItemImage record
+            item.item_images.create!(
+              image_url: public_url,
+              position: index + 1,
+              primary: index == 0, # First image is primary
+              alt_text: "#{item.name} - Image #{index + 1}"
+            )
+            
+          rescue => e
+            Rails.logger.error "[WholesaleItemsController] Image upload failed for item #{item.id}, image #{index + 1}: #{e.message}"
+            Rails.logger.error "[WholesaleItemsController] Backtrace: #{e.backtrace.join("\n")}"
+            # Continue processing other images
+          end
+        end
+      end
+
+      def item_with_computed_fields(item)
+        # Calculate stock status
+        stock_status = 'in_stock'
+        if item.track_inventory && item.stock_quantity.present?
+          if item.stock_quantity <= 0
+            stock_status = 'out_of_stock'
+          elsif item.low_stock_threshold.present? && item.stock_quantity <= item.low_stock_threshold
+            stock_status = 'low_stock'
+          end
+        end
+        
+        item.attributes.merge(
+          'fundraiser_name' => item.fundraiser&.name,
+          'price' => item.price_cents / 100.0,
+          'stock_status' => stock_status,
+          'in_stock' => !item.track_inventory || (item.stock_quantity.present? && item.stock_quantity > 0),
+          'total_ordered' => 0, # TODO: Calculate from orders
+          'total_revenue' => 0, # TODO: Calculate from orders  
+          'images_count' => item.item_images.count,
+          'item_images' => item.item_images.order(:position).map do |img|
+            {
+              id: img.id,
+              image_url: img.image_url,
+              alt_text: img.alt_text,
+              position: img.position,
+              primary: img.primary
+            }
+          end,
+          'orders_sold' => 0, # TODO: Calculate from orders
+          'revenue_generated_cents' => 0 # TODO: Calculate from orders
+        )
+      end
+
+      def set_restaurant_context
+        unless current_restaurant
+          render_unauthorized('Restaurant context not set.')
+        end
+      end
+
+      def set_fundraiser
+        @fundraiser = Wholesale::Fundraiser.where(restaurant: current_restaurant)
+          .find_by(id: params[:fundraiser_id])
+        render_not_found('Fundraiser not found') unless @fundraiser
+      end
+
+      def nested_route?
+        params[:fundraiser_id].present?
+      end
+    end
+  end
+end

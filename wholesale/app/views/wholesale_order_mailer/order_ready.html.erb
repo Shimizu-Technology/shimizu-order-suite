@@ -1,0 +1,159 @@
+<% content_for :header_color, @header_color %>
+
+<div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; background-color: #ffffff;">
+  <!-- Header -->
+  <div style="background-color: <%= @header_color %>; padding: 20px; text-align: center;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">Order Ready for Pickup!</h1>
+  </div>
+
+  <!-- Order Details -->
+  <div style="padding: 30px 20px;">
+    <h2 style="color: #333; margin-bottom: 20px;">Your wholesale order is ready!</h2>
+    
+    <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+      Hi <%= @order.customer_name %>,<br><br>
+      Great news! Your wholesale order for <strong><%= @fundraiser.name %></strong> is now ready for pickup.
+      <% if @participant %>
+        Thank you for supporting <strong><%= @participant.name %></strong>!
+      <% end %>
+    </p>
+
+    <!-- Pickup Instructions -->
+    <div style="background-color: #e8f5e8; padding: 20px; border-radius: 8px; margin-bottom: 25px; border-left: 4px solid #28a745;">
+      <h3 style="color: #155724; margin-top: 0; margin-bottom: 15px;">Pickup Instructions</h3>
+      <ul style="color: #155724; margin: 0; padding-left: 20px;">
+        <li style="margin-bottom: 8px;">Please bring this confirmation email when picking up</li>
+        <li style="margin-bottom: 8px;">Show your order number: <strong><%= @order.order_number %></strong></li>
+        <li style="margin-bottom: 8px;">Pickup location details are below</li>
+        <li>Contact us if you have any questions</li>
+      </ul>
+    </div>
+
+    <!-- Order Information -->
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+      <h3 style="color: #333; margin-top: 0; margin-bottom: 15px;">Order Information</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Order Number:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @order.order_number %></td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Order Date:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @order.created_at.strftime("%B %d, %Y at %I:%M %p") %></td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Fundraiser:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @fundraiser.name %></td>
+        </tr>
+        <% if @participant %>
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Supporting:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @participant.name %></td>
+        </tr>
+        <% end %>
+      </table>
+    </div>
+
+    <!-- Pickup Location -->
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+      <h3 style="color: #333; margin-top: 0; margin-bottom: 15px;">Pickup Location</h3>
+      <p style="color: #333; margin: 0; margin-bottom: 10px;">
+        <strong><%= @fundraiser.pickup_display_name %></strong><br>
+        <%= @fundraiser.pickup_display_address %>
+      </p>
+      
+      <% if @fundraiser.pickup_instructions.present? %>
+        <div style="background-color: #e3f2fd; padding: 15px; border-left: 4px solid #2196f3; margin-bottom: 10px;">
+          <strong style="color: #1976d2;">Pickup Instructions:</strong><br>
+          <span style="color: #1976d2;"><%= @fundraiser.pickup_instructions %></span>
+        </div>
+      <% end %>
+      
+      <% if @fundraiser.pickup_hours.present? %>
+        <p style="color: #2e7d32; margin: 10px 0;">
+          <strong>🕒 Pickup Hours:</strong> <%= @fundraiser.pickup_hours %>
+        </p>
+      <% end %>
+      
+      <% if @fundraiser.pickup_contact_name.present? %>
+        <p style="color: #333; margin: 10px 0;">
+          <strong>Contact:</strong> <%= @fundraiser.pickup_contact_name %>
+          <% if @fundraiser.pickup_contact_display_phone.present? %>
+            - <%= @fundraiser.pickup_contact_display_phone %>
+          <% end %>
+        </p>
+      <% end %>
+    </div>
+
+    <!-- Order Items -->
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+      <h3 style="color: #333; margin-top: 0; margin-bottom: 15px;">Order Items</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <% @order_items.each do |item| %>
+        <tr style="border-bottom: 1px solid #e9ecef;">
+          <td style="padding: 15px 0; color: #333;">
+            <strong><%= item.item_name %></strong>
+            <% if item.selected_options.present? && item.selected_options.any? %>
+              <br>
+              <span style="color: #666; font-size: 14px;">
+                Options: <%= item.selected_options.map { |k, v| "#{k.humanize}: #{v}" }.join(', ') %>
+              </span>
+            <% end %>
+            <% if item.item_description.present? %>
+              <br>
+              <span style="color: #666; font-size: 14px;"><%= item.item_description %></span>
+            <% end %>
+          </td>
+          <td style="padding: 15px 0; text-align: center; color: #333;">
+            <%= item.quantity %>
+          </td>
+          <td style="padding: 15px 0; text-align: right; color: #333;">
+            $<%= sprintf("%.2f", item.price) %>
+          </td>
+          <td style="padding: 15px 0; text-align: right; color: #333; font-weight: bold;">
+            $<%= sprintf("%.2f", item.line_total) %>
+          </td>
+        </tr>
+        <% end %>
+      </table>
+    </div>
+
+    <!-- Order Total -->
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 10px 0; text-align: right; color: #666; font-size: 18px;">
+            <strong>Order Total:</strong>
+          </td>
+          <td style="padding: 10px 0; text-align: right; color: #333; font-size: 18px; font-weight: bold;">
+            $<%= sprintf("%.2f", @total) %>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Special Instructions -->
+    <% if @order.notes.present? %>
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+      <h3 style="color: #333; margin-top: 0; margin-bottom: 15px;">Special Instructions</h3>
+      <p style="color: #333; margin: 0; white-space: pre-line;"><%= @order.notes %></p>
+    </div>
+    <% end %>
+
+    <!-- Contact Information -->
+    <div style="border-top: 1px solid #e9ecef; padding-top: 20px; text-align: center;">
+      <p style="color: #666; font-size: 14px; margin-bottom: 10px;">
+        Questions about your pickup? Contact us:
+      </p>
+      <p style="color: #333; margin: 0;">
+        <strong><%= @restaurant.name %></strong><br>
+        <% if @restaurant.phone_number.present? %>
+          Phone: <%= @restaurant.phone_number %><br>
+        <% end %>
+        <% if @restaurant.contact_email.present? %>
+          Email: <%= @restaurant.contact_email %>
+        <% end %>
+      </p>
+    </div>
+  </div>
+</div>

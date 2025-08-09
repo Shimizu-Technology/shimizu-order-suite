@@ -10,13 +10,17 @@ class ApplicationController < ActionController::API
   # Rescue from Pundit authorization errors
   rescue_from Pundit::NotAuthorizedError, with: :user_not_authorized
   def authorize_request
+    Rails.logger.debug { "[AUTH] authorize_request called" }
     header = request.headers["Authorization"]
     token = header.split(" ").last if header
+    Rails.logger.debug { "[AUTH] Token present: #{token.present?}" }
 
     begin
       # Use TokenService to verify and decode the token
       decoded = TokenService.verify_token(token)
+      Rails.logger.debug { "[AUTH] Token decoded: #{decoded}" }
       @current_user = User.find(decoded["user_id"])
+      Rails.logger.debug { "[AUTH] User found: #{@current_user.email}, role: #{@current_user.role}" }
       
       # IMPORTANT: The tenant context is already set in the before_action :set_current_tenant callback
       # from the TenantIsolation concern, which runs before this method

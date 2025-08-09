@@ -78,3 +78,5 @@ group :test do
   gem "simplecov", require: false # For tracking test coverage
   gem "webmock"    # For mocking external API calls
 end
+
+gem "wholesale", path: "wholesale"

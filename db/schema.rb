@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_06_27_004634) do
+ActiveRecord::Schema[7.2].define(version: 2025_08_08_230054) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -647,7 +647,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_06_27_004634) do
     t.index ["restaurant_id", "is_active"], name: "idx_staff_discounts_restaurant_active"
     t.index ["restaurant_id"], name: "index_staff_discount_configurations_on_restaurant_id"
     t.check_constraint "discount_percentage >= 0::numeric AND discount_percentage <= 100::numeric", name: "chk_discount_percentage_range"
-    t.check_constraint "discount_type::text = ANY (ARRAY['percentage'::character varying, 'fixed_amount'::character varying]::text[])", name: "chk_discount_type_values"
+    t.check_constraint "discount_type::text = ANY (ARRAY['percentage'::character varying::text, 'fixed_amount'::character varying::text])", name: "chk_discount_type_values"
   end
 
   create_table "staff_members", force: :cascade do |t|
@@ -759,6 +759,151 @@ ActiveRecord::Schema[7.2].define(version: 2025_06_27_004634) do
     t.index ["restaurant_id"], name: "index_waitlist_entries_on_restaurant_id"
   end
 
+  create_table "wholesale_fundraiser_counters", force: :cascade do |t|
+    t.bigint "fundraiser_id", null: false
+    t.integer "counter", default: 0, null: false
+    t.date "last_reset_date", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["fundraiser_id"], name: "index_wholesale_fundraiser_counters_on_fundraiser_id"
+  end
+
+  create_table "wholesale_fundraisers", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.date "start_date", null: false
+    t.date "end_date"
+    t.string "contact_email"
+    t.string "contact_phone"
+    t.text "terms_and_conditions"
+    t.boolean "active", default: true
+    t.jsonb "settings", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "card_image_url"
+    t.string "banner_url"
+    t.string "pickup_location_name"
+    t.text "pickup_address"
+    t.text "pickup_instructions"
+    t.string "pickup_contact_name"
+    t.string "pickup_contact_phone"
+    t.text "pickup_hours"
+    t.index ["restaurant_id", "active"], name: "index_wholesale_fundraisers_on_restaurant_id_and_active"
+    t.index ["restaurant_id", "slug"], name: "index_wholesale_fundraisers_on_restaurant_id_and_slug", unique: true
+    t.index ["restaurant_id"], name: "index_wholesale_fundraisers_on_restaurant_id"
+    t.index ["start_date", "end_date"], name: "index_wholesale_fundraisers_on_start_date_and_end_date"
+  end
+
+  create_table "wholesale_item_images", force: :cascade do |t|
+    t.bigint "item_id", null: false
+    t.string "image_url", null: false
+    t.string "alt_text"
+    t.integer "position", default: 1
+    t.boolean "primary", default: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["item_id", "position"], name: "index_wholesale_item_images_on_item_id_and_position"
+    t.index ["item_id"], name: "index_wholesale_item_images_on_item_id"
+  end
+
+  create_table "wholesale_items", force: :cascade do |t|
+    t.bigint "fundraiser_id", null: false
+    t.string "name", null: false
+    t.text "description"
+    t.string "sku"
+    t.integer "price_cents", null: false
+    t.integer "stock_quantity"
+    t.integer "low_stock_threshold"
+    t.boolean "track_inventory", default: false
+    t.integer "position", default: 0
+    t.integer "sort_order", default: 0
+    t.boolean "active", default: true
+    t.jsonb "options", default: {}
+    t.text "admin_notes"
+    t.datetime "last_restocked_at", precision: nil
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["fundraiser_id", "active"], name: "index_wholesale_items_on_fundraiser_id_and_active"
+    t.index ["fundraiser_id", "sort_order"], name: "index_wholesale_items_on_fundraiser_id_and_sort_order"
+    t.index ["fundraiser_id"], name: "index_wholesale_items_on_fundraiser_id"
+    t.index ["track_inventory", "stock_quantity"], name: "index_wholesale_items_on_track_inventory_and_stock_quantity"
+  end
+
+  create_table "wholesale_order_items", force: :cascade do |t|
+    t.bigint "order_id", null: false
+    t.bigint "item_id", null: false
+    t.integer "quantity", null: false
+    t.integer "price_cents", null: false
+    t.string "item_name"
+    t.text "item_description"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.jsonb "selected_options", default: {}
+    t.index ["item_id"], name: "index_wholesale_order_items_on_item_id"
+    t.index ["order_id"], name: "index_wholesale_order_items_on_order_id"
+    t.index ["selected_options"], name: "index_wholesale_order_items_on_selected_options", using: :gin
+  end
+
+  create_table "wholesale_order_payments", force: :cascade do |t|
+    t.bigint "order_id", null: false
+    t.integer "amount_cents", null: false
+    t.string "payment_method", default: "stripe"
+    t.string "status", default: "pending"
+    t.string "stripe_payment_intent_id"
+    t.string "stripe_charge_id"
+    t.string "transaction_id"
+    t.jsonb "payment_data", default: {}
+    t.datetime "processed_at", precision: nil
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["order_id"], name: "index_wholesale_order_payments_on_order_id"
+    t.index ["status"], name: "index_wholesale_order_payments_on_status"
+    t.index ["stripe_payment_intent_id"], name: "index_wholesale_order_payments_on_stripe_payment_intent_id"
+  end
+
+  create_table "wholesale_orders", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.bigint "fundraiser_id", null: false
+    t.bigint "user_id"
+    t.bigint "participant_id"
+    t.string "order_number", null: false
+    t.string "customer_name", null: false
+    t.string "customer_email", null: false
+    t.string "customer_phone"
+    t.text "shipping_address"
+    t.integer "total_cents", null: false
+    t.string "status", default: "pending"
+    t.text "notes"
+    t.jsonb "metadata", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["fundraiser_id", "status"], name: "index_wholesale_orders_on_fundraiser_id_and_status"
+    t.index ["fundraiser_id"], name: "index_wholesale_orders_on_fundraiser_id"
+    t.index ["participant_id"], name: "index_wholesale_orders_on_participant_id"
+    t.index ["restaurant_id", "order_number"], name: "index_wholesale_orders_on_restaurant_id_and_order_number", unique: true
+    t.index ["restaurant_id", "status"], name: "index_wholesale_orders_on_restaurant_id_and_status"
+    t.index ["restaurant_id"], name: "index_wholesale_orders_on_restaurant_id"
+    t.index ["user_id"], name: "index_wholesale_orders_on_user_id"
+  end
+
+  create_table "wholesale_participants", force: :cascade do |t|
+    t.bigint "fundraiser_id", null: false
+    t.string "name", null: false
+    t.string "slug", null: false
+    t.text "description"
+    t.string "photo_url"
+    t.integer "goal_amount_cents"
+    t.integer "current_amount_cents", default: 0
+    t.boolean "active", default: true
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["fundraiser_id", "active"], name: "index_wholesale_participants_on_fundraiser_id_and_active"
+    t.index ["fundraiser_id", "slug"], name: "index_wholesale_participants_on_fundraiser_id_and_slug", unique: true
+    t.index ["fundraiser_id"], name: "index_wholesale_participants_on_fundraiser_id"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "audit_logs", "restaurants", on_delete: :cascade
@@ -832,4 +977,16 @@ ActiveRecord::Schema[7.2].define(version: 2025_06_27_004634) do
   add_foreign_key "vip_access_codes", "users"
   add_foreign_key "vip_code_recipients", "vip_access_codes"
   add_foreign_key "waitlist_entries", "restaurants"
+  add_foreign_key "wholesale_fundraiser_counters", "wholesale_fundraisers", column: "fundraiser_id"
+  add_foreign_key "wholesale_fundraisers", "restaurants"
+  add_foreign_key "wholesale_item_images", "wholesale_items", column: "item_id"
+  add_foreign_key "wholesale_items", "wholesale_fundraisers", column: "fundraiser_id"
+  add_foreign_key "wholesale_order_items", "wholesale_items", column: "item_id"
+  add_foreign_key "wholesale_order_items", "wholesale_orders", column: "order_id"
+  add_foreign_key "wholesale_order_payments", "wholesale_orders", column: "order_id"
+  add_foreign_key "wholesale_orders", "restaurants"
+  add_foreign_key "wholesale_orders", "users"
+  add_foreign_key "wholesale_orders", "wholesale_fundraisers", column: "fundraiser_id"
+  add_foreign_key "wholesale_orders", "wholesale_participants", column: "participant_id"
+  add_foreign_key "wholesale_participants", "wholesale_fundraisers", column: "fundraiser_id"
 end

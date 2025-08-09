@@ -1,0 +1,75 @@
+WHOLESALE ORDER READY FOR PICKUP!
+<%= @restaurant.name %>
+
+Your wholesale order is ready!
+
+Hi <%= @order.customer_name %>,
+
+Great news! Your wholesale order for <%= @fundraiser.name %> is now ready for pickup.
+<% if @participant %>Thank you for supporting <%= @participant.name %>!<% end %>
+
+PICKUP INSTRUCTIONS
+===================
+• Please bring this confirmation email when picking up
+• Show your order number: <%= @order.order_number %>
+• Pickup location details are below
+• Contact us if you have any questions
+
+ORDER INFORMATION
+=================
+Order Number: <%= @order.order_number %>
+Order Date: <%= @order.created_at.strftime("%B %d, %Y at %I:%M %p") %>
+Fundraiser: <%= @fundraiser.name %>
+<% if @participant %>Supporting: <%= @participant.name %><% end %>
+
+PICKUP LOCATION
+===============
+<%= @fundraiser.pickup_display_name %>
+<%= @fundraiser.pickup_display_address %>
+
+<% if @fundraiser.pickup_instructions.present? %>
+PICKUP INSTRUCTIONS
+==================
+<%= @fundraiser.pickup_instructions %>
+
+<% end %>
+<% if @fundraiser.pickup_hours.present? %>
+PICKUP HOURS: <%= @fundraiser.pickup_hours %>
+
+<% end %>
+<% if @fundraiser.pickup_contact_name.present? %>
+CONTACT: <%= @fundraiser.pickup_contact_name %><% if @fundraiser.pickup_contact_display_phone.present? %> - <%= @fundraiser.pickup_contact_display_phone %><% end %>
+
+<% end %>
+
+ORDER ITEMS
+===========
+<% @order_items.each do |item| %>
+<%= item.item_name %>
+<% if item.selected_options.present? && item.selected_options.any? %>
+  Options: <%= item.selected_options.map { |k, v| "#{k.humanize}: #{v}" }.join(', ') %>
+<% end %>
+<% if item.item_description.present? %>
+  <%= item.item_description %>
+<% end %>
+  Quantity: <%= item.quantity %>
+  Price: $<%= sprintf("%.2f", item.price) %>
+  Line Total: $<%= sprintf("%.2f", item.line_total) %>
+
+<% end %>
+
+ORDER TOTAL: $<%= sprintf("%.2f", @total) %>
+
+<% if @order.notes.present? %>
+SPECIAL INSTRUCTIONS
+====================
+<%= @order.notes %>
+
+<% end %>
+CONTACT INFORMATION
+===================
+<%= @restaurant.name %>
+<% if @restaurant.phone_number.present? %>Phone: <%= @restaurant.phone_number %><% end %>
+<% if @restaurant.contact_email.present? %>Email: <%= @restaurant.contact_email %><% end %>
+
+Thank you for supporting <%= @fundraiser.name %>!

@@ -1,3 +1,9 @@
+PATH
+  remote: wholesale
+  specs:
+    wholesale (0.1.0)
+      rails (>= 7.2.2.1)
+
 GEM
   remote: https://rubygems.org/
   specs:
@@ -406,6 +412,7 @@ DEPENDENCIES
   tzinfo-data
   web-push (~> 3.0.1)
   webmock
+  wholesale!
 
 BUNDLED WITH
    2.5.9

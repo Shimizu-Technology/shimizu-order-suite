@@ -190,6 +190,8 @@ module TenantIsolation
       # For super_admin users, always use the explicitly requested restaurant context
       # This ensures they don't accidentally access data from other restaurants
       ActiveRecord::Base.current_restaurant = restaurant
+      Rails.logger.debug { "[TENANT] current_user is: #{current_user.inspect}" }
+      Rails.logger.debug { "[TENANT] @current_user is: #{@current_user.inspect}" }
       Rails.logger.debug { "Setting tenant context to restaurant_id: #{restaurant&.id || 'nil'} for user role: #{current_user&.role || 'public'}" }
     end
     

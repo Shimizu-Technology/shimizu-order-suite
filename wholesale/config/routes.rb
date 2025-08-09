@@ -1,0 +1,140 @@
+Wholesale::Engine.routes.draw do
+  # Admin routes (protected)
+  namespace :admin do
+    resources :fundraisers do
+      member do
+        patch :toggle_active
+        post :duplicate
+      end
+      
+      # Nested fundraiser-scoped resources
+      resources :items, only: [:index, :show, :create, :update, :destroy] do
+        member do
+          patch :toggle_active
+        end
+        collection do
+          post :bulk_update
+        end
+      end
+      
+      resources :participants, only: [:index, :show, :create, :update, :destroy] do
+        member do
+          patch :toggle_active
+        end
+      end
+      
+      resources :orders, only: [:index, :show, :update] do
+        member do
+          patch :update_status
+          patch :update_tracking
+          get :export
+        end
+        collection do
+          get :export_all
+          patch :bulk_update_status
+          get :wholesale_statuses
+        end
+      end
+      
+      # Fundraiser-specific analytics
+      get 'analytics', to: 'analytics#fundraiser_analytics'
+    end
+    
+    # Flat routes (for backward compatibility)
+    resources :items do
+      member do
+        patch :toggle_active
+      end
+      collection do
+        post :bulk_update
+      end
+    end
+    
+    resources :participants do
+      member do
+        patch :toggle_active
+      end
+    end
+    
+    resources :orders, only: [:index, :show, :update] do
+      member do
+        patch :update_status
+        patch :update_tracking
+        get :export
+      end
+      collection do
+        get :export_all
+        patch :bulk_update_status
+        get :wholesale_statuses
+      end
+    end
+    
+    # Global admin analytics and reporting
+    get 'analytics', to: 'analytics#index'
+    get 'analytics/revenue', to: 'analytics#revenue'
+    get 'analytics/participants', to: 'analytics#participants'
+    get 'analytics/fundraisers', to: 'analytics#fundraisers'
+  end
+  
+  # Health check
+  get '/health', to: 'application#health'
+  
+  # Fundraisers (public browsing)
+  resources :fundraisers, only: [:index, :show], param: :slug do
+    # Items within fundraisers
+    resources :items, only: [:index, :show] do
+      member do
+        post :check_availability
+      end
+    end
+  end
+  
+  # Items (alternative direct access)
+  resources :items, only: [:show] do
+    member do
+      post :check_availability
+    end
+  end
+  
+  # Shopping cart (session-based)
+  resource :cart, only: [:show] do
+    member do
+      post :add
+      put :update
+      delete :clear
+      get :validate
+    end
+    
+    # Remove specific item from cart
+    delete :remove, to: 'cart#remove'
+  end
+  
+  # Orders and checkout
+  resources :orders, only: [:index, :show, :create, :update] do
+    member do
+      delete :cancel
+      get :status
+    end
+    
+    # Payments for orders
+    resources :payments, only: [:index, :create, :show] do
+      member do
+        post :confirm
+        post :refund
+      end
+    end
+  end
+  
+  # Direct payment access
+  resources :payments, only: [:show] do
+    member do
+      post :refund
+    end
+  end
+  
+  # Stripe webhooks
+  post '/payments/webhook', to: 'payments#webhook'
+  
+  # API info endpoint
+  get '/api/info', to: 'application#api_info'
+end

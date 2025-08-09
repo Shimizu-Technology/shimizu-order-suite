@@ -3,6 +3,10 @@
 Rails.application.routes.draw do
   # Mount Action Cable server
   mount ActionCable.server => '/cable'
+  
+  # Mount Wholesale Engine
+  mount Wholesale::Engine, at: "/wholesale"
+  
   # Health check endpoints
   get "/health/check", to: "health#index"
   get "/health/sidekiq", to: "health#sidekiq_stats"

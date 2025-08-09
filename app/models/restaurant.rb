@@ -113,6 +113,13 @@ class Restaurant < ApplicationRecord
   has_many :locations,        dependent: :destroy
   has_many :staff_discount_configurations, dependent: :destroy
 
+  # Wholesale-related associations
+  has_many :wholesale_fundraisers, class_name: "Wholesale::Fundraiser", dependent: :destroy
+  has_many :wholesale_items, through: :wholesale_fundraisers, class_name: "Wholesale::Item"
+  has_many :wholesale_participants, through: :wholesale_fundraisers, class_name: "Wholesale::Participant"
+  has_many :wholesale_orders, class_name: "Wholesale::Order", dependent: :destroy
+  has_many :wholesale_order_payments, class_name: "Wholesale::OrderPayment", dependent: :destroy
+
   # Layout-related associations
   has_many :layouts,          dependent: :destroy
   has_many :seat_sections,    through: :layouts

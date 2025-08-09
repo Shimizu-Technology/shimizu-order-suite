@@ -1,0 +1,55 @@
+WHOLESALE ORDER FULFILLED!
+<%= @restaurant.name %>
+
+Your wholesale order has been fulfilled!
+
+Hi <%= @order.customer_name %>,
+
+Great news! Your wholesale order for <%= @fundraiser.name %> has been fulfilled and is being prepared for pickup.
+<% if @participant %>Thank you for supporting <%= @participant.name %>!<% end %>
+
+WHAT THIS MEANS
+===============
+• Your order items have been prepared
+• We'll notify you when it's ready for pickup
+• Keep your order number handy: <%= @order.order_number %>
+• Contact us if you have any questions
+
+ORDER INFORMATION
+=================
+Order Number: <%= @order.order_number %>
+Order Date: <%= @order.created_at.strftime("%B %d, %Y at %I:%M %p") %>
+Fundraiser: <%= @fundraiser.name %>
+<% if @participant %>Supporting: <%= @participant.name %><% end %>
+
+ORDER ITEMS
+===========
+<% @order_items.each do |item| %>
+<%= item.item_name %>
+<% if item.selected_options.present? && item.selected_options.any? %>
+  Options: <%= item.selected_options.map { |k, v| "#{k.humanize}: #{v}" }.join(', ') %>
+<% end %>
+<% if item.item_description.present? %>
+  <%= item.item_description %>
+<% end %>
+  Quantity: <%= item.quantity %>
+  Price: $<%= sprintf("%.2f", item.price) %>
+  Line Total: $<%= sprintf("%.2f", item.line_total) %>
+
+<% end %>
+
+ORDER TOTAL: $<%= sprintf("%.2f", @total) %>
+
+<% if @order.notes.present? %>
+SPECIAL INSTRUCTIONS
+====================
+<%= @order.notes %>
+
+<% end %>
+CONTACT INFORMATION
+===================
+<%= @restaurant.name %>
+<% if @restaurant.phone_number.present? %>Phone: <%= @restaurant.phone_number %><% end %>
+<% if @restaurant.contact_email.present? %>Email: <%= @restaurant.contact_email %><% end %>
+
+Thank you for supporting <%= @fundraiser.name %>!
