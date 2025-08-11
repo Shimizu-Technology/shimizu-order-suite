@@ -106,12 +106,14 @@ module Wholesale
           averageOrderValue: average_order_value,
           conversionRate: 0, # Would need visitor data
           topFundraisers: generate_top_fundraisers(fundraisers, orders),
-          topParticipants: generate_top_participants(participants, orders),
+          topParticipants: generate_enhanced_participant_analytics(participants, orders),
           generalSupport: generate_general_support_analytics(orders),
-          topItems: generate_top_items(orders),
+          topItems: generate_enhanced_item_analytics(orders),
+          itemVariantBreakdown: generate_item_variant_breakdown(orders),
           revenueByMonth: generate_revenue_by_month(orders),
           ordersByStatus: generate_orders_by_status(orders),
-          variantAnalytics: generate_variant_analytics(orders)
+          variantAnalytics: generate_variant_analytics(orders),
+          dailyTrends: generate_daily_trends(orders)
         }
       end
       
@@ -346,6 +348,155 @@ module Wholesale
         end
       end
       
+      def generate_enhanced_participant_analytics(participants, orders)
+        participants.map do |participant|
+          participant_orders = orders.where(participant: participant)
+          goal_amount = participant.goal_amount_cents ? (participant.goal_amount_cents / 100.0) : 0
+          raised = participant_orders.sum(:total_cents) / 100.0
+          avg_order_value = participant_orders.count > 0 ? raised / participant_orders.count : 0
+          
+          {
+            id: participant.id,
+            name: participant.name,
+            fundraiser: participant.fundraiser&.name || 'Unknown',
+            raised: raised,
+            goal: goal_amount,
+            progress: goal_amount > 0 ? (raised / goal_amount * 100).round(1) : 0,
+            orders_count: participant_orders.count,
+            average_order_value: avg_order_value.round(2),
+            goal_percentage: goal_amount > 0 ? (raised / goal_amount * 100).round(1) : nil
+          }
+        end.sort_by { |p| -p[:raised] }
+      end
+      
+      def generate_enhanced_item_analytics(orders)
+        # Get all order items from these orders
+        order_items = Wholesale::OrderItem.joins(:order)
+                                          .where(wholesale_orders: { id: orders.pluck(:id) })
+                                          .includes(:item)
+        
+        item_stats = {}
+        order_items.each do |order_item|
+          item = order_item.item
+          next unless item
+          
+          item_stats[item.id] ||= { 
+            id: item.id,
+            name: item.name, 
+            quantity: 0, 
+            revenue: 0,
+            orders_count: 0,
+            unique_orders: Set.new,
+            variants: {}
+          }
+          
+          item_stats[item.id][:quantity] += order_item.quantity
+          item_stats[item.id][:revenue] += order_item.quantity * order_item.price_cents
+          item_stats[item.id][:unique_orders].add(order_item.order_id)
+          
+          # Track variants for this item
+          if order_item.selected_options.present?
+            variant_key = order_item.selected_options.sort.to_h.to_s
+            item_stats[item.id][:variants][variant_key] ||= {
+              options: order_item.selected_options,
+              quantity: 0,
+              revenue: 0
+            }
+            item_stats[item.id][:variants][variant_key][:quantity] += order_item.quantity
+            item_stats[item.id][:variants][variant_key][:revenue] += order_item.quantity * order_item.price_cents
+          end
+        end
+        
+        item_stats.map do |item_id, stats|
+          {
+            id: item_id,
+            name: stats[:name],
+            quantity: stats[:quantity],
+            revenue: stats[:revenue] / 100.0,
+            orders_count: stats[:unique_orders].size,
+            average_quantity_per_order: stats[:unique_orders].size > 0 ? (stats[:quantity].to_f / stats[:unique_orders].size).round(2) : 0,
+            variant_count: stats[:variants].size,
+            top_variants: stats[:variants].map do |variant_key, variant_data|
+              {
+                options: variant_data[:options],
+                quantity: variant_data[:quantity],
+                revenue: variant_data[:revenue] / 100.0,
+                percentage_of_item: stats[:quantity] > 0 ? (variant_data[:quantity].to_f / stats[:quantity] * 100).round(1) : 0
+              }
+            end.sort_by { |v| -v[:quantity] }.first(3)
+          }
+        end.sort_by { |i| -i[:revenue] }
+      end
+      
+      def generate_item_variant_breakdown(orders)
+        # Detailed breakdown of variants by item
+        order_items = Wholesale::OrderItem.joins(:order)
+                                          .where(wholesale_orders: { id: orders.pluck(:id) })
+                                          .includes(:item)
+        
+        item_variants = {}
+        order_items.each do |order_item|
+          item = order_item.item
+          next unless item && order_item.selected_options.present?
+          
+          item_variants[item.name] ||= {}
+          
+          size = order_item.selected_options['size']
+          color = order_item.selected_options['color']
+          
+          if size.present?
+            item_variants[item.name][size] ||= { quantity: 0, revenue: 0, colors: {} }
+            item_variants[item.name][size][:quantity] += order_item.quantity
+            item_variants[item.name][size][:revenue] += order_item.quantity * order_item.price_cents
+            
+            if color.present?
+              item_variants[item.name][size][:colors][color] ||= { quantity: 0, revenue: 0 }
+              item_variants[item.name][size][:colors][color][:quantity] += order_item.quantity
+              item_variants[item.name][size][:colors][color][:revenue] += order_item.quantity * order_item.price_cents
+            end
+          end
+        end
+        
+        item_variants.map do |item_name, sizes|
+          {
+            item_name: item_name,
+            sizes: sizes.map do |size, size_data|
+              {
+                size: size,
+                quantity: size_data[:quantity],
+                revenue: size_data[:revenue] / 100.0,
+                colors: size_data[:colors].map do |color, color_data|
+                  {
+                    color: color,
+                    quantity: color_data[:quantity],
+                    revenue: color_data[:revenue] / 100.0
+                  }
+                end.sort_by { |c| -c[:quantity] }
+              }
+            end.sort_by { |s| -s[:quantity] }
+          }
+        end.sort_by { |item| -item[:sizes].sum { |s| s[:quantity] } }
+      end
+      
+      def generate_daily_trends(orders)
+        # Group orders by day for trend analysis
+        daily_data = orders.group("DATE(created_at)").group(:status).count
+        daily_revenue = orders.group("DATE(created_at)").sum(:total_cents)
+        
+        trend_data = {}
+        daily_data.each do |(date, status), count|
+          trend_data[date] ||= { date: date, orders: 0, revenue: 0, statuses: {} }
+          trend_data[date][:orders] += count
+          trend_data[date][:statuses][status] = count
+        end
+        
+        daily_revenue.each do |date, revenue_cents|
+          trend_data[date] ||= { date: date, orders: 0, revenue: 0, statuses: {} }
+          trend_data[date][:revenue] = revenue_cents / 100.0
+        end
+        
+        trend_data.values.sort_by { |d| d[:date] }.last(30) # Last 30 days
+      end
 
       
       def set_restaurant_context
