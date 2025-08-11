@@ -131,11 +131,13 @@ module Wholesale
     
     # Order statistics
     def total_ordered_quantity
-      order_items.joins(:order).where(wholesale_orders: { status: ['paid', 'completed'] }).sum(:quantity)
+      # All orders count as revenue since orders can only be created after payment
+      order_items.joins(:order).sum(:quantity)
     end
     
     def total_revenue_cents
-      order_items.joins(:order).where(wholesale_orders: { status: ['paid', 'completed'] }).sum('quantity * price_cents')
+      # All orders count as revenue since orders can only be created after payment
+      order_items.joins(:order).sum('quantity * price_cents')
     end
     
     private

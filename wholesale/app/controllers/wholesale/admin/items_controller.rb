@@ -214,13 +214,20 @@ module Wholesale
           end
         end
         
+        # Calculate performance metrics from order items
+        # Note: All orders count as revenue since orders can only be created after payment
+        all_order_items = item.order_items.joins(:order)
+        
+        total_ordered = all_order_items.sum(:quantity)
+        total_revenue_cents = all_order_items.sum('quantity * price_cents')
+        
         item.attributes.merge(
           'fundraiser_name' => item.fundraiser&.name,
           'price' => item.price_cents / 100.0,
           'stock_status' => stock_status,
           'in_stock' => !item.track_inventory || (item.stock_quantity.present? && item.stock_quantity > 0),
-          'total_ordered' => 0, # TODO: Calculate from orders
-          'total_revenue' => 0, # TODO: Calculate from orders  
+          'total_ordered' => total_ordered,
+          'total_revenue' => total_revenue_cents / 100.0,
           'images_count' => item.item_images.count,
           'item_images' => item.item_images.order(:position).map do |img|
             {
@@ -231,8 +238,8 @@ module Wholesale
               primary: img.primary
             }
           end,
-          'orders_sold' => 0, # TODO: Calculate from orders
-          'revenue_generated_cents' => 0 # TODO: Calculate from orders
+          'orders_sold' => total_ordered, # Alias for backward compatibility
+          'revenue_generated_cents' => total_revenue_cents # Alias for backward compatibility
         )
       end
 

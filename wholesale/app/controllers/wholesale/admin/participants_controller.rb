@@ -26,11 +26,25 @@ module Wholesale
         
         # Add computed fields
         participants_with_stats = participants.map do |participant|
-          participant.attributes.merge(
-            'fundraiser_name' => participant.fundraiser&.name,
-            'total_orders' => 0, # TODO: Calculate from orders
-            'total_items_sold' => 0 # TODO: Calculate from orders
-          )
+          participant_with_computed_fields(participant)
+        end
+        
+        # Add General Organization Support for orders without specific participants
+        if @fundraiser
+          # For specific fundraiser, add general support for that fundraiser
+          general_support_entry = create_general_support_entry(@fundraiser.id, @fundraiser.name)
+          participants_with_stats.unshift(general_support_entry) if general_support_entry
+        elsif params[:fundraiser_id].present?
+          # Parameter-based filtering for backward compatibility
+          fundraiser = Wholesale::Fundraiser.where(restaurant: current_restaurant)
+            .find_by(id: params[:fundraiser_id])
+          if fundraiser
+            general_support_entry = create_general_support_entry(fundraiser.id, fundraiser.name)
+            participants_with_stats.unshift(general_support_entry) if general_support_entry
+          end
+        else
+          # For global view, add general support across all fundraisers
+          # Note: This might be complex for the global view, so we'll focus on fundraiser-specific for now
         end
         
         render_success(participants: participants_with_stats)
@@ -38,12 +52,7 @@ module Wholesale
       
       # GET /wholesale/admin/participants/:id
       def show
-        participant_data = @participant.attributes.merge(
-          'fundraiser_name' => @participant.fundraiser&.name,
-          'total_orders' => 0, # TODO: Calculate from orders
-          'total_items_sold' => 0 # TODO: Calculate from orders
-        )
-        
+        participant_data = participant_with_computed_fields(@participant)
         render_success(participant: participant_data)
       end
       
@@ -135,8 +144,70 @@ module Wholesale
         permitted_params
       end
       
+      def create_general_support_entry(fundraiser_id, fundraiser_name)
+        # Calculate performance for orders without specific participants (general support)
+        # Note: All orders count as revenue since orders can only be created after payment
+        general_orders = Wholesale::Order
+          .where(fundraiser_id: fundraiser_id, participant_id: nil)
+        
+        total_orders_count = general_orders.count
+        total_raised = general_orders.sum(:total_cents) / 100.0
+        
+        # Only return entry if there are actually general support orders
+        return nil if total_orders_count == 0
+        
+        {
+          'id' => 'general_support', # Special ID to identify this as the general support entry
+          'fundraiser_id' => fundraiser_id,
+          'fundraiser_name' => fundraiser_name,
+          'name' => 'General Organization Support',
+          'slug' => 'general-organization-support',
+          'description' => "Support #{fundraiser_name} overall",
+          'photo_url' => nil,
+          'goal_amount_cents' => nil,
+          'goal_amount' => nil,
+          'current_amount' => total_raised,
+          'goal_progress_percentage' => nil,
+          'total_orders_count' => total_orders_count,
+          'total_raised' => total_raised,
+          'total_orders' => total_orders_count,
+          'total_items_sold' => 0,
+          'active' => true,
+          'created_at' => nil,
+          'updated_at' => nil
+        }
+      end
 
-      
+      def participant_with_computed_fields(participant)
+        # Calculate performance metrics from orders for this participant
+        # Note: All orders count as revenue since orders can only be created after payment
+        all_orders = participant.orders
+        
+        total_orders_count = all_orders.count
+        total_raised = all_orders.sum(:total_cents) / 100.0
+        
+        # Calculate goal progress if participant has a goal
+        goal_progress_percentage = nil
+        goal_amount = nil
+        current_amount = total_raised
+        
+        if participant.goal_amount_cents.present? && participant.goal_amount_cents > 0
+          goal_amount = participant.goal_amount_cents / 100.0
+          goal_progress_percentage = (current_amount / goal_amount * 100).round(2)
+        end
+        
+        participant.attributes.merge(
+          'fundraiser_name' => participant.fundraiser&.name,
+          'goal_amount' => goal_amount,
+          'current_amount' => current_amount,
+          'goal_progress_percentage' => goal_progress_percentage,
+          'total_orders_count' => total_orders_count,
+          'total_raised' => total_raised,
+          'total_orders' => total_orders_count, # Alias for backward compatibility
+          'total_items_sold' => 0 # TODO: Calculate from order items if needed
+        )
+      end
+
       def set_restaurant_context
         unless current_restaurant
           render_unauthorized('Restaurant context not set.')

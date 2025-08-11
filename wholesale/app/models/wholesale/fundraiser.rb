@@ -74,7 +74,8 @@ module Wholesale
     end
     
     def total_revenue_cents
-      orders.where(status: ['paid', 'fulfilled', 'completed']).sum(:total_cents)
+      # All orders count as revenue since orders can only be created after payment
+      orders.sum(:total_cents)
     end
     
     def to_param
