@@ -281,7 +281,7 @@ module Wholesale
     def self.wholesale_statuses
       [
         { value: STATUS_PENDING, label: 'Pending', description: 'Order placed, awaiting fulfillment' },
-        { value: STATUS_FULFILLED, label: 'Fulfilled', description: 'Items prepared and ready' },
+        { value: STATUS_FULFILLED, label: 'Ready for Pickup', description: 'Items prepared and ready for pickup' },
         { value: STATUS_COMPLETED, label: 'Completed', description: 'Order picked up/delivered' },
         { value: STATUS_CANCELLED, label: 'Cancelled', description: 'Order cancelled' }
       ]

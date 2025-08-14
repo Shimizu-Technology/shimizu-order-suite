@@ -1,17 +1,17 @@
-WHOLESALE ORDER FULFILLED!
+WHOLESALE ORDER READY FOR PICKUP!
 <%= @restaurant.name %>
 
-Your wholesale order has been fulfilled!
+Your wholesale order is ready for pickup!
 
 Hi <%= @order.customer_name %>,
 
-Great news! Your wholesale order for <%= @fundraiser.name %> has been fulfilled and is being prepared for pickup.
+Great news! Your wholesale order for <%= @fundraiser.name %> is ready for pickup.
 <% if @participant %>Thank you for supporting <%= @participant.name %>!<% end %>
 
 WHAT THIS MEANS
 ===============
-• Your order items have been prepared
-• We'll notify you when it's ready for pickup
+• Your order items have been prepared and are ready
+• You can now pick up your order
 • Keep your order number handy: <%= @order.order_number %>
 • Contact us if you have any questions
 
@@ -46,8 +46,38 @@ SPECIAL INSTRUCTIONS
 <%= @order.notes %>
 
 <% end %>
-CONTACT INFORMATION
-===================
+PICKUP LOCATION
+===============
+<%= @fundraiser.pickup_display_name %>
+<% if @fundraiser.pickup_address.present? || @fundraiser.restaurant&.address.present? %>
+<%= @fundraiser.pickup_display_address %>
+<% else %>
+Please contact us for pickup address details
+<% end %>
+
+<% if @fundraiser.pickup_instructions.present? %>
+PICKUP INSTRUCTIONS
+==================
+<%= @fundraiser.pickup_instructions %>
+
+<% end %>
+<% if @fundraiser.pickup_hours.present? %>
+PICKUP HOURS: <%= @fundraiser.pickup_hours %>
+
+<% end %>
+<% if @fundraiser.pickup_contact_name.present? %>
+PICKUP CONTACT: <%= @fundraiser.pickup_contact_name %><% if @fundraiser.pickup_contact_display_phone.present? %> - <%= @fundraiser.pickup_contact_display_phone %><% end %>
+
+<% elsif @fundraiser.pickup_contact_phone.present? %>
+PICKUP CONTACT: <%= @fundraiser.pickup_contact_display_phone %>
+
+<% end %>
+<% unless @fundraiser.pickup_instructions.present? || @fundraiser.pickup_hours.present? || @fundraiser.pickup_contact_name.present? || @fundraiser.pickup_contact_phone.present? %>
+NOTE: For specific pickup instructions, hours, or questions, please refer to the general contact information below.
+
+<% end %>
+GENERAL CONTACT INFORMATION
+============================
 <%= @restaurant.name %>
 <% if @restaurant.phone_number.present? %>Phone: <%= @restaurant.phone_number %><% end %>
 <% if @restaurant.contact_email.present? %>Email: <%= @restaurant.contact_email %><% end %>

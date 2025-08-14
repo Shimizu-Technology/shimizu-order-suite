@@ -3,16 +3,16 @@
 <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; background-color: #ffffff;">
   <!-- Header -->
   <div style="background-color: <%= @header_color %>; padding: 20px; text-align: center;">
-    <h1 style="color: white; margin: 0; font-size: 24px;">Order Fulfilled!</h1>
+    <h1 style="color: white; margin: 0; font-size: 24px;">Order Ready for Pickup!</h1>
   </div>
 
   <!-- Order Details -->
   <div style="padding: 30px 20px;">
-    <h2 style="color: #333; margin-bottom: 20px;">Your wholesale order has been fulfilled!</h2>
+    <h2 style="color: #333; margin-bottom: 20px;">Your wholesale order is ready for pickup!</h2>
     
     <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
       Hi <%= @order.customer_name %>,<br><br>
-      Great news! Your wholesale order for <strong><%= @fundraiser.name %></strong> has been fulfilled and is being prepared for pickup.
+      Great news! Your wholesale order for <strong><%= @fundraiser.name %></strong> is ready for pickup.
       <% if @participant %>
         Thank you for supporting <strong><%= @participant.name %></strong>!
       <% end %>
@@ -22,8 +22,8 @@
     <div style="background-color: #e3f2fd; padding: 20px; border-radius: 8px; margin-bottom: 25px; border-left: 4px solid #2196f3;">
       <h3 style="color: #0d47a1; margin-top: 0; margin-bottom: 15px;">What This Means</h3>
       <ul style="color: #0d47a1; margin: 0; padding-left: 20px;">
-        <li style="margin-bottom: 8px;">Your order items have been prepared</li>
-        <li style="margin-bottom: 8px;">We'll notify you when it's ready for pickup</li>
+        <li style="margin-bottom: 8px;">Your order items have been prepared and are ready</li>
+        <li style="margin-bottom: 8px;">You can now pick up your order</li>
         <li style="margin-bottom: 8px;">Keep your order number handy: <strong><%= @order.order_number %></strong></li>
         <li>Contact us if you have any questions</li>
       </ul>
@@ -108,6 +108,53 @@
       <p style="color: #333; margin: 0; white-space: pre-line;"><%= @order.notes %></p>
     </div>
     <% end %>
+
+    <!-- Pickup Location -->
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+      <h3 style="color: #333; margin-top: 0; margin-bottom: 15px;">Pickup Location</h3>
+      <p style="color: #333; margin: 0; margin-bottom: 10px;">
+        <strong><%= @fundraiser.pickup_display_name %></strong><br>
+        <% if @fundraiser.pickup_address.present? || @fundraiser.restaurant&.address.present? %>
+          <%= @fundraiser.pickup_display_address %>
+        <% else %>
+          <em style="color: #666;">Please contact us for pickup address details</em>
+        <% end %>
+      </p>
+      
+      <% if @fundraiser.pickup_instructions.present? %>
+        <div style="background-color: #e3f2fd; padding: 15px; border-left: 4px solid #2196f3; margin-bottom: 10px;">
+          <strong style="color: #1976d2;">Pickup Instructions:</strong><br>
+          <span style="color: #1976d2;"><%= @fundraiser.pickup_instructions %></span>
+        </div>
+      <% end %>
+      
+      <% if @fundraiser.pickup_hours.present? %>
+        <p style="color: #2e7d32; margin: 10px 0;">
+          <strong>🕒 Pickup Hours:</strong> <%= @fundraiser.pickup_hours %>
+        </p>
+      <% end %>
+      
+      <% if @fundraiser.pickup_contact_name.present? %>
+        <p style="color: #333; margin: 10px 0;">
+          <strong>Pickup Contact:</strong> <%= @fundraiser.pickup_contact_name %>
+          <% if @fundraiser.pickup_contact_display_phone.present? %>
+            - <%= @fundraiser.pickup_contact_display_phone %>
+          <% end %>
+        </p>
+      <% elsif @fundraiser.pickup_contact_phone.present? %>
+        <p style="color: #333; margin: 10px 0;">
+          <strong>Pickup Contact:</strong> <%= @fundraiser.pickup_contact_display_phone %>
+        </p>
+      <% end %>
+      
+      <% unless @fundraiser.pickup_instructions.present? || @fundraiser.pickup_hours.present? || @fundraiser.pickup_contact_name.present? || @fundraiser.pickup_contact_phone.present? %>
+        <div style="background-color: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin-top: 10px;">
+          <p style="color: #856404; margin: 0; font-size: 14px;">
+            <strong>Note:</strong> For specific pickup instructions, hours, or questions, please refer to the general contact information below.
+          </p>
+        </div>
+      <% end %>
+    </div>
 
     <!-- Contact Information -->
     <div style="border-top: 1px solid #e9ecef; padding-top: 20px; text-align: center;">

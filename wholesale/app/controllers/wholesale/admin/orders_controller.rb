@@ -313,10 +313,22 @@ module Wholesale
           sms_sender = current_restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
           participant_text = order.participant ? " supporting #{order.participant.name}" : ""
           
-          pickup_location = order.fundraiser.pickup_display_name.present? ? " at #{order.fundraiser.pickup_display_name}" : ""
+          # Only show location if we have a custom pickup location name, otherwise it's just the restaurant name
+          pickup_location = order.fundraiser.pickup_location_name.present? ? " at #{order.fundraiser.pickup_display_name}" : ""
+          
+          # Only show pickup contact if it's different from the restaurant's main contact
+          pickup_contact = ""
+          if order.fundraiser.pickup_contact_phone.present? || order.fundraiser.contact_phone.present?
+            contact_phone = order.fundraiser.pickup_contact_display_phone
+            # Don't repeat the same phone number that's likely already known to the customer
+            restaurant_phone = order.fundraiser.restaurant&.phone_number
+            if contact_phone != restaurant_phone && contact_phone.present?
+              pickup_contact = " Contact: #{contact_phone}."
+            end
+          end
           
           msg = "Hi #{order.customer_name}, your wholesale order ##{order.order_number} for #{order.fundraiser.name}#{participant_text} "\
-                "has been fulfilled and is being prepared for pickup#{pickup_location}. We'll notify you when it's ready. Thank you!"
+                "is ready for pickup#{pickup_location}.#{pickup_contact} Thank you!"
           
           SendSmsJob.perform_later(to: order.customer_phone, body: msg, from: sms_sender)
         end
