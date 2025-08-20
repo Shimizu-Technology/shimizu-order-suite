@@ -15,6 +15,9 @@ Wholesale::Engine.routes.draw do
         collection do
           post :bulk_update
         end
+        
+        # Variant management
+        resources :variants, only: [:index, :show, :update, :destroy], controller: 'item_variants'
       end
       
       resources :participants, only: [:index, :show, :create, :update, :destroy] do
@@ -48,6 +51,9 @@ Wholesale::Engine.routes.draw do
       collection do
         post :bulk_update
       end
+      
+      # Variant management
+      resources :variants, only: [:index, :show, :update, :destroy], controller: 'item_variants'
     end
     
     resources :participants do

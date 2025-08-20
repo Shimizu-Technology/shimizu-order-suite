@@ -74,7 +74,18 @@ module Wholesale
       
       # PATCH/PUT /wholesale/admin/items/:id
       def update
-        if @item.update(item_params)
+        # Separate image operations from item updates
+        update_params = item_params.except(:images, :delete_image_ids)
+        
+        if @item.update(update_params)
+          # Process image deletions if present
+          process_image_deletions(@item, item_params[:delete_image_ids]) if item_params[:delete_image_ids].present?
+          
+          # Process image uploads if present
+          process_image_uploads(@item, item_params[:images]) if item_params[:images].present?
+          
+          # Reload to include any image changes
+          @item.reload
           render_success(item: item_with_computed_fields(@item), message: 'Item updated successfully!')
         else
           render_error('Failed to update item', errors: @item.errors.full_messages)
@@ -126,9 +137,10 @@ module Wholesale
       def item_params
         permitted_params = params.require(:item).permit(
           :fundraiser_id, :name, :description, :price, :price_cents, :sku, :image_url,
-          :stock_quantity, :low_stock_threshold, :track_inventory, :active,
-          :position, :sort_order, :options,
-          images: []
+          :stock_quantity, :low_stock_threshold, :track_inventory, :allow_sale_with_no_stock, :active,
+          :position, :sort_order, :options, :custom_variant_skus,
+          images: [],
+          delete_image_ids: []
         )
         
         # Convert price to price_cents if price is provided instead of price_cents
@@ -146,7 +158,7 @@ module Wholesale
         end
         
         # Boolean conversions  
-        [:track_inventory, :active].each do |field|
+        [:track_inventory, :allow_sale_with_no_stock, :active].each do |field|
           if permitted_params[field].present?
             permitted_params[field] = permitted_params[field].to_s.downcase.in?(['true', '1', 'yes', 'on'])
           end
@@ -202,6 +214,30 @@ module Wholesale
           end
         end
       end
+      
+      def process_image_deletions(item, image_ids)
+        return unless image_ids.is_a?(Array)
+        
+        image_ids.each do |image_id|
+          next unless image_id.present?
+          
+          begin
+            # Find the image that belongs to this item
+            image = item.item_images.find_by(id: image_id)
+            next unless image
+            
+            Rails.logger.info "[WholesaleItemsController] Deleting image #{image.id} for item #{item.id}"
+            
+            # Delete the image record (S3 cleanup could be added here if needed)
+            image.destroy!
+            
+          rescue => e
+            Rails.logger.error "[WholesaleItemsController] Image deletion failed for item #{item.id}, image #{image_id}: #{e.message}"
+            Rails.logger.error "[WholesaleItemsController] Backtrace: #{e.backtrace.join("\n")}"
+            # Continue with other deletions even if one fails
+          end
+        end
+      end
 
       def item_with_computed_fields(item)
         # Calculate stock status
@@ -238,6 +274,25 @@ module Wholesale
               primary: img.primary
             }
           end,
+          'variants' => item.variants.active.map do |variant|
+            {
+              id: variant.id,
+              sku: variant.sku,
+              size: variant.size,
+              color: variant.color,
+              display_name: variant.display_name,
+              price_adjustment: variant.price_adjustment,
+              final_price: variant.final_price,
+              stock_quantity: variant.stock_quantity,
+              low_stock_threshold: variant.low_stock_threshold,
+              total_ordered: variant.total_ordered,
+              total_revenue: variant.total_revenue,
+              active: variant.active,
+              can_purchase: variant.can_purchase?
+            }
+          end,
+          'has_variants' => item.has_variants?,
+          'variant_count' => item.variants.active.count,
           'orders_sold' => total_ordered, # Alias for backward compatibility
           'revenue_generated_cents' => total_revenue_cents # Alias for backward compatibility
         )

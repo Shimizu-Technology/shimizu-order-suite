@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_08_08_230054) do
+ActiveRecord::Schema[7.2].define(version: 2025_08_19_045052) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -808,6 +808,24 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_08_230054) do
     t.index ["item_id"], name: "index_wholesale_item_images_on_item_id"
   end
 
+  create_table "wholesale_item_variants", force: :cascade do |t|
+    t.bigint "wholesale_item_id", null: false
+    t.string "sku", null: false
+    t.string "size"
+    t.string "color"
+    t.decimal "price_adjustment", precision: 8, scale: 2, default: "0.0"
+    t.integer "stock_quantity", default: 0
+    t.integer "low_stock_threshold", default: 5
+    t.integer "total_ordered", default: 0
+    t.decimal "total_revenue", precision: 10, scale: 2, default: "0.0"
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["sku"], name: "index_wholesale_item_variants_on_sku", unique: true
+    t.index ["wholesale_item_id", "size", "color"], name: "index_wholesale_variants_on_item_size_color", unique: true
+    t.index ["wholesale_item_id"], name: "index_wholesale_item_variants_on_wholesale_item_id"
+  end
+
   create_table "wholesale_items", force: :cascade do |t|
     t.bigint "fundraiser_id", null: false
     t.string "name", null: false
@@ -825,6 +843,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_08_230054) do
     t.datetime "last_restocked_at", precision: nil
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "allow_sale_with_no_stock", default: false, null: false
     t.index ["fundraiser_id", "active"], name: "index_wholesale_items_on_fundraiser_id_and_active"
     t.index ["fundraiser_id", "sort_order"], name: "index_wholesale_items_on_fundraiser_id_and_sort_order"
     t.index ["fundraiser_id"], name: "index_wholesale_items_on_fundraiser_id"
@@ -980,6 +999,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_08_230054) do
   add_foreign_key "wholesale_fundraiser_counters", "wholesale_fundraisers", column: "fundraiser_id"
   add_foreign_key "wholesale_fundraisers", "restaurants"
   add_foreign_key "wholesale_item_images", "wholesale_items", column: "item_id"
+  add_foreign_key "wholesale_item_variants", "wholesale_items"
   add_foreign_key "wholesale_items", "wholesale_fundraisers", column: "fundraiser_id"
   add_foreign_key "wholesale_order_items", "wholesale_items", column: "item_id"
   add_foreign_key "wholesale_order_items", "wholesale_orders", column: "order_id"

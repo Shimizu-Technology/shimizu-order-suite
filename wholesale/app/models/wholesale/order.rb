@@ -214,10 +214,36 @@ module Wholesale
       return false unless can_be_refunded?
       
       transaction do
-        # Restore inventory if items have inventory tracking
+        # Restore inventory and reverse variant sales tracking
         order_items.includes(:item).each do |order_item|
-          if order_item.item.track_inventory?
-            order_item.item.increment!(:stock_quantity, order_item.quantity)
+          item = order_item.item
+          
+          # Handle inventory restoration
+          if item.track_inventory?
+            # Check if this is a variant-specific order
+            if item.has_variants? && order_item.selected_options.present?
+              variant = item.find_variant_by_options(order_item.selected_options)
+              if variant
+                variant.add_stock!(order_item.quantity)
+              else
+                # Fallback to item-level stock if variant not found
+                item.increment!(:stock_quantity, order_item.quantity)
+              end
+            else
+              # Traditional item-level inventory
+              item.increment!(:stock_quantity, order_item.quantity)
+            end
+          end
+          
+          # Reverse variant sales tracking (regardless of inventory tracking)
+          if item.has_variants? && order_item.selected_options.present?
+            variant = item.find_variant_by_options(order_item.selected_options)
+            if variant
+              revenue = order_item.quantity * order_item.price_cents / 100.0
+              # Reverse the sale by subtracting
+              variant.decrement!(:total_ordered, order_item.quantity)
+              variant.decrement!(:total_revenue, revenue)
+            end
           end
         end
         
@@ -225,13 +251,40 @@ module Wholesale
       end
     end
     
-    # Reduce inventory when order is placed
+    # Reduce inventory and track variant sales when order is placed
     def reduce_inventory!
       order_items.includes(:item).each do |order_item|
         item = order_item.item
+        
+        # Handle inventory reduction
         if item.track_inventory?
-          unless item.reduce_stock!(order_item.quantity)
-            raise "Insufficient stock for #{item.name}"
+          # Check if this is a variant-specific order
+          if item.has_variants? && order_item.selected_options.present?
+            variant = item.find_variant_by_options(order_item.selected_options)
+            if variant
+              unless variant.reduce_stock!(order_item.quantity)
+                raise "Insufficient stock for #{variant.full_display_name}"
+              end
+            else
+              # Fallback to item-level stock if variant not found
+              unless item.reduce_stock!(order_item.quantity)
+                raise "Insufficient stock for #{item.name}"
+              end
+            end
+          else
+            # Traditional item-level inventory
+            unless item.reduce_stock!(order_item.quantity)
+              raise "Insufficient stock for #{item.name}"
+            end
+          end
+        end
+        
+        # Track variant sales (regardless of inventory tracking)
+        if item.has_variants? && order_item.selected_options.present?
+          variant = item.find_variant_by_options(order_item.selected_options)
+          if variant
+            revenue = order_item.quantity * order_item.price_cents / 100.0
+            variant.add_sale!(order_item.quantity, revenue)
           end
         end
       end
