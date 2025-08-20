@@ -8,6 +8,10 @@ module Wholesale
     has_many :order_items, class_name: 'Wholesale::OrderItem', dependent: :restrict_with_error
     has_many :variants, class_name: 'Wholesale::WholesaleItemVariant', foreign_key: 'wholesale_item_id', dependent: :destroy
     
+    # Option Groups (new system)
+    has_many :option_groups, class_name: 'Wholesale::OptionGroup', foreign_key: 'wholesale_item_id', dependent: :destroy
+    has_many :item_options, through: :option_groups, source: :options, class_name: 'Wholesale::Option'
+    
     # Virtual attribute for custom variant SKUs
     attr_accessor :custom_variant_skus
     
@@ -147,7 +151,9 @@ module Wholesale
     end
     
     # Variant management methods (public)
+    # DEPRECATED: Use has_options? instead for the new option groups system
     def has_variants?
+      Rails.logger.warn "DEPRECATED: has_variants? is deprecated. Use has_options? instead."
       return false unless options.is_a?(Hash)
       size_options = options['size_options'] || []
       color_options = options['color_options'] || []
@@ -155,13 +161,178 @@ module Wholesale
     end
     
     # Find variant by selected options
+    # DEPRECATED: Use option groups system instead
     def find_variant_by_options(selected_options)
+      Rails.logger.warn "DEPRECATED: find_variant_by_options is deprecated. Use option groups system instead."
       return nil unless has_variants? && selected_options.present?
       
       size = selected_options['size'] || selected_options[:size]
       color = selected_options['color'] || selected_options[:color]
       
       variants.find_by(size: size, color: color)
+    end
+    
+    # ===== NEW OPTION GROUP METHODS =====
+    
+    # Check if item has option groups
+    def has_options?
+      option_groups.exists?
+    end
+    
+    # Generate SKU for a specific option selection
+    # selected_options format: { "group_id" => "option_id", "group_id" => "option_id" }
+    def generate_sku_for_selection(selected_options = {})
+      base_sku = sku.present? ? sku.upcase : "ITEM-#{id}"
+      
+      # Add option abbreviations to SKU
+      option_parts = []
+      option_groups.includes(:options).order(:position).each do |group|
+        if selected_options[group.id.to_s].present?
+          option = group.options.find_by(id: selected_options[group.id.to_s])
+          if option
+            option_parts << abbreviate_option_name(option.name)
+          end
+        end
+      end
+      
+      option_parts.any? ? "#{base_sku}-#{option_parts.join('-')}" : base_sku
+    end
+    
+    # Check if item has required option groups with no available options
+    def has_required_unavailable_option_groups?
+      option_groups.any?(&:required_but_unavailable?)
+    end
+    
+    # Get list of required option groups with no available options
+    def required_unavailable_option_groups
+      option_groups.select(&:required_but_unavailable?)
+    end
+    
+    # Check if item is effectively available (considering option availability)
+    def effectively_available?
+      return active unless has_options?
+      active && !has_required_unavailable_option_groups?
+    end
+    
+    # ===== OPTION-BASED ORDER PROCESSING METHODS =====
+    
+    # Calculate final price for a specific option selection
+    # selected_options format: { "group_id" => "option_id", "group_id" => "option_id" }
+    def calculate_price_for_options(selected_options = {})
+      base_price = price_cents / 100.0
+      additional_price = 0.0
+      
+      return base_price unless has_options? && selected_options.present?
+      
+      option_groups.includes(:options).each do |group|
+        option_id = selected_options[group.id.to_s]
+        if option_id.present?
+          option = group.options.find_by(id: option_id)
+          additional_price += option.additional_price if option
+        end
+      end
+      
+      base_price + additional_price
+    end
+    
+    # Check if a specific option selection is available for purchase
+    def can_purchase_with_options?(selected_options = {}, quantity = 1)
+      return false unless active
+      return false if has_required_unavailable_option_groups?
+      
+      # Check if all selected options are available
+      if has_options? && selected_options.present?
+        option_groups.includes(:options).each do |group|
+          option_id = selected_options[group.id.to_s]
+          if option_id.present?
+            option = group.options.find_by(id: option_id)
+            return false unless option&.available?
+          elsif group.required?
+            return false # Required group must have a selection
+          end
+        end
+      end
+      
+      # Check inventory if tracking is enabled
+      if track_inventory?
+        return false unless can_purchase?(quantity)
+      end
+      
+      true
+    end
+    
+    # Validate that selected options meet group requirements
+    def validate_option_selection(selected_options = {})
+      errors = []
+      
+      return errors unless has_options?
+      
+      option_groups.includes(:options).each do |group|
+        selected_option_ids = Array(selected_options[group.id.to_s]).compact
+        
+        # Check minimum selections
+        if selected_option_ids.length < group.min_select
+          errors << "#{group.name} requires at least #{group.min_select} selection(s)"
+        end
+        
+        # Check maximum selections
+        if selected_option_ids.length > group.max_select
+          errors << "#{group.name} allows at most #{group.max_select} selection(s)"
+        end
+        
+        # Check required groups
+        if group.required? && selected_option_ids.empty?
+          errors << "#{group.name} is required"
+        end
+        
+        # Check that selected options exist and are available
+        selected_option_ids.each do |option_id|
+          option = group.options.find_by(id: option_id)
+          if option.nil?
+            errors << "Invalid option selected for #{group.name}"
+          elsif !option.available?
+            errors << "#{option.name} is not available in #{group.name}"
+          end
+        end
+      end
+      
+      errors
+    end
+    
+    # Track sales for specific option selections
+    def track_option_sales!(selected_options = {}, quantity = 1, revenue = 0.0)
+      return unless has_options? && selected_options.present?
+      
+      option_groups.includes(:options).each do |group|
+        option_id = selected_options[group.id.to_s]
+        if option_id.present?
+          option = group.options.find_by(id: option_id)
+          if option
+            option.increment!(:total_ordered, quantity)
+            option.increment!(:total_revenue, revenue)
+          end
+        end
+      end
+    end
+    
+    # Get display name for option selection
+    def option_selection_display_name(selected_options = {})
+      return name unless has_options? && selected_options.present?
+      
+      option_names = []
+      option_groups.includes(:options).order(:position).each do |group|
+        option_id = selected_options[group.id.to_s]
+        if option_id.present?
+          option = group.options.find_by(id: option_id)
+          option_names << option.name if option
+        end
+      end
+      
+      if option_names.any?
+        "#{name} (#{option_names.join(', ')})"
+      else
+        name
+      end
     end
     
     private
@@ -182,6 +353,32 @@ module Wholesale
       self.last_restocked_at = Time.current
     end
     
+    # Simple abbreviation logic for option names
+    def abbreviate_option_name(name)
+      case name.upcase.strip
+      when /^EXTRA\s*SMALL$|^XS$/ then 'XS'
+      when /^SMALL$|^S$/ then 'S'
+      when /^MEDIUM$|^M$/ then 'M'
+      when /^LARGE$|^L$/ then 'L'
+      when /^EXTRA\s*LARGE$|^XL$/ then 'XL'
+      when /^XXL$|^2XL$|^EXTRA\s*EXTRA\s*LARGE$/ then 'XXL'
+      when /^RED$/ then 'RED'
+      when /^BLUE$/ then 'BLU'
+      when /^GREEN$/ then 'GRN'
+      when /^BLACK$/ then 'BLK'
+      when /^WHITE$/ then 'WHI'
+      when /^YELLOW$/ then 'YEL'
+      when /^ORANGE$/ then 'ORG'
+      when /^PURPLE$/ then 'PUR'
+      when /^PINK$/ then 'PNK'
+      when /^GRAY$|^GREY$/ then 'GRY'
+      when /^NAVY$/ then 'NAV'
+      else
+        # For unknown options, take first 3 characters
+        name.upcase.gsub(/\s+/, '').first(3)
+      end
+    end
+    
     def handle_variant_updates
       # Parse custom_variant_skus if it's a JSON string
       parsed_custom_skus = nil
@@ -192,7 +389,9 @@ module Wholesale
       create_or_update_variants(parsed_custom_skus)
     end
     
+    # DEPRECATED: Use option groups system instead
     def create_or_update_variants(custom_skus = nil)
+      Rails.logger.warn "DEPRECATED: create_or_update_variants is deprecated. Use option groups system instead."
       return unless has_variants?
       
       # Get current variant combinations
@@ -224,17 +423,19 @@ module Wholesale
           color: variant_data[:color]
         )
         
+        # Always update SKU as it may have changed due to base SKU changes
         variant.sku = variant_data[:sku]
-        variant.price_adjustment = 0.0 # Default, can be customized later
-        variant.active = true
         
-        # For new variants, inherit stock settings from parent item
+        # For new variants, set default values
         if variant.new_record?
+          variant.price_adjustment = 0.0
+          variant.active = true
           variant.stock_quantity = track_inventory? ? (stock_quantity || 0) : 0
           variant.low_stock_threshold = low_stock_threshold || 5
           variant.total_ordered = 0
           variant.total_revenue = 0.0
         end
+        # For existing variants, preserve their current settings (active, price_adjustment, etc.)
         
         variant.save!
       end

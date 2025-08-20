@@ -1,10 +1,14 @@
 module Wholesale
   module Admin
+    # DEPRECATED: This controller is deprecated in favor of the new Option Groups system.
+    # Use OptionGroupsController and OptionsController instead.
+    # This controller is kept for backward compatibility only.
     class ItemVariantsController < Wholesale::ApplicationController
       before_action :require_admin!
       before_action :set_restaurant_context
       before_action :set_item
       before_action :set_variant, only: [:show, :update, :destroy]
+      before_action :log_deprecation_warning
     
     # GET /wholesale/admin/items/:item_id/variants
     def index
@@ -54,6 +58,10 @@ module Wholesale
     end
     
     private
+    
+    def log_deprecation_warning
+      Rails.logger.warn "DEPRECATED: ItemVariantsController is deprecated. Use OptionGroupsController instead. Called from #{request.path}"
+    end
     
     def set_item
       @item = Wholesale::Item.joins(:fundraiser)

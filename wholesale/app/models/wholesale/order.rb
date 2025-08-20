@@ -251,15 +251,22 @@ module Wholesale
       end
     end
     
-    # Reduce inventory and track variant sales when order is placed
+    # Reduce inventory and track sales when order is placed
     def reduce_inventory!
       order_items.includes(:item).each do |order_item|
         item = order_item.item
         
         # Handle inventory reduction
         if item.track_inventory?
-          # Check if this is a variant-specific order
-          if item.has_variants? && order_item.selected_options.present?
+          # Check if this uses the new option group system
+          if order_item.uses_option_groups?
+            # Option group system - inventory is tracked at item level for now
+            # Future enhancement: per-option inventory tracking
+            unless item.reduce_stock!(order_item.quantity)
+              raise "Insufficient stock for #{order_item.variant_description}"
+            end
+          elsif item.has_variants? && order_item.selected_options.present?
+            # Legacy variant system
             variant = item.find_variant_by_options(order_item.selected_options)
             if variant
               unless variant.reduce_stock!(order_item.quantity)
@@ -279,11 +286,16 @@ module Wholesale
           end
         end
         
-        # Track variant sales (regardless of inventory tracking)
-        if item.has_variants? && order_item.selected_options.present?
+        # Track sales
+        revenue = order_item.quantity * order_item.price_cents / 100.0
+        
+        if order_item.uses_option_groups?
+          # Track option group sales
+          item.track_option_sales!(order_item.selected_options, order_item.quantity, revenue)
+        elsif item.has_variants? && order_item.selected_options.present?
+          # Track legacy variant sales
           variant = item.find_variant_by_options(order_item.selected_options)
           if variant
-            revenue = order_item.quantity * order_item.price_cents / 100.0
             variant.add_sale!(order_item.quantity, revenue)
           end
         end

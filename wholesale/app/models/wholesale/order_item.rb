@@ -14,6 +14,8 @@ module Wholesale
     # Custom validations
     validate :item_availability, on: :create
     validate :quantity_available, on: :create
+    validate :validate_option_selections, on: :create
+    validate :options_availability, on: :create
     
     # Callbacks
     before_validation :snapshot_item_data, if: -> { item.present? && (new_record? || item_id_changed?) }
@@ -185,15 +187,63 @@ module Wholesale
     def variant_description
       return item_name if selected_options.blank?
       
-      variant_parts = []
-      variant_parts << selected_options['size'] if selected_options['size'].present?
-      variant_parts << selected_options['color'] if selected_options['color'].present?
-      
-      if variant_parts.any?
-        "#{item_name} (#{variant_parts.join(', ')})"
-      else
-        item_name
+      # Handle legacy variant system (size/color)
+      if selected_options.key?('size') || selected_options.key?('color')
+        variant_parts = []
+        variant_parts << selected_options['size'] if selected_options['size'].present?
+        variant_parts << selected_options['color'] if selected_options['color'].present?
+        
+        if variant_parts.any?
+          return "#{item_name} (#{variant_parts.join(', ')})"
+        end
       end
+      
+      # Handle new option group system
+      if item&.has_options?
+        return item.option_selection_display_name(selected_options)
+      end
+      
+      item_name
+    end
+    
+    # ===== OPTION GROUP METHODS =====
+    
+    # Check if this order item uses the new option group system
+    def uses_option_groups?
+      item&.has_options? && has_option_group_selections?
+    end
+    
+    # Check if selected_options contains option group selections (numeric keys)
+    def has_option_group_selections?
+      return false unless selected_options.present?
+      selected_options.keys.any? { |key| key.to_s.match?(/^\d+$/) }
+    end
+    
+    # Validate option selections against item's option groups
+    def validate_option_selections
+      return true unless item&.has_options?
+      
+      validation_errors = item.validate_option_selection(selected_options)
+      
+      validation_errors.each do |error|
+        errors.add(:selected_options, error)
+      end
+      
+      validation_errors.empty?
+    end
+    
+    # Calculate price based on selected options
+    def calculate_option_price
+      return item.price if item.nil? || !item.has_options?
+      
+      item.calculate_price_for_options(selected_options)
+    end
+    
+    # Check if the selected options are available for purchase
+    def options_available_for_purchase?
+      return true unless item&.has_options?
+      
+      item.can_purchase_with_options?(selected_options, quantity)
     end
     
     private
@@ -203,7 +253,14 @@ module Wholesale
       
       self.item_name = item.name
       self.item_description = item.description
-      self.price_cents = item.price_cents
+      
+      # Calculate price based on selected options
+      if item.has_options? && selected_options.present?
+        calculated_price = calculate_option_price
+        self.price_cents = (calculated_price * 100).round
+      else
+        self.price_cents = item.price_cents
+      end
     end
     
     def item_availability
@@ -242,6 +299,15 @@ module Wholesale
       # We don't want to double-reduce here, just validate
       unless item.can_purchase?(quantity)
         raise "Insufficient inventory for #{item.name}"
+      end
+    end
+    
+    def options_availability
+      return unless item.present?
+      
+      # Check if selected options are available for purchase
+      unless options_available_for_purchase?
+        errors.add(:selected_options, 'contains unavailable options or invalid selections')
       end
     end
     

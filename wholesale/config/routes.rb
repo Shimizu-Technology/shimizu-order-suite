@@ -16,8 +16,17 @@ Wholesale::Engine.routes.draw do
           post :bulk_update
         end
         
-        # Variant management
-        resources :variants, only: [:index, :show, :update, :destroy], controller: 'item_variants'
+        # Variant management (legacy) - DEPRECATED: Use option_groups instead
+        # resources :variants, only: [:index, :show, :update, :destroy], controller: 'item_variants'
+        
+        # Option Group management (new system)
+        resources :option_groups, only: [:index, :show, :create, :update, :destroy] do
+          resources :options, only: [:index, :show, :create, :update, :destroy] do
+            collection do
+              patch :batch_update_positions
+            end
+          end
+        end
       end
       
       resources :participants, only: [:index, :show, :create, :update, :destroy] do
@@ -52,8 +61,8 @@ Wholesale::Engine.routes.draw do
         post :bulk_update
       end
       
-      # Variant management
-      resources :variants, only: [:index, :show, :update, :destroy], controller: 'item_variants'
+      # Variant management - DEPRECATED: Use option_groups instead
+      # resources :variants, only: [:index, :show, :update, :destroy], controller: 'item_variants'
     end
     
     resources :participants do

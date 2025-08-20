@@ -1,4 +1,7 @@
 module Wholesale
+  # DEPRECATED: This model is deprecated in favor of the new Option Groups system.
+  # Use Wholesale::OptionGroup and Wholesale::Option instead.
+  # This model is kept for backward compatibility only.
   class WholesaleItemVariant < ApplicationRecord
     self.table_name = 'wholesale_item_variants'
     

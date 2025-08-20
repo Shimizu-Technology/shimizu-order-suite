@@ -133,6 +133,27 @@ module Wholesale
         # Basic statistics
         total_ordered: item.total_ordered_quantity,
         
+        # Option Groups (new system)
+        option_groups: item.option_groups.includes(:options).order(:position).map do |group|
+          {
+            id: group.id,
+            name: group.name,
+            min_select: group.min_select,
+            max_select: group.max_select,
+            required: group.required,
+            position: group.position,
+            options: group.options.order(:position).map do |option|
+              {
+                id: option.id,
+                name: option.name,
+                additional_price: option.additional_price.to_f,
+                available: option.available,
+                position: option.position
+              }
+            end
+          }
+        end,
+        
         created_at: item.created_at,
         updated_at: item.updated_at
       }
@@ -179,6 +200,31 @@ module Wholesale
         # Statistics
         total_ordered: item.total_ordered_quantity,
         total_revenue: item.total_revenue_cents / 100.0,
+        
+        # Option Groups (new system)
+        option_groups: item.option_groups.includes(:options).order(:position).map do |group|
+          {
+            id: group.id,
+            name: group.name,
+            min_select: group.min_select,
+            max_select: group.max_select,
+            required: group.required,
+            position: group.position,
+            enable_inventory_tracking: group.enable_inventory_tracking,
+            options: group.options.order(:position).map do |option|
+              {
+                id: option.id,
+                name: option.name,
+                additional_price: option.additional_price.to_f,
+                available: option.available,
+                position: option.position,
+                stock_quantity: option.stock_quantity,
+                damaged_quantity: option.damaged_quantity,
+                low_stock_threshold: option.low_stock_threshold
+              }
+            end
+          }
+        end,
         
         # Fundraiser context
         fundraiser_id: item.fundraiser_id,

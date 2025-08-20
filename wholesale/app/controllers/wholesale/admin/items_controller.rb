@@ -61,10 +61,13 @@ module Wholesale
         item = Wholesale::Item.new(create_params)
         
         if item.save
+          # Process legacy variant options and convert to option groups
+          process_legacy_options(item, create_params[:options]) if create_params[:options].present?
+          
           # Process image uploads if present
           process_image_uploads(item, item_params[:images]) if item_params[:images].present?
           
-          # Reload to include any created images
+          # Reload to include any created images and option groups
           item.reload
           render_success(item: item_with_computed_fields(item), message: 'Item created successfully!', status: :created)
         else
@@ -78,13 +81,16 @@ module Wholesale
         update_params = item_params.except(:images, :delete_image_ids)
         
         if @item.update(update_params)
+          # Process legacy variant options and convert to option groups
+          process_legacy_options(@item, update_params[:options]) if update_params[:options].present?
+          
           # Process image deletions if present
           process_image_deletions(@item, item_params[:delete_image_ids]) if item_params[:delete_image_ids].present?
           
           # Process image uploads if present
           process_image_uploads(@item, item_params[:images]) if item_params[:images].present?
           
-          # Reload to include any image changes
+          # Reload to include any image changes and option groups
           @item.reload
           render_success(item: item_with_computed_fields(@item), message: 'Item updated successfully!')
         else
@@ -182,6 +188,80 @@ module Wholesale
         permitted_params
       end
       
+      # Convert legacy variant options to option groups
+      def process_legacy_options(item, options_data)
+        return unless options_data.is_a?(Hash)
+        
+        Rails.logger.info "Processing legacy options for item #{item.id}: #{options_data.inspect}"
+        
+        # Extract size and color options from the legacy format
+        size_options = options_data['size_options'] || []
+        color_options = options_data['color_options'] || []
+        
+        # Create Size option group if size options exist
+        if size_options.any?
+          size_group = item.option_groups.create!(
+            name: 'Size',
+            min_select: 1,
+            max_select: 1,
+            required: true,
+            position: 1,
+            enable_inventory_tracking: false
+          )
+          
+          size_options.each_with_index do |size, index|
+            size_group.options.create!(
+              name: size,
+              additional_price: 0.0,
+              available: true,
+              position: index + 1,
+              stock_quantity: nil,
+              damaged_quantity: 0,
+              low_stock_threshold: nil,
+              total_ordered: 0,
+              total_revenue: 0.0
+            )
+          end
+          
+          Rails.logger.info "Created Size option group with #{size_options.length} options"
+        end
+        
+        # Create Color option group if color options exist
+        if color_options.any?
+          color_group = item.option_groups.create!(
+            name: 'Color',
+            min_select: 1,
+            max_select: 1,
+            required: true,
+            position: 2,
+            enable_inventory_tracking: false
+          )
+          
+          color_options.each_with_index do |color, index|
+            color_group.options.create!(
+              name: color,
+              additional_price: 0.0,
+              available: true,
+              position: index + 1,
+              stock_quantity: nil,
+              damaged_quantity: 0,
+              low_stock_threshold: nil,
+              total_ordered: 0,
+              total_revenue: 0.0
+            )
+          end
+          
+          Rails.logger.info "Created Color option group with #{color_options.length} options"
+        end
+        
+        # Clear the legacy options field since we've converted to option groups
+        item.update_column(:options, {})
+        
+      rescue StandardError => e
+        Rails.logger.error "Error processing legacy options for item #{item.id}: #{e.message}"
+        Rails.logger.error e.backtrace.first(5).join("\n")
+        # Don't raise the error - let the item creation succeed even if option group creation fails
+      end
 
       
       def process_image_uploads(item, image_files)
@@ -274,7 +354,7 @@ module Wholesale
               primary: img.primary
             }
           end,
-          'variants' => item.variants.active.map do |variant|
+          'variants' => item.variants.map do |variant|
             {
               id: variant.id,
               sku: variant.sku,
@@ -293,6 +373,44 @@ module Wholesale
           end,
           'has_variants' => item.has_variants?,
           'variant_count' => item.variants.active.count,
+          
+          # Option Groups (new system)
+          'option_groups' => item.option_groups.includes(:options).order(:position).map do |group|
+            {
+              id: group.id,
+              name: group.name,
+              min_select: group.min_select,
+              max_select: group.max_select,
+              required: group.required,
+              position: group.position,
+              enable_inventory_tracking: group.enable_inventory_tracking,
+              has_available_options: group.has_available_options?,
+              required_but_unavailable: group.required_but_unavailable?,
+              options: group.options.order(:position).map do |option|
+                {
+                  id: option.id,
+                  name: option.name,
+                  additional_price: option.additional_price.to_f,
+                  available: option.available,
+                  position: option.position,
+                  total_ordered: option.total_ordered,
+                  total_revenue: option.total_revenue.to_f,
+                  stock_quantity: option.stock_quantity,
+                  damaged_quantity: option.damaged_quantity,
+                  low_stock_threshold: option.low_stock_threshold,
+                  inventory_tracking_enabled: option.inventory_tracking_enabled?,
+                  available_stock: option.available_stock,
+                  in_stock: option.in_stock?,
+                  out_of_stock: option.out_of_stock?,
+                  low_stock: option.low_stock?,
+                  final_price: option.final_price,
+                  display_name: option.display_name
+                }
+              end
+            }
+          end,
+          'has_options' => item.has_options?,
+          'option_groups_count' => item.option_groups.count,
           'orders_sold' => total_ordered, # Alias for backward compatibility
           'revenue_generated_cents' => total_revenue_cents # Alias for backward compatibility
         )

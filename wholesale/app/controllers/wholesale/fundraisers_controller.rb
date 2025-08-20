@@ -48,6 +48,58 @@ module Wholesale
     
     private
     
+    # Summary format for item listing (shared with ItemsController)
+    def item_summary(item)
+      {
+        id: item.id,
+        name: item.name,
+        description: item.description,
+        sku: item.sku,
+        price: item.price,
+        price_cents: item.price_cents,
+        position: item.position,
+        sort_order: item.sort_order,
+        options: item.options,
+        
+        # Availability
+        active: item.active?,
+        track_inventory: item.track_inventory?,
+        in_stock: item.in_stock?,
+        stock_status: item.stock_status,
+        available_quantity: item.track_inventory? ? item.available_quantity : nil,
+        
+        # Primary image only for summary
+        primary_image_url: item.primary_image_url,
+        
+        # Basic statistics
+        total_ordered: item.total_ordered_quantity,
+        
+        # Option Groups (new system)
+        option_groups: item.option_groups.includes(:options).order(:position).map do |group|
+          {
+            id: group.id,
+            name: group.name,
+            min_select: group.min_select,
+            max_select: group.max_select,
+            required: group.required,
+            position: group.position,
+            options: group.options.order(:position).map do |option|
+              {
+                id: option.id,
+                name: option.name,
+                additional_price: option.additional_price.to_f,
+                available: option.available,
+                position: option.position
+              }
+            end
+          }
+        end,
+        
+        created_at: item.created_at,
+        updated_at: item.updated_at
+      }
+    end
+    
     # Summary format for fundraiser listing
     def fundraiser_summary(fundraiser)
       {
@@ -118,44 +170,9 @@ module Wholesale
         
         url: "/wholesale/#{fundraiser.slug}",
         
-        # Items available for purchase
-        items: fundraiser.items.active.by_sort_order.map do |item|
-          {
-            id: item.id,
-            name: item.name,
-            description: item.description,
-            sku: item.sku,
-            price: item.price,
-            price_cents: item.price_cents,
-            position: item.position,
-            sort_order: item.sort_order,
-            options: item.options,
-            
-            # Inventory information
-            track_inventory: item.track_inventory?,
-            in_stock: item.in_stock?,
-            stock_status: item.stock_status,
-            available_quantity: item.track_inventory? ? item.available_quantity : nil,
-            
-            # Images
-            images: item.item_images.by_position.map do |image|
-              {
-                id: image.id,
-                image_url: image.image_url,
-                alt_text: image.alt_text,
-                position: image.position,
-                primary: image.primary?
-              }
-            end,
-            primary_image_url: item.primary_image_url,
-            
-            # Statistics
-            total_ordered: item.total_ordered_quantity,
-            total_revenue: item.total_revenue_cents / 100.0,
-            
-            created_at: item.created_at,
-            updated_at: item.updated_at
-          }
+        # Items available for purchase (using item_summary for consistency with option groups)
+        items: fundraiser.items.active.includes(:item_images, option_groups: :options).by_sort_order.map do |item|
+          item_summary(item)
         end,
         
         # Participants for attribution
