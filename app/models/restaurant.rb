@@ -119,6 +119,7 @@ class Restaurant < ApplicationRecord
   has_many :wholesale_participants, through: :wholesale_fundraisers, class_name: "Wholesale::Participant"
   has_many :wholesale_orders, class_name: "Wholesale::Order", dependent: :destroy
   has_many :wholesale_order_payments, class_name: "Wholesale::OrderPayment", dependent: :destroy
+  has_many :wholesale_option_group_presets, class_name: "Wholesale::OptionGroupPreset", dependent: :destroy
 
   # Layout-related associations
   has_many :layouts,          dependent: :destroy

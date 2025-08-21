@@ -85,6 +85,17 @@ Wholesale::Engine.routes.draw do
       end
     end
     
+    # Option Group Presets management
+    resources :option_group_presets do
+      member do
+        post :duplicate
+        post :apply_to_item
+      end
+      
+      # Nested option presets within group presets
+      resources :option_presets, only: [:index, :show, :create, :update, :destroy]
+    end
+    
     # Global admin analytics and reporting
     get 'analytics', to: 'analytics#index'
     get 'analytics/revenue', to: 'analytics#revenue'

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_08_20_022732) do
+ActiveRecord::Schema[7.2].define(version: 2025_08_21_052427) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -850,6 +850,22 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_20_022732) do
     t.index ["track_inventory", "stock_quantity"], name: "index_wholesale_items_on_track_inventory_and_stock_quantity"
   end
 
+  create_table "wholesale_option_group_presets", force: :cascade do |t|
+    t.bigint "restaurant_id", null: false
+    t.string "name", null: false
+    t.text "description"
+    t.integer "min_select", default: 0
+    t.integer "max_select", default: 1
+    t.boolean "required", default: false
+    t.integer "position", default: 0
+    t.boolean "enable_inventory_tracking", default: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["position"], name: "index_wholesale_option_group_presets_on_position"
+    t.index ["restaurant_id", "name"], name: "index_wholesale_option_group_presets_on_restaurant_id_and_name", unique: true
+    t.index ["restaurant_id"], name: "index_wholesale_option_group_presets_on_restaurant_id"
+  end
+
   create_table "wholesale_option_groups", force: :cascade do |t|
     t.bigint "wholesale_item_id", null: false
     t.string "name", null: false
@@ -863,6 +879,21 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_20_022732) do
     t.index ["position"], name: "index_wholesale_option_groups_on_position"
     t.index ["wholesale_item_id", "enable_inventory_tracking"], name: "idx_wholesale_option_groups_item_inventory_tracking"
     t.index ["wholesale_item_id"], name: "index_wholesale_option_groups_on_wholesale_item_id"
+  end
+
+  create_table "wholesale_option_presets", force: :cascade do |t|
+    t.bigint "wholesale_option_group_preset_id", null: false
+    t.string "name", null: false
+    t.decimal "additional_price", precision: 8, scale: 2, default: "0.0"
+    t.boolean "available", default: true
+    t.integer "position", default: 0
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["available"], name: "index_wholesale_option_presets_on_available"
+    t.index ["position"], name: "index_wholesale_option_presets_on_position"
+    t.index ["wholesale_option_group_preset_id", "name"], name: "idx_wholesale_option_presets_group_name", unique: true
+    t.index ["wholesale_option_group_preset_id"], name: "idx_on_wholesale_option_group_preset_id_78a1a1b26a"
+    t.index ["wholesale_option_group_preset_id"], name: "index_wholesale_option_presets_on_group_preset_id"
   end
 
   create_table "wholesale_options", force: :cascade do |t|
@@ -1035,7 +1066,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_20_022732) do
   add_foreign_key "wholesale_item_images", "wholesale_items", column: "item_id"
   add_foreign_key "wholesale_item_variants", "wholesale_items"
   add_foreign_key "wholesale_items", "wholesale_fundraisers", column: "fundraiser_id"
+  add_foreign_key "wholesale_option_group_presets", "restaurants"
   add_foreign_key "wholesale_option_groups", "wholesale_items"
+  add_foreign_key "wholesale_option_presets", "wholesale_option_group_presets"
   add_foreign_key "wholesale_options", "wholesale_option_groups"
   add_foreign_key "wholesale_order_items", "wholesale_items", column: "item_id"
   add_foreign_key "wholesale_order_items", "wholesale_orders", column: "order_id"
