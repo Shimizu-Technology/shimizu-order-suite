@@ -68,8 +68,17 @@ module Wholesale
         stock_status: item.stock_status,
         available_quantity: item.track_inventory? ? item.available_quantity : nil,
         
-        # Primary image only for summary
+        # Primary image and all images for carousel
         primary_image_url: item.primary_image_url,
+        images: item.item_images.order(:position).map do |img|
+          {
+            id: img.id,
+            image_url: img.image_url,
+            alt_text: img.alt_text,
+            position: img.position,
+            primary: img.primary
+          }
+        end,
         
         # Basic statistics
         total_ordered: item.total_ordered_quantity,

@@ -11,6 +11,7 @@ Wholesale::Engine.routes.draw do
       resources :items, only: [:index, :show, :create, :update, :destroy] do
         member do
           patch :toggle_active
+          patch :set_primary_image
         end
         collection do
           post :bulk_update

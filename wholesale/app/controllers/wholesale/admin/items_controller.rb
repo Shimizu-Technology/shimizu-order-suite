@@ -5,7 +5,7 @@ module Wholesale
     class ItemsController < Wholesale::ApplicationController
       before_action :require_admin!
       before_action :set_fundraiser, only: [:index, :show, :create, :update, :destroy, :toggle_active, :bulk_update], if: :nested_route?
-      before_action :set_item, only: [:show, :update, :destroy, :toggle_active]
+      before_action :set_item, only: [:show, :update, :destroy, :toggle_active, :set_primary_image]
       before_action :set_restaurant_context
       
       # GET /wholesale/admin/items
@@ -122,6 +122,35 @@ module Wholesale
       def bulk_update
         # TODO: Implement bulk update functionality
         render_success(message: 'Bulk update functionality coming soon')
+      end
+      
+      # PATCH /wholesale/admin/items/:id/set_primary_image
+      def set_primary_image
+        image_id = params[:image_id]
+        
+        unless image_id.present?
+          render_error('Image ID is required')
+          return
+        end
+        
+        # Find the image and ensure it belongs to this item
+        image = @item.item_images.find_by(id: image_id)
+        
+        unless image
+          render_error('Image not found')
+          return
+        end
+        
+        begin
+          image.make_primary!
+          @item.reload
+          render_success(
+            item: item_with_computed_fields(@item),
+            message: 'Primary image updated successfully!'
+          )
+        rescue => e
+          render_error("Failed to update primary image: #{e.message}")
+        end
       end
       
       private
