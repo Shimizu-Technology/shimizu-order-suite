@@ -1,7 +1,5 @@
 module Wholesale
   class OptionGroupPresetService
-    include TenantScoped
-    
     def initialize(restaurant)
       @restaurant = restaurant
     end
