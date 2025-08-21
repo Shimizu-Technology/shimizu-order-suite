@@ -296,6 +296,10 @@ module Wholesale
       def process_image_uploads(item, image_files)
         return unless image_files.is_a?(Array)
         
+        # Get the current maximum position and check if there's already a primary image
+        max_position = item.item_images.maximum(:position) || 0
+        has_primary = item.item_images.exists?(primary: true)
+        
         image_files.each_with_index do |file, index|
           next unless file.present? && file.respond_to?(:original_filename)
           
@@ -308,12 +312,16 @@ module Wholesale
             # Upload to S3
             public_url = S3Uploader.upload(file, new_filename)
             
+            # Calculate position and primary status
+            new_position = max_position + index + 1
+            is_primary = !has_primary && index == 0 # Only first image is primary if no existing primary
+            
             # Create ItemImage record
             item.item_images.create!(
               image_url: public_url,
-              position: index + 1,
-              primary: index == 0, # First image is primary
-              alt_text: "#{item.name} - Image #{index + 1}"
+              position: new_position,
+              primary: is_primary,
+              alt_text: "#{item.name} - Image #{new_position}"
             )
             
           rescue => e
