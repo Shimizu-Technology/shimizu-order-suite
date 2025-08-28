@@ -25,9 +25,9 @@ Fundraiser: <%= @fundraiser.name %>
 ORDER ITEMS
 ===========
 <% @order_items.each do |item| %>
-<%= item.item_name %>
-<% if item.selected_options.present? && item.selected_options.any? %>
-  Options: <%= item.selected_options.map { |k, v| "#{k.humanize}: #{v}" }.join(', ') %>
+<%= item.variant_description || item.item_name %>
+<% if item.variant_description.blank? && item.selected_options.present? && item.selected_options.any? %>
+  Options: <%= item.selected_options.map { |k, v| "#{k.humanize}: #{Array(v).join(', ')}" }.join(', ') %>
 <% end %>
 <% if item.item_description.present? %>
   <%= item.item_description %>

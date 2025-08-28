@@ -61,11 +61,11 @@
         <% @order_items.each do |item| %>
         <tr style="border-bottom: 1px solid #e9ecef;">
           <td style="padding: 15px 0; color: #333;">
-            <strong><%= item.item_name %></strong>
-            <% if item.selected_options.present? && item.selected_options.any? %>
+            <strong><%= item.variant_description || item.item_name %></strong>
+            <% if item.variant_description.blank? && item.selected_options.present? && item.selected_options.any? %>
               <br>
               <span style="color: #666; font-size: 14px;">
-                Options: <%= item.selected_options.map { |k, v| "#{k.humanize}: #{v}" }.join(', ') %>
+                Options: <%= item.selected_options.map { |k, v| "#{k.humanize}: #{Array(v).join(', ')}" }.join(', ') %>
               </span>
             <% end %>
             <% if item.item_description.present? %>

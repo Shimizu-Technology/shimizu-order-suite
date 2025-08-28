@@ -308,9 +308,19 @@ module Wholesale
           WholesaleOrderMailer.order_fulfilled(order).deliver_later
         end
         
-        # Send SMS notification
-        if notification_channels["sms"] == true && order.customer_phone.present?
-          sms_sender = current_restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+        # Send SMS notification - enabled by default unless explicitly disabled
+        if notification_channels["sms"] != false && order.customer_phone.present?
+          # Priority: 1) Fundraiser contact phone, 2) Restaurant phone, 3) Admin SMS sender ID, 4) Restaurant name
+          sms_sender = order.fundraiser.contact_phone.presence ||
+                       current_restaurant.phone_number.presence ||
+                       current_restaurant.admin_settings&.dig("sms_sender_id").presence ||
+                       restaurant_name
+          
+          # Format phone numbers for ClickSend (remove dashes, keep only digits)
+          if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, '').length >= 10
+            sms_sender = sms_sender.gsub(/\D/, '').gsub(/^1/, '')
+          end
+          
           participant_text = order.participant ? " supporting #{order.participant.name}" : ""
           
           # Only show location if we have a custom pickup location name, otherwise it's just the restaurant name
@@ -340,9 +350,19 @@ module Wholesale
           WholesaleOrderMailer.order_ready(order).deliver_later
         end
         
-        # Send SMS notification
-        if notification_channels["sms"] == true && order.customer_phone.present?
-          sms_sender = current_restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+        # Send SMS notification - enabled by default unless explicitly disabled
+        if notification_channels["sms"] != false && order.customer_phone.present?
+          # Priority: 1) Fundraiser contact phone, 2) Restaurant phone, 3) Admin SMS sender ID, 4) Restaurant name
+          sms_sender = order.fundraiser.contact_phone.presence ||
+                       current_restaurant.phone_number.presence ||
+                       current_restaurant.admin_settings&.dig("sms_sender_id").presence ||
+                       restaurant_name
+          
+          # Format phone numbers for ClickSend (remove dashes, keep only digits)
+          if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, '').length >= 10
+            sms_sender = sms_sender.gsub(/\D/, '').gsub(/^1/, '')
+          end
+          
           participant_text = order.participant ? " supporting #{order.participant.name}" : ""
           
           pickup_location = order.fundraiser.pickup_display_name.present? ? " at #{order.fundraiser.pickup_display_name}" : ""

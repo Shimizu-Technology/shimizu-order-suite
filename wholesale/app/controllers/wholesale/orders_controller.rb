@@ -247,7 +247,8 @@ module Wholesale
     end
     
     def send_order_confirmations(order)
-      # Get notification preferences (consistent with regular orders)
+      # Get notification preferences - both email and SMS are enabled by default for better UX
+      # Users must explicitly set email: false or sms: false to disable notifications
       notification_channels = current_restaurant.admin_settings&.dig("notification_channels", "wholesale_orders") || {}
       restaurant_name = current_restaurant.name
       
@@ -257,9 +258,18 @@ module Wholesale
         Rails.logger.info("Wholesale order confirmation email queued for order ##{order.order_number}")
       end
       
-      # 2) Confirmation SMS (to the customer) - must be explicitly enabled (consistent with regular orders)
-      if notification_channels["sms"] == true && order.customer_phone.present?
-        sms_sender = current_restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+      # 2) Confirmation SMS (to the customer) - enabled by default unless explicitly disabled
+      if notification_channels["sms"] != false && order.customer_phone.present?
+        # Priority: 1) Fundraiser contact phone, 2) Restaurant phone, 3) Admin SMS sender ID, 4) Restaurant name
+        sms_sender = order.fundraiser.contact_phone.presence ||
+                     current_restaurant.phone_number.presence ||
+                     current_restaurant.admin_settings&.dig("sms_sender_id").presence ||
+                     restaurant_name
+        
+        # Format phone numbers for ClickSend (remove dashes, keep only digits)
+        if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, '').length >= 10
+          sms_sender = sms_sender.gsub(/\D/, '').gsub(/^1/, '')
+        end
         
         participant_text = order.participant ? " supporting #{order.participant.name}" : ""
         

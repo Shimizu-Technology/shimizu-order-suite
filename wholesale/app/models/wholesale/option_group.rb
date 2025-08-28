@@ -2,6 +2,10 @@ module Wholesale
   class OptionGroup < ApplicationRecord
     self.table_name = 'wholesale_option_groups'
     
+    # Soft delete support
+    scope :active, -> { where(deleted_at: nil) }
+    scope :deleted, -> { where.not(deleted_at: nil) }
+    
     belongs_to :wholesale_item, class_name: 'Wholesale::Item', foreign_key: 'wholesale_item_id'
     has_many :options, class_name: 'Wholesale::Option', foreign_key: 'wholesale_option_group_id', dependent: :destroy
     
@@ -48,6 +52,28 @@ module Wholesale
     def has_option_stock?
       return false unless inventory_tracking_enabled?
       available_option_stock > 0
+    end
+    
+    # Soft delete methods
+    def soft_delete!
+      return false if used_in_orders?
+      update!(deleted_at: Time.current)
+    end
+    
+    def deleted?
+      deleted_at.present?
+    end
+    
+    def restore!
+      update!(deleted_at: nil)
+    end
+    
+    # Check if this option group is used in any orders
+    def used_in_orders?
+      # Check if any order items reference this option group ID in their selected_options
+      Wholesale::OrderItem.joins(:order)
+        .where("selected_options ? :group_id", group_id: id.to_s)
+        .exists?
     end
     
     private

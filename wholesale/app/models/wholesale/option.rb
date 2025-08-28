@@ -2,6 +2,10 @@ module Wholesale
   class Option < ApplicationRecord
     self.table_name = 'wholesale_options'
     
+    # Soft delete support
+    scope :active, -> { where(deleted_at: nil) }
+    scope :deleted, -> { where.not(deleted_at: nil) }
+    
     belongs_to :option_group, class_name: 'Wholesale::OptionGroup', foreign_key: 'wholesale_option_group_id'
     
     validates :name, presence: true
@@ -78,6 +82,28 @@ module Wholesale
     def full_display_name
       item_name = option_group&.wholesale_item&.name || "Unknown Item"
       "#{item_name} - #{name}"
+    end
+    
+    # Soft delete methods
+    def soft_delete!
+      return false if used_in_orders?
+      update!(deleted_at: Time.current)
+    end
+    
+    def deleted?
+      deleted_at.present?
+    end
+    
+    def restore!
+      update!(deleted_at: nil)
+    end
+    
+    # Check if this option is used in any orders
+    def used_in_orders?
+      # Check if any order items reference this option ID in their selected_options
+      Wholesale::OrderItem.joins(:order)
+        .where("EXISTS (SELECT 1 FROM jsonb_each(selected_options) AS j(key, value) WHERE value @> :option_id)", option_id: "[#{id}]")
+        .exists?
     end
     
     private

@@ -20,6 +20,7 @@ module Wholesale
     # Callbacks
     before_validation :snapshot_item_data, if: -> { item.present? && (new_record? || item_id_changed?) }
     before_validation :normalize_selected_options
+    before_validation :store_option_names
     before_create :validate_and_reserve_inventory
     
     # Scopes
@@ -200,7 +201,18 @@ module Wholesale
       
       # Handle new option group system
       if item&.has_options?
-        return item.option_selection_display_name(selected_options)
+        display_name = item.option_selection_display_name(selected_options)
+        # If the display name is just the item name (meaning options weren't found),
+        # fall back to the stored option_names backup
+        if display_name == item.name && option_names.present?
+          return "#{item_name} (#{option_names})"
+        end
+        return display_name
+      end
+      
+      # Final fallback to stored option names if available
+      if option_names.present?
+        return "#{item_name} (#{option_names})"
       end
       
       item_name
@@ -261,6 +273,26 @@ module Wholesale
       else
         self.price_cents = item.price_cents
       end
+    end
+    
+    # Store human-readable option names as backup
+    def store_option_names
+      return unless item&.has_options? && selected_options.present?
+      
+      option_names_array = []
+      selected_options.each do |group_id, option_ids|
+        group = item.option_groups.find_by(id: group_id)
+        next unless group
+        
+        Array(option_ids).each do |option_id|
+          option = group.options.find_by(id: option_id)
+          if option
+            option_names_array << "#{group.name}: #{option.name}"
+          end
+        end
+      end
+      
+      self.option_names = option_names_array.join(', ') if option_names_array.any?
     end
     
     def item_availability

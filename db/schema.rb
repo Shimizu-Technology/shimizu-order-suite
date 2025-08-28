@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_08_21_052427) do
+ActiveRecord::Schema[7.2].define(version: 2025_08_27_231956) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -876,6 +876,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_21_052427) do
     t.boolean "enable_inventory_tracking", default: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
+    t.index ["deleted_at"], name: "index_wholesale_option_groups_on_deleted_at"
     t.index ["position"], name: "index_wholesale_option_groups_on_position"
     t.index ["wholesale_item_id", "enable_inventory_tracking"], name: "idx_wholesale_option_groups_item_inventory_tracking"
     t.index ["wholesale_item_id"], name: "index_wholesale_option_groups_on_wholesale_item_id"
@@ -909,7 +911,9 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_21_052427) do
     t.decimal "total_revenue", precision: 10, scale: 2, default: "0.0"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "deleted_at"
     t.index ["available"], name: "index_wholesale_options_on_available"
+    t.index ["deleted_at"], name: "index_wholesale_options_on_deleted_at"
     t.index ["position"], name: "index_wholesale_options_on_position"
     t.index ["wholesale_option_group_id", "name"], name: "idx_wholesale_options_group_name", unique: true
     t.index ["wholesale_option_group_id"], name: "index_wholesale_options_on_wholesale_option_group_id"
@@ -924,7 +928,8 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_21_052427) do
     t.text "item_description"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.jsonb "selected_options", default: {}
+    t.jsonb "selected_options", default: {}, comment: "JSONB storing option group IDs as keys and arrays of option IDs as values. Format: {\"group_id\": [option_id1, option_id2]}"
+    t.text "option_names"
     t.index ["item_id"], name: "index_wholesale_order_items_on_item_id"
     t.index ["order_id"], name: "index_wholesale_order_items_on_order_id"
     t.index ["selected_options"], name: "index_wholesale_order_items_on_selected_options", using: :gin
