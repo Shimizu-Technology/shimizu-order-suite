@@ -258,7 +258,13 @@ module Wholesale
         Rails.logger.info("Wholesale order confirmation email queued for order ##{order.order_number}")
       end
       
-      # 2) Confirmation SMS (to the customer) - enabled by default unless explicitly disabled
+      # 2) POC notification email (to the fundraiser contact) - only if contact email exists
+      if order.fundraiser.contact_email.present?
+        WholesaleOrderMailer.poc_order_notification(order).deliver_later
+        Rails.logger.info("Wholesale POC notification email queued for order ##{order.order_number} to #{order.fundraiser.contact_email}")
+      end
+      
+      # 3) Confirmation SMS (to the customer) - enabled by default unless explicitly disabled
       if notification_channels["sms"] != false && order.customer_phone.present?
         # Priority: 1) Fundraiser contact phone, 2) Restaurant phone, 3) Admin SMS sender ID, 4) Restaurant name
         sms_sender = order.fundraiser.contact_phone.presence ||

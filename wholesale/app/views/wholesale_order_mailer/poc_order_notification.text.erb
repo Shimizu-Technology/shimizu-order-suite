@@ -1,0 +1,53 @@
+NEW ORDER NOTIFICATION
+<%= @restaurant.name %>
+
+New order for your fundraiser!
+
+Hafa Adai,
+
+A new wholesale order has been placed for <%= @fundraiser.name %>.
+<% if @participant %>Thank you for supporting <%= @participant.name %>!<% end %>
+
+ORDER INFORMATION
+=================
+Order Number: <%= @order.order_number %>
+Order Date: <%= @order.created_at.strftime("%B %d, %Y at %I:%M %p") %>
+Customer: <%= @order.customer_name %>
+Customer Email: <%= @order.customer_email %>
+<% if @order.customer_phone.present? %>Customer Phone: <%= @order.customer_phone %><% end %>
+Fundraiser: <%= @fundraiser.name %>
+<% if @participant %>Supporting: <%= @participant.name %><% end %>
+
+ORDER ITEMS
+===========
+<% @order_items.each do |item| %>
+<%= item.variant_description || item.item_name %>
+<% if item.variant_description.blank? && item.selected_options.present? && item.selected_options.any? %>
+  Options: <%= item.selected_options.map { |k, v| "#{k.humanize}: #{Array(v).join(', ')}" }.join(', ') %>
+<% end %>
+<% if item.item_description.present? %>
+  <%= item.item_description %>
+<% end %>
+  Quantity: <%= item.quantity %>
+  Unit Price: $<%= '%.2f' % (item.price_cents / 100.0) %>
+  Total: $<%= '%.2f' % ((item.price_cents * item.quantity) / 100.0) %>
+
+<% end %>
+
+ORDER TOTAL: $<%= '%.2f' % @total %>
+
+<% if @order.notes.present? %>
+SPECIAL INSTRUCTIONS
+====================
+<%= @order.notes %>
+
+<% end %>
+WHAT'S NEXT?
+============
+• The customer has been sent an order confirmation
+• The order will be processed and prepared for pickup
+• The customer will be notified when the order is ready
+• You'll receive updates on any status changes
+
+---
+This notification was sent because you are listed as the contact for <%= @fundraiser.name %>.

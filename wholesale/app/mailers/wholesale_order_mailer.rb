@@ -89,6 +89,26 @@ class WholesaleOrderMailer < ApplicationMailer
     )
   end
   
+  # POC (Point of Contact) notification emails for fundraiser organizers
+  def poc_order_notification(order)
+    @order = order
+    @restaurant = order.restaurant
+    @fundraiser = order.fundraiser
+    @participant = order.participant
+    @order_items = order.order_items.includes(:item)
+    @header_color = email_header_color_for(@restaurant)
+    
+    # Calculate order summary
+    @subtotal = @order.total_cents / 100.0
+    @total = @subtotal
+    
+    mail(
+      to: @fundraiser.contact_email,
+      from: restaurant_from_address(@restaurant),
+      subject: "New Order for #{@fundraiser.name} - Order ##{@order.order_number}"
+    )
+  end
+  
   private
   
   def get_restaurant_for(order)

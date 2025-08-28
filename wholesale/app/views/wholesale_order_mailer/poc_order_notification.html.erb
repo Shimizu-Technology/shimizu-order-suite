@@ -1,0 +1,119 @@
+<% content_for :header_color, @header_color %>
+
+<div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; background-color: #ffffff;">
+  <!-- Header -->
+  <div style="background-color: <%= @header_color %>; padding: 20px; text-align: center;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">New Order Notification</h1>
+  </div>
+
+  <!-- Order Details -->
+  <div style="padding: 30px 20px;">
+    <h2 style="color: #333; margin-bottom: 20px;">New order for your fundraiser!</h2>
+    
+    <p style="color: #666; line-height: 1.6; margin-bottom: 20px;">
+      Hafa Adai,<br><br>
+      A new wholesale order has been placed for <strong><%= @fundraiser.name %></strong>.
+      <% if @participant %>
+        This order is supporting <strong><%= @participant.name %></strong>.
+      <% end %>
+    </p>
+
+    <!-- Order Information -->
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+      <h3 style="color: #333; margin-top: 0; margin-bottom: 15px;">Order Information</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Order Number:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @order.order_number %></td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Order Date:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @order.created_at.strftime("%B %d, %Y at %I:%M %p") %></td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Customer:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @order.customer_name %></td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Customer Email:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @order.customer_email %></td>
+        </tr>
+        <% if @order.customer_phone.present? %>
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Customer Phone:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @order.customer_phone %></td>
+        </tr>
+        <% end %>
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Fundraiser:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @fundraiser.name %></td>
+        </tr>
+        <% if @participant %>
+        <tr>
+          <td style="padding: 8px 0; color: #666; font-weight: bold;">Supporting:</td>
+          <td style="padding: 8px 0; color: #333;"><%= @participant.name %></td>
+        </tr>
+        <% end %>
+      </table>
+    </div>
+
+    <!-- Order Items -->
+    <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
+      <h3 style="color: #333; margin-top: 0; margin-bottom: 15px;">Order Items</h3>
+      <% @order_items.each do |item| %>
+        <div style="border-bottom: 1px solid #e9ecef; padding: 15px 0;">
+          <div style="font-weight: bold; color: #333; margin-bottom: 5px;">
+            <%= item.variant_description || item.item_name %>
+          </div>
+          <% if item.variant_description.blank? && item.selected_options.present? && item.selected_options.any? %>
+            <div style="color: #666; font-size: 14px; margin-bottom: 5px;">
+              Options: <%= item.selected_options.map { |k, v| "#{k.humanize}: #{Array(v).join(', ')}" }.join(', ') %>
+            </div>
+          <% end %>
+          <% if item.item_description.present? %>
+            <div style="color: #666; font-size: 14px; margin-bottom: 5px;">
+              <%= item.item_description %>
+            </div>
+          <% end %>
+          <div style="color: #666; font-size: 14px;">
+            Quantity: <%= item.quantity %> | 
+            Unit Price: $<%= '%.2f' % (item.price_cents / 100.0) %> | 
+            Total: $<%= '%.2f' % ((item.price_cents * item.quantity) / 100.0) %>
+          </div>
+        </div>
+      <% end %>
+      
+      <div style="text-align: right; margin-top: 15px; padding-top: 15px; border-top: 2px solid #dee2e6;">
+        <div style="font-size: 18px; font-weight: bold; color: #333;">
+          Order Total: $<%= '%.2f' % @total %>
+        </div>
+      </div>
+    </div>
+
+    <% if @order.notes.present? %>
+    <!-- Special Instructions -->
+    <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 8px; margin-bottom: 25px;">
+      <h3 style="color: #856404; margin-top: 0; margin-bottom: 10px;">Special Instructions</h3>
+      <p style="color: #856404; margin: 0;"><%= @order.notes %></p>
+    </div>
+    <% end %>
+
+    <!-- Next Steps -->
+    <div style="background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 20px; border-radius: 8px;">
+      <h3 style="color: #0c5460; margin-top: 0; margin-bottom: 15px;">What's Next?</h3>
+      <ul style="color: #0c5460; margin: 0; padding-left: 20px;">
+        <li style="margin-bottom: 8px;">The customer has been sent an order confirmation</li>
+        <li style="margin-bottom: 8px;">The order will be processed and prepared for pickup</li>
+        <li style="margin-bottom: 8px;">The customer will be notified when the order is ready</li>
+        <li>You'll receive updates on any status changes</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="background-color: #f8f9fa; padding: 20px; text-align: center; border-top: 1px solid #dee2e6;">
+    <p style="color: #666; margin: 0; font-size: 14px;">
+      This notification was sent because you are listed as the contact for <%= @fundraiser.name %>.
+    </p>
+  </div>
+</div>
