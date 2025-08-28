@@ -876,7 +876,15 @@ class OrdersController < ApplicationController
 
       # 2) Confirmation text (SMS to the customer)
       if notification_channels["sms"] == true && @order.contact_phone.present?
-        sms_sender = @order.restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+        # Priority: 1) Restaurant phone, 2) Admin SMS sender ID, 3) Restaurant name
+        sms_sender = @order.restaurant.phone_number.presence ||
+                     @order.restaurant.admin_settings&.dig("sms_sender_id").presence ||
+                     restaurant_name
+        
+        # Format phone numbers for ClickSend (remove dashes, keep only digits)
+        if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, '').length >= 10
+          sms_sender = sms_sender.gsub(/\D/, '').gsub(/^1/, '')
+        end
 
         item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
         if @order.merchandise_items.present?
@@ -1037,7 +1045,15 @@ class OrdersController < ApplicationController
 
       notification_channels = order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
       restaurant_name = order.restaurant.name
-      sms_sender = order.restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+      # Priority: 1) Restaurant phone, 2) Admin SMS sender ID, 3) Restaurant name
+      sms_sender = order.restaurant.phone_number.presence ||
+                   order.restaurant.admin_settings&.dig("sms_sender_id").presence ||
+                   restaurant_name
+      
+      # Format phone numbers for ClickSend (remove dashes, keep only digits)
+      if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, '').length >= 10
+        sms_sender = sms_sender.gsub(/\D/, '').gsub(/^1/, '')
+      end
 
       # If status changed from 'pending' to 'preparing'
       if old_status == "pending" && order.status == "preparing"
@@ -1267,7 +1283,15 @@ class OrdersController < ApplicationController
   def send_order_ready_notifications(order)
     notification_channels = order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
     restaurant_name = order.restaurant.name
-    sms_sender = order.restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
+    # Priority: 1) Restaurant phone, 2) Admin SMS sender ID, 3) Restaurant name
+    sms_sender = order.restaurant.phone_number.presence ||
+                 order.restaurant.admin_settings&.dig("sms_sender_id").presence ||
+                 restaurant_name
+    
+    # Format phone numbers for ClickSend (remove dashes, keep only digits)
+    if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, '').length >= 10
+      sms_sender = sms_sender.gsub(/\D/, '').gsub(/^1/, '')
+    end
 
     # Send email notification
     if notification_channels["email"] != false && order.contact_email.present?
