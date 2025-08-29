@@ -101,6 +101,23 @@ Wholesale::Engine.routes.draw do
     get 'analytics/revenue', to: 'analytics#revenue'
     get 'analytics/participants', to: 'analytics#participants'
     get 'analytics/fundraisers', to: 'analytics#fundraisers'
+    
+    # Inventory management
+    get 'inventory', to: 'inventory#index'
+    get 'inventory/audit_trail', to: 'inventory#audit_trail'
+    
+    # Item-level inventory management - direct routes
+    get 'inventory/items/:id', to: 'inventory#show', as: :item_inventory_detail
+    post 'inventory/items/:id/update_stock', to: 'inventory#update_item_stock', as: :update_item_stock
+    post 'inventory/items/:id/mark_damaged', to: 'inventory#mark_damaged', as: :mark_item_damaged
+    post 'inventory/items/:id/restock', to: 'inventory#restock', as: :restock_item
+    post 'inventory/items/:id/enable_tracking', to: 'inventory#enable_tracking', as: :enable_item_tracking
+    post 'inventory/items/:id/disable_tracking', to: 'inventory#disable_tracking', as: :disable_item_tracking
+    
+    # Option-level inventory management
+    post 'inventory/options/:id/update_stock', to: 'inventory#update_option_stock', as: :update_option_stock
+    post 'inventory/options/:id/mark_damaged', to: 'inventory#mark_option_damaged', as: :mark_option_damaged
+    post 'inventory/options/:id/restock', to: 'inventory#restock_option', as: :restock_option
   end
   
   # Health check
@@ -124,12 +141,13 @@ Wholesale::Engine.routes.draw do
   end
   
   # Shopping cart (session-based)
-  resource :cart, only: [:show] do
+  resource :cart, only: [:show], controller: 'cart' do
     member do
       post :add
       put :update
       delete :clear
       get :validate
+      post :validate
     end
     
     # Remove specific item from cart

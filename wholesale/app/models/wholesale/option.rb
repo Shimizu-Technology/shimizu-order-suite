@@ -8,6 +8,9 @@ module Wholesale
     
     belongs_to :option_group, class_name: 'Wholesale::OptionGroup', foreign_key: 'wholesale_option_group_id'
     
+    # Inventory audit trail
+    has_many :option_stock_audits, class_name: 'Wholesale::OptionStockAudit', foreign_key: 'wholesale_option_id', dependent: :destroy
+    
     validates :name, presence: true
     validates :name, uniqueness: { scope: :wholesale_option_group_id, message: "must be unique within the option group" }
     validates :additional_price, numericality: { greater_than_or_equal_to: 0 }
@@ -39,32 +42,112 @@ module Wholesale
       option_group&.inventory_tracking_enabled? || false
     end
     
-    # Get available stock for this option (future feature)
+    # Get available stock for this option (stock - damaged)
     def available_stock
       return nil unless inventory_tracking_enabled?
-      return nil if stock_quantity.nil?
-      [stock_quantity - (damaged_quantity || 0), 0].max
-    end
-    
-    # Check if option is in stock (future feature)
-    def in_stock?
-      return available unless inventory_tracking_enabled?
-      available && (stock_quantity.nil? || available_stock > 0)
-    end
-    
-    # Check if option is out of stock (future feature)
-    def out_of_stock?
-      return !available unless inventory_tracking_enabled?
-      !available || (stock_quantity.present? && available_stock <= 0)
-    end
-    
-    # Check if option is low stock (future feature)
-    def low_stock?(threshold = nil)
-      return false unless inventory_tracking_enabled?
-      return false if stock_quantity.nil? || available_stock.nil?
+      return 0 unless stock_quantity.present?
       
-      threshold ||= low_stock_threshold || 5
+      total = stock_quantity.to_i
+      damaged = damaged_quantity.to_i
+      available = total - damaged
+      
+      [available, 0].max
+    end
+    
+    # Check if option is in stock (has available stock)
+    def in_stock?
+      return true unless inventory_tracking_enabled?
+      available_stock > 0
+    end
+
+    # Check if option is out of stock
+    def out_of_stock?
+      inventory_tracking_enabled? && available_stock <= 0
+    end
+
+    # Check if option is low stock (you can customize the threshold)
+    def low_stock?(threshold = 5)
+      return false unless inventory_tracking_enabled?
       available_stock <= threshold && available_stock > 0
+    end
+    
+    # Get the low stock threshold for this option
+    def actual_low_stock_threshold
+      low_stock_threshold || option_group&.wholesale_item&.actual_low_stock_threshold || 5
+    end
+    
+    # Mark a quantity as damaged without affecting stock quantity
+    def mark_as_damaged(quantity, reason, user = nil)
+      return false unless inventory_tracking_enabled?
+
+      transaction do
+        # Create audit record for damaged option
+        stock_audit = Wholesale::OptionStockAudit.create_damaged_record(self, quantity, reason, user)
+
+        # Update the damaged quantity
+        previous_damaged = self.damaged_quantity || 0
+        self.update!(damaged_quantity: previous_damaged + quantity.to_i)
+
+        true
+      end
+    rescue => e
+      Rails.logger.error("Failed to mark wholesale option as damaged: #{e.message}")
+      false
+    end
+
+    # Update stock quantity with audit trail
+    def update_stock_quantity(new_quantity, reason_type, reason_details = nil, user = nil, order = nil)
+      return false unless inventory_tracking_enabled?
+
+      transaction do
+        # Create audit record
+        stock_audit = Wholesale::OptionStockAudit.create_stock_record(self, new_quantity, reason_type, reason_details, user, order)
+
+        # Update the stock quantity
+        self.update!(stock_quantity: new_quantity)
+
+        true
+      end
+    rescue => e
+      Rails.logger.error("Failed to update wholesale option stock quantity: #{e.message}")
+      false
+    end
+
+    # Convenience methods with audit trail
+    def restock!(quantity, notes: nil, user: nil)
+      return false unless inventory_tracking_enabled?
+      
+      new_quantity = (stock_quantity || 0) + quantity
+      update_stock_quantity(new_quantity, 'restock', notes, user)
+    end
+    
+    def reduce_stock!(quantity, reason: 'manual_adjustment', user: nil, order: nil)
+      return true unless inventory_tracking_enabled?
+      
+      # Check availability with better error messaging
+      unless in_stock? && available_stock >= quantity
+        available = available_stock
+        if available <= 0
+          raise "#{full_display_name} is out of stock"
+        else
+          raise "Insufficient stock for #{full_display_name}. Only #{available} available (requested #{quantity})"
+        end
+      end
+      
+      new_quantity = (stock_quantity || 0) - quantity
+      success = update_stock_quantity(new_quantity, reason, "Reduced by #{quantity}", user, order)
+      
+      unless success
+        raise "Failed to reduce stock for #{full_display_name}"
+      end
+      
+      success
+    end
+    
+    def set_stock!(quantity, notes: nil, user: nil)
+      return false unless inventory_tracking_enabled?
+      
+      update_stock_quantity(quantity, 'manual_adjustment', notes, user)
     end
     
     # Get the final price including any additional price

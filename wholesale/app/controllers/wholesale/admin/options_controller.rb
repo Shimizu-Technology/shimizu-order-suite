@@ -36,6 +36,9 @@ module Wholesale
         option = @option_group.options.build(option_params)
         
         if option.save
+          # Create audit trail for initial option inventory setup
+          create_option_inventory_audit(option, 'created')
+          
           render_success(
             option: option_json(option), 
             message: 'Option created successfully!'
@@ -47,7 +50,13 @@ module Wholesale
       
       # PATCH/PUT /wholesale/admin/items/:item_id/option_groups/:option_group_id/options/:id
       def update
+        # Track changes for audit trail
+        old_stock_quantity = @option.stock_quantity
+        
         if @option.update(option_params)
+          # Create audit trail for option inventory changes
+          create_option_inventory_update_audit(@option, old_stock_quantity)
+          
           render_success(
             option: option_json(@option), 
             message: 'Option updated successfully!'
@@ -176,6 +185,81 @@ module Wholesale
             required: option.option_group.required
           }
         }
+      end
+
+      # Create audit trail for option inventory setup
+      def create_option_inventory_audit(option, action)
+        return unless option.inventory_tracking_enabled? && option.stock_quantity.present? && option.stock_quantity > 0
+
+        # Create audit record for initial option inventory setup
+        # For new options, previous quantity is 0
+        Wholesale::OptionStockAudit.create!(
+          wholesale_option: option,
+          audit_type: 'stock_update',
+          quantity_change: option.stock_quantity,
+          previous_quantity: 0,
+          new_quantity: option.stock_quantity,
+          reason: "Initial option inventory setup: #{option.stock_quantity} units",
+          user: current_user
+        )
+        
+        Rails.logger.info "Created initial option inventory audit for option #{option.id} (#{option.name}): #{option.stock_quantity} units by user #{current_user.id}"
+      rescue => e
+        Rails.logger.error "Failed to create option inventory audit for option #{option.id}: #{e.message}"
+        # Don't fail the option creation if audit fails
+      end
+
+      # Create audit trail for option inventory changes
+      def create_option_inventory_update_audit(option, old_stock_quantity)
+        return unless option.inventory_tracking_enabled?
+
+        # Check if this is the first time stock is being set (tracking was enabled but no stock was set before)
+        if old_stock_quantity.nil? && option.stock_quantity.present? && option.stock_quantity > 0
+          # First time setting stock after enabling tracking
+          Wholesale::OptionStockAudit.create!(
+            wholesale_option: option,
+            audit_type: 'stock_update',
+            quantity_change: option.stock_quantity,
+            previous_quantity: 0,
+            new_quantity: option.stock_quantity,
+            reason: "Initial stock setup after enabling tracking: #{option.stock_quantity} units",
+            user: current_user
+          )
+          
+          Rails.logger.info "Created initial stock setup audit for option #{option.id} (#{option.name}): #{option.stock_quantity} units by user #{current_user.id}"
+        elsif old_stock_quantity.present? && option.stock_quantity.present? && old_stock_quantity != option.stock_quantity
+          # Stock quantity changed
+          quantity_change = option.stock_quantity - old_stock_quantity
+          
+          if quantity_change > 0
+            # Stock increased
+            Wholesale::OptionStockAudit.create!(
+              wholesale_option: option,
+              audit_type: 'stock_update',
+              quantity_change: quantity_change,
+              previous_quantity: old_stock_quantity,
+              new_quantity: option.stock_quantity,
+              reason: "Stock adjusted from #{old_stock_quantity} to #{option.stock_quantity} (+#{quantity_change})",
+              user: current_user
+            )
+          elsif quantity_change < 0
+            # Stock decreased
+            Wholesale::OptionStockAudit.create!(
+              wholesale_option: option,
+              audit_type: 'stock_update',
+              quantity_change: quantity_change,
+              previous_quantity: old_stock_quantity,
+              new_quantity: option.stock_quantity,
+              reason: "Stock adjusted from #{old_stock_quantity} to #{option.stock_quantity} (#{quantity_change})",
+              user: current_user
+            )
+          end
+          
+          Rails.logger.info "Created stock adjustment audit for option #{option.id} (#{option.name}): #{quantity_change} units by user #{current_user.id}"
+        end
+      rescue => e
+        Rails.logger.error "Failed to create option inventory update audit for option #{option.id}: #{e.message}"
+        # Don't fail the option update if audit fails
       end
     end
   end

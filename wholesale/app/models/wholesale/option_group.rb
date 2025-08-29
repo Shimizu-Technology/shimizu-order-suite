@@ -36,22 +36,80 @@ module Wholesale
       enable_inventory_tracking == true
     end
     
-    # Get total stock across all options (future feature)
+    # Get total stock across all options
     def total_option_stock
       return 0 unless inventory_tracking_enabled?
-      options.sum(:stock_quantity)
+      options.active.sum { |option| option.stock_quantity || 0 }
     end
     
-    # Get available stock across all options (future feature)
+    # Get available stock across all options (total - damaged)
     def available_option_stock
       return 0 unless inventory_tracking_enabled?
-      options.sum('COALESCE(stock_quantity, 0) - COALESCE(damaged_quantity, 0)')
+      options.active.sum { |option| option.available_stock || 0 }
     end
     
-    # Check if any options have stock (future feature)
+    # Check if any options have stock
     def has_option_stock?
       return false unless inventory_tracking_enabled?
-      available_option_stock > 0
+      options.active.any? { |option| option.in_stock? }
+    end
+    
+    # Get options that are in stock
+    def in_stock_options
+      return options.active unless inventory_tracking_enabled?
+      options.active.select { |option| option.in_stock? }
+    end
+    
+    # Get options that are out of stock
+    def out_of_stock_options
+      return [] unless inventory_tracking_enabled?
+      options.active.select { |option| option.out_of_stock? }
+    end
+    
+    # Get options that are low stock
+    def low_stock_options
+      return [] unless inventory_tracking_enabled?
+      options.active.select { |option| option.low_stock? }
+    end
+    
+    # Sync option inventory with item inventory (distribute proportionally)
+    def sync_with_item_inventory!(target_total)
+      return false unless inventory_tracking_enabled?
+      
+      current_total = total_option_stock
+      return true if current_total == target_total
+      
+      difference = target_total - current_total
+      distribute_stock_difference_to_options(difference)
+      
+      true
+    end
+    
+    private
+    
+    # Distribute stock difference across options proportionally
+    def distribute_stock_difference_to_options(difference)
+      options_with_stock = options.active.where('stock_quantity > 0')
+      return if options_with_stock.empty? && difference < 0
+      
+      if options_with_stock.empty? && difference > 0
+        # If no options have stock but we need to add, distribute evenly
+        options_to_update = options.active
+      else
+        options_to_update = options_with_stock
+      end
+      
+      return if options_to_update.empty?
+      
+      # Simple proportional distribution
+      per_option = difference / options_to_update.count
+      remainder = difference % options_to_update.count
+      
+      options_to_update.each_with_index do |option, index|
+        additional = index < remainder ? 1 : 0
+        new_quantity = [option.stock_quantity.to_i + per_option + additional, 0].max
+        option.update_column(:stock_quantity, new_quantity)
+      end
     end
     
     # Soft delete methods

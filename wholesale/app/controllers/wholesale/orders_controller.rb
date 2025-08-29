@@ -96,6 +96,11 @@ module Wholesale
              unless item.fundraiser_id == fundraiser.id && fundraiser.active? && fundraiser.current?
                raise "Fundraiser is not currently accepting orders"
              end
+             
+             # Ensure item is still active
+             unless item.active?
+               raise "Item #{item.name} is no longer available"
+             end
             
             quantity = (cart_item['quantity'] || cart_item[:quantity]).to_i
             # Validate availability one more time
@@ -131,11 +136,73 @@ module Wholesale
       rescue ActiveRecord::RecordInvalid => e
         Rails.logger.error("Order validation failed: #{e.record.errors.full_messages}")
         Rails.logger.error("Order attributes: #{e.record.attributes}")
-        render_error("Order validation failed: #{e.record.errors.full_messages.join(', ')}")
+        
+        # Check if it's an inventory-related validation error
+        error_messages = e.record.errors.full_messages
+        inventory_errors = error_messages.select do |msg|
+          msg.include?('out of stock') || 
+          msg.include?('only') && msg.include?('available') ||
+          msg.include?('insufficient') ||
+          msg.include?('no longer available')
+        end
+        
+        if inventory_errors.any?
+          # Try to get more specific information from cart validation
+          begin
+            # Validate the current cart to get detailed inventory issues
+            cart_validation = validate_current_cart_items
+            
+            if cart_validation[:issues].any?
+              specific_errors = cart_validation[:issues].map do |issue|
+                case issue[:type]
+                when 'out_of_stock'
+                  "#{issue[:item_name]}#{issue[:option_name] ? " (#{issue[:option_name]})" : ""} is no longer available"
+                when 'insufficient_stock'
+                  "#{issue[:item_name]}#{issue[:option_name] ? " (#{issue[:option_name]})" : ""} only has #{issue[:available]} available (you're trying to order #{issue[:requested]})"
+                when 'option_unavailable'
+                  "#{issue[:option_name]} is no longer available#{issue[:group_name] ? " for #{issue[:group_name]}" : ""} (from #{issue[:item_name]})"
+                when 'item_not_found'
+                  "#{issue[:item_name]} is no longer available"
+                else
+                  issue[:message] || "Unknown inventory issue"
+                end
+              end
+              
+              render_error("The following items in your cart have inventory issues:\n\n#{specific_errors.join('\n')}\n\nPlease update your cart and try again.")
+            else
+              # Fallback to generic message
+              render_error("Sorry, some items in your cart are no longer available in the requested quantity. Please refresh your cart and try again.")
+            end
+          rescue => validation_error
+            Rails.logger.error("Failed to validate cart for detailed error: #{validation_error.message}")
+            # Fallback to generic message
+            render_error("Sorry, some items in your cart are no longer available in the requested quantity. Please refresh your cart and try again.")
+          end
+        else
+          # Generic validation error
+          render_error("Order validation failed: #{error_messages.join(', ')}")
+        end
+      rescue ActiveRecord::StatementInvalid => e
+        # Handle database constraint violations (like negative stock)
+        if e.message.include?('check_options_stock_quantity_non_negative') || 
+           e.message.include?('stock_quantity') && e.message.include?('constraint')
+          Rails.logger.warn("Inventory constraint violation during order creation: #{e.message}")
+          render_error("Sorry, some items in your cart are no longer available in the requested quantity. Please refresh and try again.")
+        else
+          Rails.logger.error("Database error during order creation: #{e.message}")
+          Rails.logger.error(e.backtrace.join("\n"))
+          render_error("Order creation failed due to a database error. Please try again.")
+        end
       rescue StandardError => e
-        Rails.logger.error("Order creation failed: #{e.message}")
-        Rails.logger.error(e.backtrace.join("\n"))
-        render_error("Order creation failed: #{e.message}")
+        # Check if it's an inventory-related error from our custom validations
+        if e.message.include?('Insufficient stock') || e.message.include?('no longer available')
+          Rails.logger.warn("Inventory validation failed during order creation: #{e.message}")
+          render_error("Sorry, some items in your cart are no longer available in the requested quantity. Please refresh your cart and try again.")
+        else
+          Rails.logger.error("Order creation failed: #{e.message}")
+          Rails.logger.error(e.backtrace.join("\n"))
+          render_error("Order creation failed: #{e.message}")
+        end
       end
     end
     
@@ -231,6 +298,145 @@ module Wholesale
     end
     
     private
+    
+    # Validate cart items to get detailed inventory issues
+    def validate_current_cart_items
+      cart_items = params[:cart_items] || []
+      issues = []
+      
+      cart_items.each do |cart_item_params|
+        begin
+          item = Wholesale::Item
+            .joins(:fundraiser)
+            .includes(option_groups: :options)
+            .where(fundraiser: { restaurant: current_restaurant })
+            .find(cart_item_params[:item_id])
+          
+          quantity = cart_item_params[:quantity].to_i
+          selected_options = cart_item_params[:selected_options] || {}
+          
+          # Check item-level inventory if enabled
+          if item.track_inventory? && !item.uses_option_level_inventory?
+            available = item.available_quantity
+            
+            if available < quantity
+              if available == 0
+                issues << {
+                  type: 'out_of_stock',
+                  item_id: item.id,
+                  item_name: cart_item_params[:name] || item.name,
+                  requested: quantity,
+                  available: available
+                }
+              else
+                issues << {
+                  type: 'insufficient_stock',
+                  item_id: item.id,
+                  item_name: cart_item_params[:name] || item.name,
+                  requested: quantity,
+                  available: available
+                }
+              end
+            end
+          end
+          
+          # Check option-level inventory if enabled
+          if item.uses_option_level_inventory?
+            tracking_group = item.option_inventory_tracking_group
+            
+            if tracking_group && selected_options.present?
+              # Get selected options for the tracking group
+              group_selections = selected_options[tracking_group.id.to_s] || []
+              group_selections = Array(group_selections)
+              
+              group_selections.each do |option_id|
+                option = tracking_group.options.find_by(id: option_id)
+                next unless option
+                
+                # Check if option is marked as unavailable
+                unless option.available
+                  issues << {
+                    type: 'option_unavailable',
+                    item_id: item.id,
+                    item_name: cart_item_params[:name] || item.name,
+                    option_id: option.id,
+                    option_name: option.name,
+                    requested: quantity,
+                    available: 0
+                  }
+                  next
+                end
+                
+                available = option.available_stock
+                
+                if available < quantity
+                  if available == 0
+                    issues << {
+                      type: 'out_of_stock',
+                      item_id: item.id,
+                      item_name: cart_item_params[:name] || item.name,
+                      option_id: option.id,
+                      option_name: option.name,
+                      requested: quantity,
+                      available: available
+                    }
+                  else
+                    issues << {
+                      type: 'insufficient_stock',
+                      item_id: item.id,
+                      item_name: cart_item_params[:name] || item.name,
+                      option_id: option.id,
+                      option_name: option.name,
+                      requested: quantity,
+                      available: available
+                    }
+                  end
+                end
+              end
+            end
+          end
+          
+          # Check for unavailable options in non-inventory-tracked option groups
+          if item.has_options? && selected_options.present?
+            item.option_groups.includes(:options).each do |group|
+              # Skip if this is the inventory tracking group (already handled above)
+              next if item.uses_option_level_inventory? && group == item.option_inventory_tracking_group
+              
+              group_selections = selected_options[group.id.to_s] || []
+              group_selections = Array(group_selections)
+              
+              group_selections.each do |option_id|
+                option = group.options.find_by(id: option_id)
+                next unless option
+                
+                # Check if option is marked as unavailable
+                unless option.available
+                  issues << {
+                    type: 'option_unavailable',
+                    item_id: item.id,
+                    item_name: cart_item_params[:name] || item.name,
+                    option_id: option.id,
+                    option_name: option.name,
+                    group_name: group.name,
+                    requested: quantity,
+                    available: 0
+                  }
+                end
+              end
+            end
+          end
+          
+        rescue ActiveRecord::RecordNotFound
+          issues << {
+            type: 'item_not_found',
+            item_id: cart_item_params[:item_id],
+            item_name: cart_item_params[:name] || 'Unknown item'
+          }
+        end
+      end
+      
+      { issues: issues, valid: issues.empty? }
+    end
     
     def get_payment_configuration
       # Get payment settings from restaurant configuration

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_08_27_231956) do
+ActiveRecord::Schema[7.2].define(version: 2025_08_28_033318) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -808,6 +808,25 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_27_231956) do
     t.index ["item_id"], name: "index_wholesale_item_images_on_item_id"
   end
 
+  create_table "wholesale_item_stock_audits", force: :cascade do |t|
+    t.bigint "wholesale_item_id", null: false
+    t.string "audit_type", null: false
+    t.integer "quantity_change"
+    t.integer "previous_quantity"
+    t.integer "new_quantity"
+    t.text "reason"
+    t.bigint "user_id"
+    t.bigint "order_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["audit_type"], name: "index_wholesale_item_stock_audits_on_audit_type"
+    t.index ["created_at"], name: "index_wholesale_item_stock_audits_on_created_at"
+    t.index ["order_id"], name: "index_wholesale_item_stock_audits_on_order_id"
+    t.index ["user_id"], name: "index_wholesale_item_stock_audits_on_user_id"
+    t.index ["wholesale_item_id", "created_at"], name: "idx_on_wholesale_item_id_created_at_adc0de72fd"
+    t.index ["wholesale_item_id"], name: "index_wholesale_item_stock_audits_on_wholesale_item_id"
+  end
+
   create_table "wholesale_item_variants", force: :cascade do |t|
     t.bigint "wholesale_item_id", null: false
     t.string "sku", null: false
@@ -844,10 +863,14 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_27_231956) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.boolean "allow_sale_with_no_stock", default: false, null: false
+    t.integer "damaged_quantity", default: 0, null: false
+    t.string "stock_status", default: "unlimited", null: false
     t.index ["fundraiser_id", "active"], name: "index_wholesale_items_on_fundraiser_id_and_active"
     t.index ["fundraiser_id", "sort_order"], name: "index_wholesale_items_on_fundraiser_id_and_sort_order"
     t.index ["fundraiser_id"], name: "index_wholesale_items_on_fundraiser_id"
+    t.index ["stock_status"], name: "index_wholesale_items_on_stock_status"
     t.index ["track_inventory", "stock_quantity"], name: "index_wholesale_items_on_track_inventory_and_stock_quantity"
+    t.index ["track_inventory", "stock_status"], name: "index_wholesale_items_on_track_inventory_and_stock_status"
   end
 
   create_table "wholesale_option_group_presets", force: :cascade do |t|
@@ -896,6 +919,25 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_27_231956) do
     t.index ["wholesale_option_group_preset_id", "name"], name: "idx_wholesale_option_presets_group_name", unique: true
     t.index ["wholesale_option_group_preset_id"], name: "idx_on_wholesale_option_group_preset_id_78a1a1b26a"
     t.index ["wholesale_option_group_preset_id"], name: "index_wholesale_option_presets_on_group_preset_id"
+  end
+
+  create_table "wholesale_option_stock_audits", force: :cascade do |t|
+    t.bigint "wholesale_option_id", null: false
+    t.string "audit_type", null: false
+    t.integer "quantity_change"
+    t.integer "previous_quantity"
+    t.integer "new_quantity"
+    t.text "reason"
+    t.bigint "user_id"
+    t.bigint "order_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["audit_type"], name: "index_wholesale_option_stock_audits_on_audit_type"
+    t.index ["created_at"], name: "index_wholesale_option_stock_audits_on_created_at"
+    t.index ["order_id"], name: "index_wholesale_option_stock_audits_on_order_id"
+    t.index ["user_id"], name: "index_wholesale_option_stock_audits_on_user_id"
+    t.index ["wholesale_option_id", "created_at"], name: "idx_on_wholesale_option_id_created_at_0b45372b0b"
+    t.index ["wholesale_option_id"], name: "index_wholesale_option_stock_audits_on_wholesale_option_id"
   end
 
   create_table "wholesale_options", force: :cascade do |t|
@@ -1069,11 +1111,17 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_27_231956) do
   add_foreign_key "wholesale_fundraiser_counters", "wholesale_fundraisers", column: "fundraiser_id"
   add_foreign_key "wholesale_fundraisers", "restaurants"
   add_foreign_key "wholesale_item_images", "wholesale_items", column: "item_id"
+  add_foreign_key "wholesale_item_stock_audits", "users"
+  add_foreign_key "wholesale_item_stock_audits", "wholesale_items"
+  add_foreign_key "wholesale_item_stock_audits", "wholesale_orders", column: "order_id"
   add_foreign_key "wholesale_item_variants", "wholesale_items"
   add_foreign_key "wholesale_items", "wholesale_fundraisers", column: "fundraiser_id"
   add_foreign_key "wholesale_option_group_presets", "restaurants"
   add_foreign_key "wholesale_option_groups", "wholesale_items"
   add_foreign_key "wholesale_option_presets", "wholesale_option_group_presets"
+  add_foreign_key "wholesale_option_stock_audits", "users"
+  add_foreign_key "wholesale_option_stock_audits", "wholesale_options"
+  add_foreign_key "wholesale_option_stock_audits", "wholesale_orders", column: "order_id"
   add_foreign_key "wholesale_options", "wholesale_option_groups"
   add_foreign_key "wholesale_order_items", "wholesale_items", column: "item_id"
   add_foreign_key "wholesale_order_items", "wholesale_orders", column: "order_id"

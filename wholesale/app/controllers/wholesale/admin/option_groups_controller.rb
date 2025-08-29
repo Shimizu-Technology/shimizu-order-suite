@@ -31,6 +31,9 @@ module Wholesale
         option_group = @item.option_groups.build(option_group_params)
         
         if option_group.save
+          # Create audit trail if inventory tracking is enabled
+          create_option_group_inventory_audit(option_group, 'created')
+          
           render_success(
             option_group: option_group_json(option_group), 
             message: 'Option group created successfully!'
@@ -42,7 +45,13 @@ module Wholesale
       
       # PATCH/PUT /wholesale/admin/items/:item_id/option_groups/:id
       def update
+        # Track changes for audit trail
+        old_enable_inventory_tracking = @option_group.enable_inventory_tracking
+        
         if @option_group.update(option_group_params)
+          # Create audit trail if inventory tracking was enabled
+          create_option_group_inventory_update_audit(@option_group, old_enable_inventory_tracking)
+          
           render_success(
             option_group: option_group_json(@option_group), 
             message: 'Option group updated successfully!'
@@ -133,6 +142,48 @@ module Wholesale
           created_at: option.created_at,
           updated_at: option.updated_at
         }
+      end
+
+      # Create audit trail for option group inventory setup
+      def create_option_group_inventory_audit(option_group, action)
+        return unless option_group.enable_inventory_tracking
+
+        # Log that inventory tracking was enabled for this option group
+        Rails.logger.info "Option group inventory tracking #{action} for group #{option_group.id} (#{option_group.name}) by user #{current_user.id}"
+        
+        # Note: Individual option stock audits will be created when options are created/updated
+        # This is just for logging the group-level inventory tracking enablement
+      rescue => e
+        Rails.logger.error "Failed to create option group inventory audit for group #{option_group.id}: #{e.message}"
+        # Don't fail the operation if audit fails
+      end
+
+      # Create audit trail for option group inventory tracking changes
+      def create_option_group_inventory_update_audit(option_group, old_enable_inventory_tracking)
+        # Check if inventory tracking was just enabled
+        if !old_enable_inventory_tracking && option_group.enable_inventory_tracking
+          Rails.logger.info "Option group inventory tracking enabled for group #{option_group.id} (#{option_group.name}) by user #{current_user.id}"
+          
+          # Create audit records for any existing options with stock quantities
+          option_group.options.each do |option|
+            if option.stock_quantity.present? && option.stock_quantity > 0
+              Wholesale::OptionStockAudit.create!(
+                wholesale_option: option,
+                audit_type: 'stock_update',
+                quantity_change: option.stock_quantity,
+                previous_quantity: 0,
+                new_quantity: option.stock_quantity,
+                reason: "Option-level inventory tracking enabled with existing stock: #{option.stock_quantity} units",
+                user: current_user
+              )
+              
+              Rails.logger.info "Created tracking enabled audit for option #{option.id} (#{option.name}): #{option.stock_quantity} units"
+            end
+          end
+        end
+      rescue => e
+        Rails.logger.error "Failed to create option group inventory update audit for group #{option_group.id}: #{e.message}"
+        # Don't fail the operation if audit fails
       end
     end
   end

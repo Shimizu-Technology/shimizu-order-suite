@@ -38,6 +38,7 @@ module Wholesale
     # Callbacks
     before_create :assign_order_number
     after_update :update_participant_progress, if: -> { saved_change_to_status? && (paid_or_completed? || fulfilled?) }
+    after_update :restore_inventory_on_cancellation, if: -> { saved_change_to_status? && status == STATUS_CANCELLED }
     
     # Scopes
     scope :by_status, ->(status) { where(status: status) }
@@ -256,34 +257,13 @@ module Wholesale
       order_items.includes(:item).each do |order_item|
         item = order_item.item
         
-        # Handle inventory reduction
-        if item.track_inventory?
-          # Check if this uses the new option group system
-          if order_item.uses_option_groups?
-            # Option group system - inventory is tracked at item level for now
-            # Future enhancement: per-option inventory tracking
-            unless item.reduce_stock!(order_item.quantity)
-              raise "Insufficient stock for #{order_item.variant_description}"
-            end
-          elsif item.has_variants? && order_item.selected_options.present?
-            # Legacy variant system
-            variant = item.find_variant_by_options(order_item.selected_options)
-            if variant
-              unless variant.reduce_stock!(order_item.quantity)
-                raise "Insufficient stock for #{variant.full_display_name}"
-              end
-            else
-              # Fallback to item-level stock if variant not found
-              unless item.reduce_stock!(order_item.quantity)
-                raise "Insufficient stock for #{item.name}"
-              end
-            end
-          else
-            # Traditional item-level inventory
-            unless item.reduce_stock!(order_item.quantity)
-              raise "Insufficient stock for #{item.name}"
-            end
-          end
+        # Handle inventory reduction based on tracking type
+        if item.uses_option_level_inventory?
+          # NEW: Option-level inventory tracking
+          reduce_option_inventory!(order_item)
+        elsif item.track_inventory?
+          # Item-level inventory tracking
+          reduce_item_inventory!(order_item)
         end
         
         # Track sales
@@ -406,6 +386,139 @@ module Wholesale
     def update_participant_progress
       return unless participant.present?
       participant.recalculate_current_amount!
+    end
+    
+    def restore_inventory_on_cancellation
+      restore_inventory!
+      Rails.logger.info("Restored inventory for cancelled order #{order_number}")
+    rescue => e
+      Rails.logger.error("Failed to restore inventory for cancelled order #{order_number}: #{e.message}")
+      # Don't fail the cancellation if inventory restoration fails
+    end
+    
+    # NEW: Reduce option-level inventory for order items
+    def reduce_option_inventory!(order_item)
+      item = order_item.item
+      tracking_group = item.option_inventory_tracking_group
+      
+      unless tracking_group
+        raise "Item #{item.name} uses option inventory but has no tracking group"
+      end
+      
+      # Get selected options for this order item
+      selected_options = order_item.selected_options || {}
+      
+      # Find the selected options in the tracking group
+      tracking_group_selections = selected_options[tracking_group.id.to_s]
+      
+      if tracking_group_selections.blank?
+        raise "No options selected for inventory tracking group #{tracking_group.name} in item #{item.name}"
+      end
+      
+      # Reduce stock for each selected option
+      Array(tracking_group_selections).each do |option_id|
+        option = tracking_group.options.active.find_by(id: option_id)
+        
+        unless option
+          raise "Selected option #{option_id} not found in tracking group #{tracking_group.name}"
+        end
+        
+        # Ensure option is still available
+        unless option.available?
+          raise "Selected option #{option.name} is no longer available"
+        end
+        
+        unless option.reduce_stock!(order_item.quantity, reason: 'order_placed', order: self)
+          raise "Insufficient stock for #{option.name} in #{item.name} (requested: #{order_item.quantity}, available: #{option.available_stock})"
+        end
+        
+        Rails.logger.info("Reduced #{order_item.quantity} units from option #{option.name} (#{option.available_stock} remaining)")
+      end
+    end
+    
+    # Reduce item-level inventory for order items
+    def reduce_item_inventory!(order_item)
+      item = order_item.item
+      
+      # Check if this uses the new option group system (but not option-level inventory)
+      if order_item.uses_option_groups?
+        # Option group system - inventory is tracked at item level
+        unless item.reduce_stock!(order_item.quantity, reason: 'order_placed', order: self)
+          raise "Insufficient stock for #{order_item.variant_description}"
+        end
+      elsif item.has_variants? && order_item.selected_options.present?
+        # Legacy variant system
+        variant = item.find_variant_by_options(order_item.selected_options)
+        if variant
+          unless variant.reduce_stock!(order_item.quantity)
+            raise "Insufficient stock for #{variant.full_display_name}"
+          end
+        else
+          # Fallback to item-level stock if variant not found
+          unless item.reduce_stock!(order_item.quantity, reason: 'order_placed', order: self)
+            raise "Insufficient stock for #{item.name}"
+          end
+        end
+      else
+        # Traditional item-level inventory
+        unless item.reduce_stock!(order_item.quantity, reason: 'order_placed', order: self)
+          raise "Insufficient stock for #{item.name}"
+        end
+      end
+    end
+    
+    # NEW: Restore inventory when order is cancelled
+    def restore_inventory!
+      order_items.includes(:item).each do |order_item|
+        item = order_item.item
+        
+        # Handle inventory restoration based on tracking type
+        if item.uses_option_level_inventory?
+          # NEW: Option-level inventory restoration
+          restore_option_inventory!(order_item)
+        elsif item.track_inventory?
+          # Item-level inventory restoration
+          restore_item_inventory!(order_item)
+        end
+      end
+    end
+    
+    # NEW: Restore option-level inventory for cancelled order items
+    def restore_option_inventory!(order_item)
+      item = order_item.item
+      tracking_group = item.option_inventory_tracking_group
+      
+      return unless tracking_group
+      
+      # Get selected options for this order item
+      selected_options = order_item.selected_options || {}
+      tracking_group_selections = selected_options[tracking_group.id.to_s]
+      
+      return if tracking_group_selections.blank?
+      
+      # Restore stock for each selected option
+      Array(tracking_group_selections).each do |option_id|
+        option = tracking_group.options.active.find_by(id: option_id)
+        
+        next unless option
+        
+        # Add the quantity back to stock
+        new_quantity = (option.stock_quantity || 0) + order_item.quantity
+        option.update_stock_quantity(new_quantity, 'order_cancelled', "Order #{order_number} cancelled", nil, self)
+        
+        Rails.logger.info("Restored #{order_item.quantity} units to option #{option.name} (#{option.available_stock} now available)")
+      end
+    end
+    
+    # Restore item-level inventory for cancelled order items
+    def restore_item_inventory!(order_item)
+      item = order_item.item
+      
+      # Add the quantity back to stock
+      new_quantity = (item.stock_quantity || 0) + order_item.quantity
+      item.update_stock_quantity(new_quantity, 'order_cancelled', "Order #{order_number} cancelled", nil, self)
+      
+      Rails.logger.info("Restored #{order_item.quantity} units to item #{item.name} (#{item.available_quantity} now available)")
     end
   end
 end

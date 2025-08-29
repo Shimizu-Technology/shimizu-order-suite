@@ -90,7 +90,7 @@ module Wholesale
     
     # Inventory helpers
     def item_tracks_inventory?
-      item&.track_inventory?
+      item&.track_inventory? || item&.uses_option_level_inventory?
     end
     
     def sufficient_inventory?
@@ -314,12 +314,13 @@ module Wholesale
     def quantity_available
       return unless item.present? && quantity.present?
       
-      if item_tracks_inventory? && !item.can_purchase?(quantity)
-        available = item.available_quantity
-        if available <= 0
-          errors.add(:quantity, 'item is out of stock')
+      if item_tracks_inventory?
+        if item.uses_option_level_inventory?
+          # Check option-level inventory availability
+          validate_option_inventory_availability
         else
-          errors.add(:quantity, "only #{available} available (requested #{quantity})")
+          # Check item-level inventory availability
+          validate_item_inventory_availability
         end
       end
     end
@@ -348,6 +349,53 @@ module Wholesale
       
       # Remove empty values
       self.selected_options = selected_options.reject { |k, v| v.blank? }
+    end
+    
+    # NEW: Validate item-level inventory availability
+    def validate_item_inventory_availability
+      unless item.can_purchase?(quantity)
+        available = item.available_quantity
+        if available <= 0
+          errors.add(:quantity, 'item is out of stock')
+        else
+          errors.add(:quantity, "only #{available} available (requested #{quantity})")
+        end
+      end
+    end
+    
+    # NEW: Validate option-level inventory availability
+    def validate_option_inventory_availability
+      tracking_group = item.option_inventory_tracking_group
+      return unless tracking_group
+      
+      # Get selected options for the tracking group
+      selected_options_hash = selected_options || {}
+      tracking_group_selections = selected_options_hash[tracking_group.id.to_s]
+      
+      if tracking_group_selections.blank?
+        errors.add(:selected_options, "must select options for #{tracking_group.name}")
+        return
+      end
+      
+      # Check availability for each selected option
+      Array(tracking_group_selections).each do |option_id|
+        option = tracking_group.options.active.find_by(id: option_id)
+        
+        unless option
+          errors.add(:selected_options, "invalid option selected for #{tracking_group.name}")
+          next
+        end
+        
+        unless option.in_stock?
+          errors.add(:selected_options, "#{option.name} is out of stock")
+          next
+        end
+        
+        available = option.available_stock
+        if available < quantity
+          errors.add(:quantity, "only #{available} #{option.name} available (requested #{quantity})")
+        end
+      end
     end
   end
 end

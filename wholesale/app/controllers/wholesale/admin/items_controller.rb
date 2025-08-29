@@ -13,7 +13,7 @@ module Wholesale
       def index
         items = Wholesale::Item.joins(:fundraiser)
           .where(wholesale_fundraisers: { restaurant_id: current_restaurant.id })
-          .includes(:fundraiser, :item_images)
+          .includes(:fundraiser, :item_images, option_groups: :options)
         
         # Apply fundraiser scoping if present
         if @fundraiser
@@ -67,6 +67,9 @@ module Wholesale
           # Process image uploads if present
           process_image_uploads(item, item_params[:images]) if item_params[:images].present?
           
+          # Create audit trail for initial inventory setup
+          create_initial_inventory_audit(item, create_params)
+          
           # Reload to include any created images and option groups
           item.reload
           render_success(item: item_with_computed_fields(item), message: 'Item created successfully!', status: :created)
@@ -80,6 +83,10 @@ module Wholesale
         # Separate image operations from item updates
         update_params = item_params.except(:images, :delete_image_ids)
         
+        # Track changes for audit trail
+        old_track_inventory = @item.track_inventory
+        old_stock_quantity = @item.stock_quantity
+        
         if @item.update(update_params)
           # Process legacy variant options and convert to option groups
           process_legacy_options(@item, update_params[:options]) if update_params[:options].present?
@@ -89,6 +96,9 @@ module Wholesale
           
           # Process image uploads if present
           process_image_uploads(@item, item_params[:images]) if item_params[:images].present?
+          
+          # Create audit trail for inventory setup changes
+          create_inventory_update_audit(@item, old_track_inventory, old_stock_quantity, update_params)
           
           # Reload to include any image changes and option groups
           @item.reload
@@ -158,7 +168,7 @@ module Wholesale
       def set_item
         query = Wholesale::Item.joins(:fundraiser)
           .where(wholesale_fundraisers: { restaurant_id: current_restaurant.id })
-          .includes(:fundraiser, :item_images)
+          .includes(:fundraiser, :item_images, option_groups: :options)
         
         # Additional scoping for nested routes
         if @fundraiser
@@ -358,12 +368,36 @@ module Wholesale
 
       def item_with_computed_fields(item)
         # Calculate stock status
-        stock_status = 'in_stock'
+        stock_status = 'unlimited'
+        
         if item.track_inventory && item.stock_quantity.present?
+          # Item-level inventory tracking
           if item.stock_quantity <= 0
             stock_status = 'out_of_stock'
           elsif item.low_stock_threshold.present? && item.stock_quantity <= item.low_stock_threshold
             stock_status = 'low_stock'
+          else
+            stock_status = 'in_stock'
+          end
+        elsif item.uses_option_level_inventory?
+          # Option-level inventory tracking
+          effective_qty = item.effective_available_quantity
+          if effective_qty.is_a?(Numeric)
+            tracking_group = item.option_inventory_tracking_group
+            if tracking_group
+              # Calculate aggregate low stock threshold
+              total_low_threshold = tracking_group.options.active.sum(:low_stock_threshold)
+              
+              if effective_qty <= 0
+                stock_status = 'out_of_stock'
+              elsif total_low_threshold > 0 && effective_qty <= total_low_threshold
+                stock_status = 'low_stock'
+              else
+                stock_status = 'in_stock'
+              end
+            else
+              stock_status = 'in_stock' # Fallback if no tracking group
+            end
           end
         end
         
@@ -449,7 +483,14 @@ module Wholesale
           'has_options' => item.has_options?,
           'option_groups_count' => item.option_groups.count,
           'orders_sold' => total_ordered, # Alias for backward compatibility
-          'revenue_generated_cents' => total_revenue_cents # Alias for backward compatibility
+          'revenue_generated_cents' => total_revenue_cents, # Alias for backward compatibility
+          
+          # Inventory tracking fields
+          'uses_option_level_inventory' => item.uses_option_level_inventory?,
+          'has_option_inventory_tracking' => item.has_option_inventory_tracking?,
+          'effective_available_quantity' => item.effective_available_quantity,
+          'available_quantity' => item.available_quantity,
+          'damaged_quantity' => item.damaged_quantity
         )
       end
 
@@ -467,6 +508,78 @@ module Wholesale
 
       def nested_route?
         params[:fundraiser_id].present?
+      end
+
+      # Create audit trail for initial inventory setup during item creation
+      def create_initial_inventory_audit(item, create_params)
+        return unless create_params[:track_inventory] && create_params[:stock_quantity].present? && create_params[:stock_quantity] > 0
+
+        # Create audit record for initial item-level inventory setup
+        # For new items, previous quantity is 0
+        Wholesale::ItemStockAudit.create!(
+          wholesale_item: item,
+          audit_type: 'stock_update',
+          quantity_change: create_params[:stock_quantity],
+          previous_quantity: 0,
+          new_quantity: create_params[:stock_quantity],
+          reason: "Initial inventory setup: #{create_params[:stock_quantity]} units",
+          user: current_user
+        )
+        
+        Rails.logger.info "Created initial inventory audit for item #{item.id}: #{create_params[:stock_quantity]} units by user #{current_user.id}"
+      rescue => e
+        Rails.logger.error "Failed to create initial inventory audit for item #{item.id}: #{e.message}"
+        # Don't fail the item creation if audit fails
+      end
+
+      # Create audit trail for inventory setup changes during item updates
+      def create_inventory_update_audit(item, old_track_inventory, old_stock_quantity, update_params)
+        # Check if inventory tracking was just enabled
+        if !old_track_inventory && update_params[:track_inventory] && update_params[:stock_quantity].present? && update_params[:stock_quantity] > 0
+          # Inventory tracking was just enabled with initial stock
+          # Create audit record with explicit previous quantity
+          Wholesale::ItemStockAudit.create!(
+            wholesale_item: item,
+            audit_type: 'stock_update',
+            quantity_change: update_params[:stock_quantity] - (old_stock_quantity || 0),
+            previous_quantity: old_stock_quantity || 0,
+            new_quantity: update_params[:stock_quantity],
+            reason: "Inventory tracking enabled with initial stock: #{update_params[:stock_quantity]} units",
+            user: current_user
+          )
+          
+          Rails.logger.info "Created inventory tracking enabled audit for item #{item.id}: #{update_params[:stock_quantity]} units by user #{current_user.id}"
+        elsif old_track_inventory && update_params[:track_inventory] && update_params[:stock_quantity].present?
+          # Inventory tracking was already enabled, check if stock quantity changed
+          if old_stock_quantity != update_params[:stock_quantity]
+            quantity_change = update_params[:stock_quantity] - (old_stock_quantity || 0)
+            
+            if quantity_change > 0
+              # Stock increased
+              Wholesale::ItemStockAudit.create_stock_record(
+                item,
+                quantity_change,
+                'manual_adjustment',
+                "Stock adjusted from #{old_stock_quantity || 0} to #{update_params[:stock_quantity]} (+#{quantity_change})",
+                current_user
+              )
+            elsif quantity_change < 0
+              # Stock decreased
+              Wholesale::ItemStockAudit.create_stock_record(
+                item,
+                quantity_change,
+                'manual_adjustment',
+                "Stock adjusted from #{old_stock_quantity || 0} to #{update_params[:stock_quantity]} (#{quantity_change})",
+                current_user
+              )
+            end
+            
+            Rails.logger.info "Created stock adjustment audit for item #{item.id}: #{quantity_change} units by user #{current_user.id}"
+          end
+        end
+      rescue => e
+        Rails.logger.error "Failed to create inventory update audit for item #{item.id}: #{e.message}"
+        # Don't fail the item update if audit fails
       end
     end
   end

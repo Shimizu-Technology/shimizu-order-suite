@@ -127,6 +127,10 @@ module Wholesale
         stock_status: item.stock_status,
         available_quantity: item.track_inventory? ? item.available_quantity : nil,
         
+        # Option-level inventory fields
+        uses_option_level_inventory: item.uses_option_level_inventory?,
+        effective_available_quantity: item.effective_available_quantity,
+        
         # Primary image only for summary
         primary_image_url: item.primary_image_url,
         
@@ -142,13 +146,17 @@ module Wholesale
             max_select: group.max_select,
             required: group.required,
             position: group.position,
+            enable_inventory_tracking: group.enable_inventory_tracking,
             options: group.options.order(:position).map do |option|
               {
                 id: option.id,
                 name: option.name,
                 additional_price: option.additional_price.to_f,
                 available: option.available,
-                position: option.position
+                position: option.position,
+                stock_quantity: option.stock_quantity,
+                damaged_quantity: option.damaged_quantity,
+                low_stock_threshold: option.low_stock_threshold
               }
             end
           }
@@ -183,6 +191,10 @@ module Wholesale
         available_quantity: item.track_inventory? ? item.available_quantity : nil,
         low_stock_threshold: item.low_stock_threshold,
         last_restocked_at: item.last_restocked_at,
+        
+        # Option-level inventory fields
+        uses_option_level_inventory: item.uses_option_level_inventory?,
+        effective_available_quantity: item.effective_available_quantity,
         
         # All images
         images: item.item_images.by_position.map do |image|

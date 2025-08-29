@@ -2,8 +2,9 @@
 
 module Wholesale
   class CartController < ApplicationController
-    # Cart operations require authentication for user persistence
-    before_action :load_cart
+    # Skip authentication for cart operations - supports both authenticated and anonymous users
+    skip_before_action :authorize_request
+    before_action :load_cart, except: [:validate]
     before_action :find_item, only: [:add, :update]
     
     # GET /wholesale/cart
@@ -26,10 +27,10 @@ module Wholesale
         return render_error("Quantity must be greater than 0")
       end
       
-      # Check if item is available
-      unless @item.can_purchase?(quantity)
-        available = @item.track_inventory? ? @item.available_quantity : "unlimited"
-        return render_error("Insufficient stock. Available: #{available}")
+      # Validate inventory based on tracking type
+      inventory_error = validate_inventory_for_add(@item, selected_options, quantity, @cart)
+      if inventory_error
+        return render_error(inventory_error)
       end
       
       # Check if cart is empty or from same fundraiser
@@ -50,6 +51,10 @@ module Wholesale
         cart_item[:selected_options] == selected_options.to_h
       }
       
+      # Calculate total price including options
+      total_price = @item.calculate_price_for_options(selected_options)
+      total_price_cents = (total_price * 100).round
+      
       if existing_item
         # Update quantity
         new_quantity = existing_item[:quantity] + quantity
@@ -60,7 +65,7 @@ module Wholesale
         end
         
         existing_item[:quantity] = new_quantity
-        existing_item[:line_total_cents] = new_quantity * @item.price_cents
+        existing_item[:line_total_cents] = new_quantity * total_price_cents
         existing_item[:updated_at] = Time.current
       else
         # Add new item
@@ -70,9 +75,9 @@ module Wholesale
           name: @item.name,
           description: @item.description,
           sku: @item.sku,
-          price_cents: @item.price_cents,
+          price_cents: total_price_cents,
           quantity: quantity,
-          line_total_cents: quantity * @item.price_cents,
+          line_total_cents: quantity * total_price_cents,
           image_url: @item.primary_image_url,
           selected_options: selected_options.to_h,
           added_at: Time.current,
@@ -116,9 +121,14 @@ module Wholesale
           return render_error("Insufficient stock. Available: #{available}")
         end
         
+        # Calculate total price including options
+        selected_options = cart_item[:selected_options] || {}
+        total_price = @item.calculate_price_for_options(selected_options)
+        total_price_cents = (total_price * 100).round
+        
         # Update quantity
         cart_item[:quantity] = quantity
-        cart_item[:line_total_cents] = quantity * @item.price_cents
+        cart_item[:line_total_cents] = quantity * total_price_cents
         cart_item[:updated_at] = Time.current
         message = "Cart updated successfully"
       end
@@ -165,24 +175,29 @@ module Wholesale
     # GET /wholesale/cart/validate
     # Validate cart items (check availability, prices, etc.)
     def validate
-      return render_success(cart: cart_summary([]), valid: true, message: "Empty cart is valid") if @cart.empty?
+      # For validation, we expect cart items to be passed as parameters, not stored in session
+      cart_items = params[:cart_items] || []
+      
+      return render_success(cart: [], valid: true, message: "Empty cart is valid") if cart_items.empty?
       
       issues = []
       valid_cart = []
       
-      @cart.each do |cart_item|
+      cart_items.each do |cart_item|
         begin
           item = Wholesale::Item
             .joins(:fundraiser)
+            .includes(option_groups: :options)
             .where(fundraiser: { restaurant: current_restaurant })
             .find(cart_item[:item_id])
           
           # Check if item is still active
           unless item.active?
             issues << {
+              type: 'item_inactive',
               item_id: item.id,
-              name: cart_item[:name],
-              issue: "Item is no longer available"
+              item_name: cart_item[:name],
+              message: "Item is no longer available"
             }
             next
           end
@@ -190,53 +205,54 @@ module Wholesale
           # Check if fundraiser is still active and current
           unless item.fundraiser.active? && item.fundraiser.current?
             issues << {
+              type: 'fundraiser_inactive',
               item_id: item.id,
-              name: cart_item[:name],
-              issue: "Fundraiser is no longer accepting orders"
+              item_name: cart_item[:name],
+              message: "Fundraiser is no longer accepting orders"
             }
             next
           end
           
-          # Check availability
-          unless item.can_purchase?(cart_item[:quantity])
-            available = item.track_inventory? ? item.available_quantity : "unlimited"
-            issues << {
-              item_id: item.id,
-              name: cart_item[:name],
-              issue: "Insufficient stock. Available: #{available}, in cart: #{cart_item[:quantity]}"
-            }
-            next
-          end
+          # Check inventory availability (item-level or option-level)
+          inventory_issues = validate_cart_item_inventory(item, cart_item)
+          issues.concat(inventory_issues)
           
-          # Check if price has changed
-          if item.price_cents != cart_item[:price_cents]
+          # Skip further validation if inventory issues found
+          next if inventory_issues.any?
+          
+          # Check if price has changed (including option prices)
+          selected_options = cart_item[:selected_options] || {}
+          expected_total_price = item.calculate_price_for_options(selected_options)
+          expected_price_cents = (expected_total_price * 100).round
+          
+          if expected_price_cents != cart_item[:price_cents]
             issues << {
+              type: 'price_changed',
               item_id: item.id,
-              name: cart_item[:name],
-              issue: "Price has changed from $#{cart_item[:price_cents] / 100.0} to $#{item.price}"
+              item_name: cart_item[:name],
+              old_price: cart_item[:price_cents] / 100.0,
+              new_price: expected_total_price,
+              message: "Price has changed from $#{cart_item[:price_cents] / 100.0} to $#{expected_total_price}"
             }
             # Update price in cart
-            cart_item[:price_cents] = item.price_cents
-            cart_item[:line_total_cents] = cart_item[:quantity] * item.price_cents
+            cart_item[:price_cents] = expected_price_cents
+            cart_item[:line_total_cents] = cart_item[:quantity] * expected_price_cents
           end
           
           valid_cart << cart_item
           
         rescue ActiveRecord::RecordNotFound
           issues << {
+            type: 'item_not_found',
             item_id: cart_item[:item_id],
-            name: cart_item[:name],
-            issue: "Item no longer exists"
+            item_name: cart_item[:name],
+            message: "Item no longer exists"
           }
         end
       end
       
-      # Update cart with valid items only
-      @cart = valid_cart
-      save_cart(@cart)
-      
       render_success(
-        cart: cart_summary(@cart),
+        cart: valid_cart,
         valid: issues.empty?,
         issues: issues,
         message: issues.empty? ? "Cart is valid" : "Cart has #{issues.length} issue(s)"
@@ -247,6 +263,166 @@ module Wholesale
     
     def load_cart
       @cart = get_cart
+    end
+    
+    # Validate inventory for a specific cart item
+    def validate_cart_item_inventory(item, cart_item)
+      issues = []
+      quantity = cart_item[:quantity]
+      selected_options = cart_item[:selected_options] || {}
+      
+      # Check item-level inventory if enabled
+      if item.track_inventory? && !item.uses_option_level_inventory?
+        available = item.available_quantity
+        
+        if available < quantity
+          if available == 0
+            issues << {
+              type: 'out_of_stock',
+              item_id: item.id,
+              item_name: cart_item[:name],
+              requested: quantity,
+              available: available,
+              message: "#{cart_item[:name]} is out of stock"
+            }
+          else
+            issues << {
+              type: 'insufficient_stock',
+              item_id: item.id,
+              item_name: cart_item[:name],
+              requested: quantity,
+              available: available,
+              message: "#{cart_item[:name]} only has #{available} available (you have #{quantity} in cart)"
+            }
+          end
+        end
+      end
+      
+      # Check option-level inventory if enabled
+      if item.uses_option_level_inventory?
+        tracking_group = item.option_inventory_tracking_group
+        
+        if tracking_group && selected_options.present?
+          # Parse selected options - they could be stored as JSON string or hash
+          parsed_options = case selected_options
+          when String
+            begin
+              JSON.parse(selected_options)
+            rescue JSON::ParserError
+              {}
+            end
+          when ActionController::Parameters
+            selected_options.to_unsafe_h
+          when Hash
+            selected_options
+          else
+            {}
+          end
+          
+          # Get selected options for the tracking group
+          group_selections = parsed_options[tracking_group.id.to_s] || []
+          group_selections = Array(group_selections)
+          
+          group_selections.each do |option_id|
+            option = tracking_group.options.find_by(id: option_id)
+            next unless option
+            
+            # Check if option is marked as unavailable
+            unless option.available
+              issues << {
+                type: 'option_unavailable',
+                item_id: item.id,
+                item_name: cart_item[:name],
+                option_id: option.id,
+                option_name: option.name,
+                requested: quantity,
+                available: 0,
+                message: "#{option.name} is no longer available (from #{cart_item[:name]})"
+              }
+              next
+            end
+            
+            available = option.available_stock
+            
+            if available < quantity
+              option_display_name = "#{cart_item[:name]} (#{option.name})"
+              
+              if available == 0
+                issues << {
+                  type: 'out_of_stock',
+                  item_id: item.id,
+                  item_name: cart_item[:name],
+                  option_id: option.id,
+                  option_name: option.name,
+                  requested: quantity,
+                  available: available,
+                  message: "#{option_display_name} is out of stock"
+                }
+              else
+                issues << {
+                  type: 'insufficient_stock',
+                  item_id: item.id,
+                  item_name: cart_item[:name],
+                  option_id: option.id,
+                  option_name: option.name,
+                  requested: quantity,
+                  available: available,
+                  message: "#{option_display_name} only has #{available} available (you have #{quantity} in cart)"
+                }
+              end
+            end
+          end
+        end
+      end
+      
+      # Check for unavailable options in non-inventory-tracked option groups
+      if item.has_options? && selected_options.present?
+        # Parse selected options - they could be stored as JSON string or hash
+        parsed_options = case selected_options
+        when String
+          begin
+            JSON.parse(selected_options)
+          rescue JSON::ParserError
+            {}
+          end
+        when ActionController::Parameters
+          selected_options.to_unsafe_h
+        when Hash
+          selected_options
+        else
+          {}
+        end
+        
+        item.option_groups.includes(:options).each do |group|
+          # Skip if this is the inventory tracking group (already handled above)
+          next if item.uses_option_level_inventory? && group == item.option_inventory_tracking_group
+          
+          group_selections = parsed_options[group.id.to_s] || []
+          group_selections = Array(group_selections)
+          
+          group_selections.each do |option_id|
+            option = group.options.find_by(id: option_id)
+            next unless option
+            
+            # Check if option is marked as unavailable
+            unless option.available
+              issues << {
+                type: 'option_unavailable',
+                item_id: item.id,
+                item_name: cart_item[:name],
+                option_id: option.id,
+                option_name: option.name,
+                group_name: group.name,
+                requested: quantity,
+                available: 0,
+                message: "#{option.name} is no longer available for #{group.name} (from #{cart_item[:name]})"
+              }
+            end
+          end
+        end
+      end
+      
+      issues
     end
     
     def find_item
@@ -347,6 +523,78 @@ module Wholesale
         cart_url: "/wholesale/cart",
         checkout_url: "/wholesale/checkout"
       }
+    end
+    
+    # Validate inventory for adding items to cart
+    def validate_inventory_for_add(item, selected_options, quantity, cart)
+      # If item doesn't track inventory, allow unlimited
+      return nil unless item.track_inventory? || item.uses_option_level_inventory?
+      
+      if item.uses_option_level_inventory?
+        # Option-level inventory validation
+        validate_option_inventory_for_add(item, selected_options, quantity, cart)
+      else
+        # Item-level inventory validation
+        validate_item_inventory_for_add(item, quantity, cart)
+      end
+    end
+    
+    # Validate item-level inventory for adding to cart
+    def validate_item_inventory_for_add(item, quantity, cart)
+      # Calculate existing quantity of this item in cart (across all option combinations)
+      existing_cart_quantity = cart.select { |cart_item| cart_item[:item_id] == item.id }
+                                   .sum { |cart_item| cart_item[:quantity] }
+      
+      # Check total quantity (existing + new) against available inventory
+      total_quantity = existing_cart_quantity + quantity
+      unless item.can_purchase?(total_quantity)
+        available = item.available_quantity
+        if existing_cart_quantity > 0
+          return "Total quantity would exceed availability. You have #{existing_cart_quantity} in cart, trying to add #{quantity} more. Available: #{available}"
+        else
+          return "Insufficient stock. Available: #{available}"
+        end
+      end
+      
+      nil # No error
+    end
+    
+    # Validate option-level inventory for adding to cart
+    def validate_option_inventory_for_add(item, selected_options, quantity, cart)
+      tracking_group = item.option_inventory_tracking_group
+      return nil unless tracking_group
+      
+      # Get selected options for the tracking group
+      tracking_group_selections = selected_options[tracking_group.id.to_s]
+      return nil if tracking_group_selections.blank?
+      
+      # Check each selected option
+      Array(tracking_group_selections).each do |option_id|
+        option = tracking_group.options.active.find_by(id: option_id)
+        next unless option
+        
+        # Calculate existing quantity of this specific option in cart
+        existing_option_quantity = cart.select do |cart_item|
+          cart_item[:item_id] == item.id &&
+          cart_item[:selected_options] &&
+          cart_item[:selected_options][tracking_group.id.to_s] &&
+          Array(cart_item[:selected_options][tracking_group.id.to_s]).include?(option_id.to_i)
+        end.sum { |cart_item| cart_item[:quantity] }
+        
+        # Check total quantity for this option
+        total_option_quantity = existing_option_quantity + quantity
+        available = option.available_stock
+        
+        unless available >= total_option_quantity
+          if existing_option_quantity > 0
+            return "Total quantity would exceed availability for #{option.name}. You have #{existing_option_quantity} in cart, trying to add #{quantity} more. Available: #{available}"
+          else
+            return "Insufficient stock for #{option.name}. Available: #{available}"
+          end
+        end
+      end
+      
+      nil # No error
     end
   end
 end

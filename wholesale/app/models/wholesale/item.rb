@@ -12,6 +12,9 @@ module Wholesale
     has_many :option_groups, class_name: 'Wholesale::OptionGroup', foreign_key: 'wholesale_item_id', dependent: :destroy
     has_many :item_options, through: :option_groups, source: :options, class_name: 'Wholesale::Option'
     
+    # Inventory audit trail
+    has_many :item_stock_audits, class_name: 'Wholesale::ItemStockAudit', foreign_key: 'wholesale_item_id', dependent: :destroy
+    
     # Virtual attribute for custom variant SKUs
     attr_accessor :custom_variant_skus
     
@@ -30,7 +33,10 @@ module Wholesale
     
     # Callbacks
     before_save :set_last_restocked_at, if: -> { stock_quantity_changed? && stock_quantity_was.present? && stock_quantity > stock_quantity_was }
+    before_save :reset_inventory_fields_if_tracking_disabled
+    before_save :reset_damaged_quantity_if_tracking_enabled
     after_save :handle_variant_updates, if: -> { saved_change_to_options? || saved_change_to_sku? || saved_change_to_price_cents? }
+    after_save :update_stock_status_after_save, if: -> { saved_change_to_stock_quantity? || saved_change_to_damaged_quantity? }
     
     # Scopes
     scope :active, -> { where(active: true) }
@@ -82,10 +88,30 @@ module Wholesale
     
     def available_quantity
       return Float::INFINITY unless track_inventory?
-      [stock_quantity, 0].max
+      return nil unless stock_quantity.present?
+      
+      total = stock_quantity.to_i
+      damaged = damaged_quantity.to_i
+      available = total - damaged
+      
+      Rails.logger.info("WHOLESALE INVENTORY DEBUG: available_quantity for #{id} (#{name}) - Stock: #{total}, Damaged: #{damaged}, Available: #{available}")
+      
+      [available, 0].max
     end
     
-    def stock_status
+    def actual_low_stock_threshold
+      low_stock_threshold || 10  # Default to 10 if not set
+    end
+    
+    # Stock status enum (similar to regular MenuItem)
+    enum :stock_status, {
+      unlimited: 'unlimited',
+      in_stock: 'in_stock',
+      out_of_stock: 'out_of_stock',
+      low_stock: 'low_stock'
+    }, prefix: true
+    
+    def stock_status_display
       return 'unlimited' if unlimited_stock?
       return 'out_of_stock' if out_of_stock?
       return 'low_stock' if low_stock?
@@ -98,32 +124,154 @@ module Wholesale
       quantity <= available_quantity
     end
     
-    # Inventory management
-    def restock!(quantity, notes: nil)
+    # Mark a quantity as damaged without affecting stock quantity
+    def mark_as_damaged(quantity, reason, user = nil)
+      return false unless track_inventory?
+
+      transaction do
+        # Create audit record for damaged item
+        stock_audit = Wholesale::ItemStockAudit.create_damaged_record(self, quantity, reason, user)
+
+        # Update the damaged quantity
+        previous_damaged = self.damaged_quantity || 0
+        self.update!(damaged_quantity: previous_damaged + quantity.to_i)
+
+        # Re-evaluate stock status based on available quantity
+        update_stock_status!
+
+        true
+      end
+    rescue => e
+      Rails.logger.error("Failed to mark wholesale item as damaged: #{e.message}")
+      false
+    end
+
+    # Update stock quantity with audit trail
+    def update_stock_quantity(new_quantity, reason_type, reason_details = nil, user = nil, order = nil)
+      return false unless track_inventory?
+
+      transaction do
+        # Create audit record
+        stock_audit = Wholesale::ItemStockAudit.create_stock_record(self, new_quantity, reason_type, reason_details, user, order)
+
+        # Update the stock quantity
+        self.update!(stock_quantity: new_quantity)
+        self.update!(last_restocked_at: Time.current) if new_quantity > (stock_quantity_was || 0)
+
+        # Re-evaluate stock status based on available quantity
+        update_stock_status!
+
+        true
+      end
+    rescue => e
+      Rails.logger.error("Failed to update wholesale stock quantity: #{e.message}")
+      false
+    end
+
+    # Update stock status based on available quantity
+    def update_stock_status!
+      return unless track_inventory?
+
+      available = available_quantity
+      return unless available.is_a?(Numeric) # Skip if unlimited or nil
+
+      old_status = stock_status
+
+      new_status = if available <= 0
+                    :out_of_stock
+      elsif available <= actual_low_stock_threshold
+                    :low_stock
+      else
+                    :in_stock
+      end
+
+      # Only update if status has changed
+      if stock_status != new_status.to_s
+        update_column(:stock_status, new_status.to_s)
+        
+        Rails.logger.info("Wholesale item #{id} (#{name}) stock status changed from #{old_status} to #{new_status}")
+      end
+    end
+
+    # Convenience methods with audit trail
+    def restock!(quantity, notes: nil, user: nil)
       return false unless track_inventory?
       
-      self.stock_quantity = (stock_quantity || 0) + quantity
-      self.last_restocked_at = Time.current
-      self.admin_notes = [admin_notes, "Restocked +#{quantity} on #{Time.current.strftime('%m/%d/%Y')}#{notes ? ": #{notes}" : ''}"].compact.join("\n")
-      save!
+      new_quantity = (stock_quantity || 0) + quantity
+      update_stock_quantity(new_quantity, 'restock', notes, user)
     end
     
-    def reduce_stock!(quantity)
+    def reduce_stock!(quantity, reason: 'manual_adjustment', user: nil, order: nil)
       return true if unlimited_stock?
-      return false unless in_stock?(quantity)
       
-      self.stock_quantity -= quantity
-      save!
+      # Check availability with better error messaging
+      unless in_stock?(quantity)
+        available = available_quantity
+        if available <= 0
+          raise "#{name} is out of stock"
+        else
+          raise "Insufficient stock for #{name}. Only #{available} available (requested #{quantity})"
+        end
+      end
+      
+      new_quantity = (stock_quantity || 0) - quantity
+      success = update_stock_quantity(new_quantity, reason, "Reduced by #{quantity}", user, order)
+      
+      unless success
+        raise "Failed to reduce stock for #{name}"
+      end
+      
+      success
     end
     
-    def set_stock!(quantity, notes: nil)
+    def set_stock!(quantity, notes: nil, user: nil)
       return false unless track_inventory?
       
-      old_quantity = stock_quantity || 0
-      self.stock_quantity = quantity
-      self.last_restocked_at = Time.current if quantity > old_quantity
-      self.admin_notes = [admin_notes, "Stock set to #{quantity} on #{Time.current.strftime('%m/%d/%Y')}#{notes ? ": #{notes}" : ''}"].compact.join("\n")
-      save!
+      update_stock_quantity(quantity, 'manual_adjustment', notes, user)
+    end
+    
+    # Option-level inventory tracking methods (similar to regular MenuItem)
+    def has_option_inventory_tracking?
+      option_groups.any?(&:inventory_tracking_enabled?)
+    end
+
+    def option_inventory_tracking_group
+      option_groups.find(&:inventory_tracking_enabled?)
+    end
+
+    def uses_option_level_inventory?
+      # For mutual exclusivity: use option inventory when item tracking is OFF and option tracking is ON
+      !track_inventory? && has_option_inventory_tracking?
+    end
+
+    # Check if option inventory totals match item inventory
+    def option_inventory_matches_item_inventory?
+      return true unless uses_option_level_inventory?
+      
+      tracking_group = option_inventory_tracking_group
+      return true unless tracking_group
+      
+      tracking_group.total_option_stock == stock_quantity.to_i
+    end
+
+    # Get effective available quantity (considers both item and option inventory)
+    def effective_available_quantity
+      if uses_option_level_inventory?
+        tracking_group = option_inventory_tracking_group
+        tracking_group&.available_option_stock || 0
+      else
+        available_quantity
+      end
+    end
+
+    # Check if effectively out of stock (considers both item and option inventory)
+    def effectively_out_of_stock?
+      if uses_option_level_inventory?
+        tracking_group = option_inventory_tracking_group
+        tracking_group ? !tracking_group.has_option_stock? : true
+      else
+        track_inventory? && available_quantity <= 0
+      end
     end
     
     # Image helpers
@@ -337,12 +485,12 @@ module Wholesale
     
     private
     
-    def low_stock_threshold_requires_tracking
+        def low_stock_threshold_requires_tracking
       if low_stock_threshold.present? && !track_inventory?
         errors.add(:low_stock_threshold, 'can only be set when inventory tracking is enabled')
       end
     end
-    
+
     def stock_quantity_requires_tracking
       if stock_quantity.present? && !track_inventory?
         errors.add(:stock_quantity, 'can only be set when inventory tracking is enabled')
@@ -505,6 +653,56 @@ module Wholesale
       end
       
       parts.join('-')
+    end
+    
+    private
+    
+    # Reset inventory tracking fields when tracking is turned off
+    def reset_inventory_fields_if_tracking_disabled
+      if track_inventory_changed? && !track_inventory?
+        # Set inventory fields to NULL in the database
+        self.stock_quantity = nil
+        self.damaged_quantity = 0
+        self.low_stock_threshold = nil
+        self.stock_status = "unlimited"
+        
+        # Also reset ALL option quantities when item tracking is disabled
+        reset_all_option_quantities("Item inventory tracking disabled")
+        
+        Rails.logger.info("Wholesale item #{id} (#{name}) - Inventory tracking disabled: fields reset")
+      end
+    end
+
+    # Reset damaged quantity to 0 when tracking is enabled
+    def reset_damaged_quantity_if_tracking_enabled
+      if track_inventory_changed? && track_inventory?
+        self.damaged_quantity = 0
+        self.stock_status = "in_stock"
+        
+        Rails.logger.info("Wholesale item #{id} (#{name}) - Inventory tracking enabled: damaged_quantity reset to 0 for fresh start")
+        
+        # Also reset ALL option quantities when item tracking is enabled for fresh start
+        reset_all_option_quantities("Item inventory tracking enabled - fresh start")
+      end
+    end
+    
+    # Reset all option quantities (when item tracking changes)
+    def reset_all_option_quantities(reason)
+      option_groups.includes(:options).each do |group|
+        group.options.each do |option|
+          if option.stock_quantity.present? && option.stock_quantity > 0
+            option.update_columns(
+              stock_quantity: nil,
+              damaged_quantity: 0
+            )
+          end
+        end
+      end
+    end
+    
+    # Update stock status after save if quantities changed
+    def update_stock_status_after_save
+      update_stock_status! if track_inventory?
     end
   end
 end
