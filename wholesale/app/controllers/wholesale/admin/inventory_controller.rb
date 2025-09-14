@@ -7,6 +7,7 @@ module Wholesale
       before_action :set_restaurant_context
       before_action :set_item, only: [:show, :update_item_stock, :mark_damaged, :restock, :enable_tracking, :disable_tracking]
       before_action :set_option, only: [:update_option_stock, :mark_option_damaged, :restock_option]
+      before_action :set_variant, only: [:update_variant_stock, :mark_variant_damaged, :restock_variant, :toggle_variant_active]
       
       # GET /wholesale/admin/inventory
       # Overview of all inventory across fundraisers
@@ -211,14 +212,98 @@ module Wholesale
           .recent
           .limit(50)
         
+        variant_audits = Wholesale::VariantStockAudit.joins(wholesale_item_variant: { wholesale_item: :fundraiser })
+          .where(wholesale_fundraisers: { restaurant_id: current_restaurant.id })
+          .includes(:wholesale_item_variant, :user, :order)
+          .recent
+          .limit(50)
+        
         # Combine and sort by timestamp
-        all_audits = (item_audits.to_a + option_audits.to_a).sort_by(&:created_at).reverse
+        all_audits = (item_audits.to_a + option_audits.to_a + variant_audits.to_a).sort_by(&:created_at).reverse
         
         audit_data = all_audits.map do |audit|
           format_audit_record(audit)
         end
         
         render_success(audit_trail: audit_data)
+      end
+      
+      # NEW: Variant-level inventory management methods
+      
+      # POST /wholesale/admin/inventory/variants/:id/update_stock
+      # Update stock quantity for a specific variant
+      def update_variant_stock
+        new_quantity = params[:quantity].to_i
+        reason = params[:reason] || 'admin_adjustment'
+        notes = params[:notes] || "Stock updated by admin"
+        
+        if new_quantity < 0
+          return render_error("Stock quantity cannot be negative")
+        end
+        
+        if @variant.update_stock_quantity(new_quantity, reason, notes, current_user)
+          render_success(
+            variant: variant_inventory_summary(@variant),
+            message: "Stock updated successfully"
+          )
+        else
+          render_error("Failed to update stock")
+        end
+      end
+      
+      # POST /wholesale/admin/inventory/variants/:id/mark_damaged
+      # Mark quantity as damaged for a specific variant
+      def mark_variant_damaged
+        damaged_quantity = params[:quantity].to_i
+        reason = params[:reason] || 'damaged_goods'
+        notes = params[:notes] || "Marked as damaged by admin"
+        
+        if damaged_quantity <= 0
+          return render_error("Damaged quantity must be greater than 0")
+        end
+        
+        if @variant.mark_damaged!(damaged_quantity, reason, notes, current_user)
+          render_success(
+            variant: variant_inventory_summary(@variant),
+            message: "Damaged quantity updated successfully"
+          )
+        else
+          render_error("Failed to mark as damaged")
+        end
+      end
+      
+      # POST /wholesale/admin/inventory/variants/:id/restock
+      # Add stock to a specific variant
+      def restock_variant
+        restock_quantity = params[:quantity].to_i
+        reason = params[:reason] || 'restock'
+        notes = params[:notes] || "Restocked by admin"
+        
+        if restock_quantity <= 0
+          return render_error("Restock quantity must be greater than 0")
+        end
+        
+        if @variant.restock!(restock_quantity, reason: reason, notes: notes, user: current_user)
+          render_success(
+            variant: variant_inventory_summary(@variant),
+            message: "Variant restocked successfully"
+          )
+        else
+          render_error("Failed to restock")
+        end
+      end
+      
+      # POST /wholesale/admin/inventory/variants/:id/toggle_active
+      # Toggle active status for a specific variant
+      def toggle_variant_active
+        if @variant.toggle_active!(user: current_user)
+          render_success(
+            variant: variant_inventory_summary(@variant),
+            message: "Variant status updated successfully"
+          )
+        else
+          render_error("Failed to update status")
+        end
       end
       
       private
@@ -243,6 +328,14 @@ module Wholesale
           .find(params[:id])
       rescue ActiveRecord::RecordNotFound
         render_error('Option not found')
+      end
+      
+      def set_variant
+        @variant = Wholesale::ItemVariant.joins(wholesale_item: :fundraiser)
+          .where(wholesale_fundraisers: { restaurant_id: current_restaurant.id })
+          .find(params[:id])
+      rescue ActiveRecord::RecordNotFound
+        render_error('Variant not found')
       end
       
       def item_inventory_summary(item)
@@ -286,6 +379,29 @@ module Wholesale
             }
           end,
           needs_attention: tracking_group.out_of_stock_options.any? || tracking_group.low_stock_options.any?
+        }
+      end
+      
+      def variant_inventory_summary(variant)
+        {
+          id: variant.id,
+          variant_key: variant.variant_key,
+          variant_name: variant.variant_name,
+          item: {
+            id: variant.wholesale_item.id,
+            name: variant.wholesale_item.name,
+            fundraiser: variant.wholesale_item.fundraiser.name
+          },
+          stock_quantity: variant.stock_quantity,
+          damaged_quantity: variant.damaged_quantity,
+          available_stock: variant.available_stock,
+          low_stock_threshold: variant.low_stock_threshold,
+          active: variant.active?,
+          stock_status: variant.stock_status,
+          is_low_stock: variant.low_stock?,
+          is_out_of_stock: variant.out_of_stock?,
+          needs_attention: variant.low_stock? || variant.out_of_stock? || !variant.active?,
+          last_updated: variant.updated_at
         }
       end
       
@@ -360,8 +476,18 @@ module Wholesale
             .limit(20)
         end
         
-        # Combine and sort
-        all_audits = (item_audits.to_a + option_audits.to_a).sort_by(&:created_at).reverse
+        # Get recent audits for variants if using variant-level inventory
+        variant_audits = []
+        if item.track_variants?
+          variant_audits = Wholesale::VariantStockAudit.joins(:wholesale_item_variant)
+            .where(wholesale_item_variants: { wholesale_item_id: item.id })
+            .includes(:wholesale_item_variant, :user, :order)
+            .recent
+            .limit(20)
+        end
+        
+        # Combine and sort all audit types
+        all_audits = (item_audits.to_a + option_audits.to_a + variant_audits.to_a).sort_by(&:created_at).reverse
         
         all_audits.map { |audit| format_audit_record(audit) }
       end
@@ -415,6 +541,19 @@ module Wholesale
             item: {
               id: audit.wholesale_item.id,
               name: audit.wholesale_item.name
+            }
+          })
+        elsif audit.is_a?(Wholesale::VariantStockAudit)
+          base_data.merge({
+            type: 'variant',
+            variant: {
+              id: audit.wholesale_item_variant.id,
+              variant_key: audit.wholesale_item_variant.variant_key,
+              variant_name: audit.wholesale_item_variant.variant_name
+            },
+            item: {
+              id: audit.wholesale_item_variant.wholesale_item.id,
+              name: audit.wholesale_item_variant.wholesale_item.name
             }
           })
         else

@@ -7,6 +7,7 @@ module Wholesale
     has_many :item_images, class_name: 'Wholesale::ItemImage', dependent: :destroy
     has_many :order_items, class_name: 'Wholesale::OrderItem', dependent: :restrict_with_error
     has_many :variants, class_name: 'Wholesale::WholesaleItemVariant', foreign_key: 'wholesale_item_id', dependent: :destroy
+    has_many :item_variants, class_name: 'Wholesale::ItemVariant', foreign_key: 'wholesale_item_id', dependent: :destroy
     
     # Option Groups (new system)
     has_many :option_groups, class_name: 'Wholesale::OptionGroup', foreign_key: 'wholesale_item_id', dependent: :destroy
@@ -254,9 +255,12 @@ module Wholesale
       tracking_group.total_option_stock == stock_quantity.to_i
     end
 
-    # Get effective available quantity (considers both item and option inventory)
+    # Get effective available quantity (considers item, option, and variant inventory)
     def effective_available_quantity
-      if uses_option_level_inventory?
+      if track_variants?
+        # For variant tracking, return the sum of all active variant stock
+        item_variants.active.sum(&:available_stock)
+      elsif uses_option_level_inventory?
         tracking_group = option_inventory_tracking_group
         tracking_group&.available_option_stock || 0
       else
@@ -703,6 +707,153 @@ module Wholesale
     # Update stock status after save if quantities changed
     def update_stock_status_after_save
       update_stock_status! if track_inventory?
+    end
+    
+    # ========================================
+    # VARIANT TRACKING METHODS
+    # ========================================
+    
+    public
+    
+    # Check if this item uses variant-level inventory tracking
+    def track_variants?
+      track_variants == true
+    end
+    
+    # Generate a variant key from selected options
+    # Format: "groupId:optionId,groupId:optionId" (sorted by group ID)
+    def generate_variant_key(selected_options)
+      return nil if selected_options.blank?
+      
+      # Convert to consistent format and sort by group ID
+      key_parts = selected_options.map do |group_id, option_ids|
+        group_id = group_id.to_s
+        option_ids = Array(option_ids).map(&:to_s).sort
+        option_ids.map { |option_id| "#{group_id}:#{option_id}" }
+      end.flatten.sort
+      
+      key_parts.join(',')
+    end
+    
+    # Generate human-readable variant name from selected options
+    def generate_variant_name(selected_options)
+      return nil if selected_options.blank?
+      
+      option_names = []
+      selected_options.each do |group_id, option_ids|
+        group = option_groups.find { |g| g.id.to_s == group_id.to_s }
+        next unless group
+        
+        Array(option_ids).each do |option_id|
+          option = group.options.find { |o| o.id.to_s == option_id.to_s }
+          option_names << option.name if option
+        end
+      end
+      
+      option_names.join(', ')
+    end
+    
+    # Find variant by selected options
+    def find_variant_by_options(selected_options)
+      return nil unless track_variants?
+      variant_key = generate_variant_key(selected_options)
+      return nil if variant_key.blank?
+      
+      item_variants.find_by(variant_key: variant_key)
+    end
+    
+    # Get available stock for a specific variant
+    def get_variant_stock(selected_options)
+      return nil unless track_variants?
+      variant = find_variant_by_options(selected_options)
+      variant&.available_stock || 0
+    end
+    
+    # Check if a variant is in stock
+    def variant_in_stock?(selected_options, quantity = 1)
+      return true unless track_variants?
+      variant = find_variant_by_options(selected_options)
+      return false unless variant
+      variant.in_stock?(quantity)
+    end
+    
+    # Get all possible variant combinations for this item
+    def generate_all_variant_combinations
+      return [] unless has_options?
+      
+      # Get all option groups with their options
+      groups_with_options = option_groups.includes(:options).map do |group|
+        {
+          group_id: group.id,
+          group_name: group.name,
+          options: group.options.active.map { |opt| { id: opt.id, name: opt.name } }
+        }
+      end
+      
+      # Generate all combinations
+      combinations = []
+      generate_combinations_recursive(groups_with_options, {}, combinations)
+      combinations
+    end
+    
+    public
+    
+    # Create variants for all possible combinations
+    def create_all_variants!(default_stock = 0)
+      return false unless track_variants?
+      
+      combinations = generate_all_variant_combinations
+      created_variants = []
+      
+      transaction do
+        combinations.each do |combination|
+          variant_key = generate_variant_key(combination[:selected_options])
+          variant_name = generate_variant_name(combination[:selected_options])
+          
+          variant = item_variants.find_or_initialize_by(variant_key: variant_key)
+          variant.assign_attributes(
+            variant_name: variant_name,
+            stock_quantity: variant.persisted? ? variant.stock_quantity : default_stock,
+            active: true
+          )
+          
+          if variant.save
+            created_variants << variant
+          else
+            Rails.logger.error("Failed to create variant: #{variant.errors.full_messages}")
+          end
+        end
+      end
+      
+      created_variants
+    end
+    
+    private
+    
+    # Recursive helper for generating variant combinations
+    def generate_combinations_recursive(groups_with_options, current_selection, combinations, group_index = 0)
+      if group_index >= groups_with_options.length
+        # We've made selections for all groups, add this combination
+        combinations << {
+          selected_options: current_selection.dup,
+          display_name: generate_variant_name(current_selection)
+        }
+        return
+      end
+      
+      current_group = groups_with_options[group_index]
+      
+      # For each option in the current group
+      current_group[:options].each do |option|
+        # Add this option to the current selection
+        current_selection[current_group[:group_id]] = [option[:id]]
+        
+        # Recurse to the next group
+        generate_combinations_recursive(groups_with_options, current_selection, combinations, group_index + 1)
+      end
+      
+      # Clean up the current selection for this group
+      current_selection.delete(current_group[:group_id])
     end
   end
 end

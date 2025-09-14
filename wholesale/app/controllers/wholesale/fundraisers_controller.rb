@@ -64,6 +64,8 @@ module Wholesale
         # Availability
         active: item.active?,
         track_inventory: item.track_inventory?,
+        track_variants: item.track_variants?,
+        uses_option_level_inventory: item.uses_option_level_inventory?,
         in_stock: item.in_stock?,
         stock_status: item.stock_status,
         available_quantity: item.track_inventory? ? item.available_quantity : nil,
@@ -92,17 +94,38 @@ module Wholesale
             max_select: group.max_select,
             required: group.required,
             position: group.position,
+            enable_inventory_tracking: group.enable_inventory_tracking,
             options: group.options.order(:position).map do |option|
               {
                 id: option.id,
                 name: option.name,
                 additional_price: option.additional_price.to_f,
                 available: option.available,
-                position: option.position
+                position: option.position,
+                stock_quantity: option.stock_quantity,
+                damaged_quantity: option.damaged_quantity,
+                low_stock_threshold: option.low_stock_threshold
               }
             end
           }
         end,
+        
+        # Item Variants (for variant-level inventory tracking)
+        item_variants: item.track_variants? ? item.item_variants.map do |variant|
+          {
+            id: variant.id,
+            variant_key: variant.variant_key,
+            variant_name: variant.variant_name,
+            stock_quantity: variant.stock_quantity,
+            damaged_quantity: variant.damaged_quantity,
+            low_stock_threshold: variant.low_stock_threshold,
+            active: variant.active,
+            available_stock: variant.available_stock,
+            in_stock: variant.in_stock?,
+            out_of_stock: variant.out_of_stock?,
+            low_stock: variant.low_stock?
+          }
+        end : [],
         
         created_at: item.created_at,
         updated_at: item.updated_at

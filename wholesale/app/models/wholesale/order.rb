@@ -215,29 +215,24 @@ module Wholesale
       return false unless can_be_refunded?
       
       transaction do
-        # Restore inventory and reverse variant sales tracking
+        # Restore inventory and reverse sales tracking (enhanced for variant tracking)
         order_items.includes(:item).each do |order_item|
           item = order_item.item
           
-          # Handle inventory restoration
-          if item.track_inventory?
-            # Check if this is a variant-specific order
-            if item.has_variants? && order_item.selected_options.present?
-              variant = item.find_variant_by_options(order_item.selected_options)
-              if variant
-                variant.add_stock!(order_item.quantity)
-              else
-                # Fallback to item-level stock if variant not found
-                item.increment!(:stock_quantity, order_item.quantity)
-              end
-            else
-              # Traditional item-level inventory
-              item.increment!(:stock_quantity, order_item.quantity)
-            end
+          # Handle inventory restoration based on tracking type (priority order: variant > option > item)
+          if item.track_variants?
+            # NEW: Variant-level inventory restoration (highest priority)
+            restore_variant_inventory!(order_item)
+          elsif item.uses_option_level_inventory?
+            # Option-level inventory restoration
+            restore_option_inventory!(order_item)
+          elsif item.track_inventory?
+            # Traditional item-level inventory
+            item.increment!(:stock_quantity, order_item.quantity)
           end
           
-          # Reverse variant sales tracking (regardless of inventory tracking)
-          if item.has_variants? && order_item.selected_options.present?
+          # Reverse sales tracking (legacy variant system - will be replaced by audit system)
+          if item.has_variants? && order_item.selected_options.present? && !item.track_variants?
             variant = item.find_variant_by_options(order_item.selected_options)
             if variant
               revenue = order_item.quantity * order_item.price_cents / 100.0
@@ -252,14 +247,17 @@ module Wholesale
       end
     end
     
-    # Reduce inventory and track sales when order is placed
+    # Reduce inventory and track sales when order is placed (enhanced for variant tracking)
     def reduce_inventory!
       order_items.includes(:item).each do |order_item|
         item = order_item.item
         
-        # Handle inventory reduction based on tracking type
-        if item.uses_option_level_inventory?
-          # NEW: Option-level inventory tracking
+        # Handle inventory reduction based on tracking type (priority order: variant > option > item)
+        if item.track_variants?
+          # NEW: Variant-level inventory tracking (highest priority)
+          reduce_variant_inventory!(order_item)
+        elsif item.uses_option_level_inventory?
+          # Option-level inventory tracking
           reduce_option_inventory!(order_item)
         elsif item.track_inventory?
           # Item-level inventory tracking
@@ -269,7 +267,14 @@ module Wholesale
         # Track sales
         revenue = order_item.quantity * order_item.price_cents / 100.0
         
-        if order_item.uses_option_groups?
+        if item.track_variants? && order_item.selected_options.present?
+          # Track variant sales (new system)
+          variant = item.find_variant_by_options(order_item.selected_options)
+          if variant
+            # Note: Sales tracking for variants will be handled by audit system
+            Rails.logger.info("Order #{order_number}: Sold #{order_item.quantity} units of variant #{variant.variant_name}")
+          end
+        elsif order_item.uses_option_groups?
           # Track option group sales
           item.track_option_sales!(order_item.selected_options, order_item.quantity, revenue)
         elsif item.has_variants? && order_item.selected_options.present?
@@ -342,9 +347,14 @@ module Wholesale
         # Allow paid orders to transition like pending orders for backward compatibility
         [STATUS_FULFILLED, STATUS_COMPLETED, STATUS_CANCELLED].include?(new_status)
       when STATUS_FULFILLED
-        [STATUS_COMPLETED, STATUS_CANCELLED].include?(new_status)
-      when STATUS_COMPLETED, STATUS_CANCELLED
-        false # Final states
+        # Allow corrections from fulfilled status (for admin error corrections)
+        [STATUS_PENDING, STATUS_PAID, STATUS_COMPLETED, STATUS_CANCELLED].include?(new_status)
+      when STATUS_COMPLETED
+        # Allow corrections from completed status (for admin error corrections)
+        [STATUS_PENDING, STATUS_PAID, STATUS_FULFILLED, STATUS_CANCELLED].include?(new_status)
+      when STATUS_CANCELLED
+        # Allow corrections from cancelled status (for admin error corrections)  
+        [STATUS_PENDING, STATUS_PAID, STATUS_FULFILLED, STATUS_COMPLETED].include?(new_status)
       else
         false
       end
@@ -467,14 +477,66 @@ module Wholesale
       end
     end
     
-    # NEW: Restore inventory when order is cancelled
+    # NEW: Reduce variant-level inventory for order items
+    def reduce_variant_inventory!(order_item)
+      item = order_item.item
+      
+      # Get selected options for this order item
+      selected_options = order_item.selected_options || {}
+      
+      if selected_options.blank?
+        raise "No options selected for variant-tracked item #{item.name}"
+      end
+      
+      # Find the specific variant
+      variant = item.find_variant_by_options(selected_options)
+      unless variant
+        variant_name = item.generate_variant_name(selected_options)
+        raise "#{variant_name || 'This combination'} is not available for #{item.name}"
+      end
+      
+      # Check if variant is still active
+      unless variant.active?
+        raise "#{variant.variant_name} is no longer available"
+      end
+      
+      # Use database locking to prevent race conditions
+      variant.with_lock do
+        # Double-check availability after acquiring lock
+        available_stock = variant.available_stock
+        
+        if available_stock < order_item.quantity
+          raise "Insufficient stock for #{variant.variant_name}. Available: #{available_stock}, Requested: #{order_item.quantity}"
+        end
+        
+        # Capture the old quantity before updating
+        old_quantity = variant.stock_quantity
+        
+        # Reduce the stock quantity
+        new_stock_quantity = variant.stock_quantity - order_item.quantity
+        variant.update!(stock_quantity: new_stock_quantity)
+        
+        Rails.logger.info("Order #{order_number}: Reduced #{order_item.quantity} units from variant #{variant.variant_name} (#{variant.available_stock} remaining)")
+        
+        # Create audit trail entry with correct previous quantity
+        Wholesale::VariantStockAudit.create_stock_record(
+          variant, new_stock_quantity, 'order_placed', 
+          "Order placed: #{order_number}", nil, self, old_quantity
+        )
+      end
+    end
+    
+    # NEW: Restore inventory when order is cancelled (enhanced for variant tracking)
     def restore_inventory!
       order_items.includes(:item).each do |order_item|
         item = order_item.item
         
-        # Handle inventory restoration based on tracking type
-        if item.uses_option_level_inventory?
-          # NEW: Option-level inventory restoration
+        # Handle inventory restoration based on tracking type (priority order: variant > option > item)
+        if item.track_variants?
+          # NEW: Variant-level inventory restoration (highest priority)
+          restore_variant_inventory!(order_item)
+        elsif item.uses_option_level_inventory?
+          # Option-level inventory restoration
           restore_option_inventory!(order_item)
         elsif item.track_inventory?
           # Item-level inventory restoration
@@ -507,6 +569,38 @@ module Wholesale
         option.update_stock_quantity(new_quantity, 'order_cancelled', "Order #{order_number} cancelled", nil, self)
         
         Rails.logger.info("Restored #{order_item.quantity} units to option #{option.name} (#{option.available_stock} now available)")
+      end
+    end
+    
+    # NEW: Restore variant-level inventory for cancelled order items
+    def restore_variant_inventory!(order_item)
+      item = order_item.item
+      
+      # Get selected options for this order item
+      selected_options = order_item.selected_options || {}
+      
+      return if selected_options.blank?
+      
+      # Find the specific variant
+      variant = item.find_variant_by_options(selected_options)
+      return unless variant
+      
+      # Use database locking to prevent race conditions
+      variant.with_lock do
+        # Capture the old quantity before updating
+        old_quantity = variant.stock_quantity
+        
+        # Restore the stock quantity
+        new_stock_quantity = variant.stock_quantity + order_item.quantity
+        variant.update!(stock_quantity: new_stock_quantity)
+        
+        Rails.logger.info("Order #{order_number}: Restored #{order_item.quantity} units to variant #{variant.variant_name} (#{variant.available_stock} now available)")
+        
+        # Create audit trail entry with correct previous quantity
+        Wholesale::VariantStockAudit.create_stock_record(
+          variant, new_stock_quantity, 'order_cancelled', 
+          "Order cancelled: #{order_number}", nil, self, old_quantity
+        )
       end
     end
     

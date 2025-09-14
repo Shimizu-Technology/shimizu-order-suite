@@ -123,12 +123,11 @@ module Wholesale
         # Availability
         active: item.active?,
         track_inventory: item.track_inventory?,
+        track_variants: item.track_variants?,
+        uses_option_level_inventory: item.uses_option_level_inventory?,
         in_stock: item.in_stock?,
         stock_status: item.stock_status,
         available_quantity: item.track_inventory? ? item.available_quantity : nil,
-        
-        # Option-level inventory fields
-        uses_option_level_inventory: item.uses_option_level_inventory?,
         effective_available_quantity: item.effective_available_quantity,
         
         # Primary image only for summary
@@ -161,6 +160,23 @@ module Wholesale
             end
           }
         end,
+        
+        # Item Variants (for variant-level inventory tracking)
+        item_variants: item.track_variants? ? item.item_variants.map do |variant|
+          {
+            id: variant.id,
+            variant_key: variant.variant_key,
+            variant_name: variant.variant_name,
+            stock_quantity: variant.stock_quantity,
+            damaged_quantity: variant.damaged_quantity,
+            low_stock_threshold: variant.low_stock_threshold,
+            active: variant.active,
+            available_stock: variant.available_stock,
+            in_stock: variant.in_stock?,
+            out_of_stock: variant.out_of_stock?,
+            low_stock: variant.low_stock?
+          }
+        end : [],
         
         created_at: item.created_at,
         updated_at: item.updated_at

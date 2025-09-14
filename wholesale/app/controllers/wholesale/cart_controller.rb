@@ -27,6 +27,9 @@ module Wholesale
         return render_error("Quantity must be greater than 0")
       end
       
+      # Get selected options for variants
+      selected_options = params[:selected_options] || {}
+      
       # Validate inventory based on tracking type
       inventory_error = validate_inventory_for_add(@item, selected_options, quantity, @cart)
       if inventory_error
@@ -41,9 +44,6 @@ module Wholesale
           status: :conflict
         )
       end
-      
-      # Get selected options for variants
-      selected_options = params[:selected_options] || {}
       
       # Check if item with same options already exists in cart  
       existing_item = @cart.find { |cart_item| 
@@ -265,11 +265,16 @@ module Wholesale
       @cart = get_cart
     end
     
-    # Validate inventory for a specific cart item
+    # Validate inventory for a specific cart item (enhanced for variant tracking)
     def validate_cart_item_inventory(item, cart_item)
       issues = []
       quantity = cart_item[:quantity]
       selected_options = cart_item[:selected_options] || {}
+      
+      # Check variant-level inventory first (highest priority)
+      if item.track_variants?
+        return validate_cart_item_variant_inventory(item, cart_item)
+      end
       
       # Check item-level inventory if enabled
       if item.track_inventory? && !item.uses_option_level_inventory?
@@ -525,9 +530,14 @@ module Wholesale
       }
     end
     
-    # Validate inventory for adding items to cart
+    # Validate inventory for adding items to cart (enhanced for variant tracking)
     def validate_inventory_for_add(item, selected_options, quantity, cart)
-      # If item doesn't track inventory, allow unlimited
+      # Check variant tracking first (highest priority)
+      if item.track_variants?
+        return validate_variant_inventory_for_add(item, selected_options, quantity, cart)
+      end
+      
+      # Fall back to existing validation methods
       return nil unless item.track_inventory? || item.uses_option_level_inventory?
       
       if item.uses_option_level_inventory?
@@ -595,6 +605,167 @@ module Wholesale
       end
       
       nil # No error
+    end
+    
+    # Validate variant-level inventory for adding to cart
+    def validate_variant_inventory_for_add(item, selected_options, quantity, cart)
+      return "No options selected for variant-tracked item" if selected_options.blank?
+      
+      # Generate variant key from selected options
+      variant_key = item.generate_variant_key(selected_options)
+      return "Invalid option combination" if variant_key.blank?
+      
+      # Find the specific variant
+      variant = item.find_variant_by_options(selected_options)
+      unless variant
+        variant_name = item.generate_variant_name(selected_options)
+        return "#{variant_name || 'This combination'} is not available for #{item.name}"
+      end
+      
+      # Check if variant is active
+      unless variant.active?
+        return "#{variant.variant_name} is no longer available"
+      end
+      
+      # Calculate existing quantity of this specific variant in cart
+      existing_variant_quantity = cart.select do |cart_item|
+        cart_item[:item_id] == item.id &&
+        cart_item[:selected_options] &&
+        item.generate_variant_key(cart_item[:selected_options]) == variant_key
+      end.sum { |cart_item| cart_item[:quantity] }
+      
+      # Check total quantity for this variant
+      total_variant_quantity = existing_variant_quantity + quantity
+      available = variant.available_stock
+      
+      unless available >= total_variant_quantity
+        if existing_variant_quantity > 0
+          return "Total quantity would exceed availability for #{variant.variant_name}. You have #{existing_variant_quantity} in cart, trying to add #{quantity} more. Available: #{available}"
+        else
+          if available == 0
+            return "#{variant.variant_name} is out of stock"
+          else
+            return "#{variant.variant_name} has only #{available} available (you're trying to add #{quantity})"
+          end
+        end
+      end
+      
+      nil # No error
+    end
+    
+    # Validate variant-level inventory for a specific cart item
+    def validate_cart_item_variant_inventory(item, cart_item)
+      issues = []
+      quantity = cart_item[:quantity]
+      selected_options = cart_item[:selected_options] || {}
+      
+      # Parse selected options - they could be stored as JSON string or hash
+      parsed_options = case selected_options
+      when String
+        begin
+          JSON.parse(selected_options)
+        rescue JSON::ParserError
+          {}
+        end
+      when ActionController::Parameters
+        selected_options.to_unsafe_h
+      when Hash
+        selected_options
+      else
+        {}
+      end
+      
+      if parsed_options.blank?
+        issues << {
+          type: 'variant_no_options',
+          item_id: item.id,
+          item_name: cart_item[:name],
+          requested: quantity,
+          available: 0,
+          message: "No options selected for variant-tracked item #{cart_item[:name]}"
+        }
+        return issues
+      end
+      
+      # Generate variant key from selected options
+      variant_key = item.generate_variant_key(parsed_options)
+      if variant_key.blank?
+        issues << {
+          type: 'variant_invalid_options',
+          item_id: item.id,
+          item_name: cart_item[:name],
+          requested: quantity,
+          available: 0,
+          message: "Invalid option combination for #{cart_item[:name]}"
+        }
+        return issues
+      end
+      
+      # Find the specific variant
+      variant = item.find_variant_by_options(parsed_options)
+      unless variant
+        variant_name = item.generate_variant_name(parsed_options)
+        issues << {
+          type: 'variant_not_found',
+          item_id: item.id,
+          item_name: cart_item[:name],
+          variant_key: variant_key,
+          variant_name: variant_name,
+          requested: quantity,
+          available: 0,
+          message: "#{variant_name || 'This combination'} is not available for #{cart_item[:name]}"
+        }
+        return issues
+      end
+      
+      # Check if variant is active
+      unless variant.active?
+        issues << {
+          type: 'variant_inactive',
+          item_id: item.id,
+          item_name: cart_item[:name],
+          variant_id: variant.id,
+          variant_key: variant.variant_key,
+          variant_name: variant.variant_name,
+          requested: quantity,
+          available: 0,
+          message: "#{variant.variant_name} is no longer available"
+        }
+        return issues
+      end
+      
+      # Check variant stock availability
+      available = variant.available_stock
+      
+      if available < quantity
+        if available == 0
+          issues << {
+            type: 'variant_out_of_stock',
+            item_id: item.id,
+            item_name: cart_item[:name],
+            variant_id: variant.id,
+            variant_key: variant.variant_key,
+            variant_name: variant.variant_name,
+            requested: quantity,
+            available: available,
+            message: "#{variant.variant_name} is out of stock"
+          }
+        else
+          issues << {
+            type: 'variant_insufficient_stock',
+            item_id: item.id,
+            item_name: cart_item[:name],
+            variant_id: variant.id,
+            variant_key: variant.variant_key,
+            variant_name: variant.variant_name,
+            requested: quantity,
+            available: available,
+            message: "#{variant.variant_name} only has #{available} available (you have #{quantity} in cart)"
+          }
+        end
+      end
+      
+      issues
     end
   end
 end

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_08_28_033318) do
+ActiveRecord::Schema[7.2].define(version: 2025_09_12_004646) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -829,7 +829,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_28_033318) do
 
   create_table "wholesale_item_variants", force: :cascade do |t|
     t.bigint "wholesale_item_id", null: false
-    t.string "sku", null: false
+    t.string "sku"
     t.string "size"
     t.string "color"
     t.decimal "price_adjustment", precision: 8, scale: 2, default: "0.0"
@@ -840,8 +840,13 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_28_033318) do
     t.boolean "active", default: true, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["sku"], name: "index_wholesale_item_variants_on_sku", unique: true
-    t.index ["wholesale_item_id", "size", "color"], name: "index_wholesale_variants_on_item_size_color", unique: true
+    t.string "variant_key"
+    t.string "variant_name"
+    t.integer "damaged_quantity", default: 0, null: false
+    t.index ["stock_quantity", "damaged_quantity"], name: "idx_on_stock_quantity_damaged_quantity_85513e2829"
+    t.index ["stock_quantity"], name: "index_wholesale_item_variants_on_stock_quantity"
+    t.index ["variant_key"], name: "index_wholesale_item_variants_on_variant_key"
+    t.index ["wholesale_item_id", "variant_key"], name: "index_wholesale_variants_on_item_and_key", unique: true
     t.index ["wholesale_item_id"], name: "index_wholesale_item_variants_on_wholesale_item_id"
   end
 
@@ -865,12 +870,14 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_28_033318) do
     t.boolean "allow_sale_with_no_stock", default: false, null: false
     t.integer "damaged_quantity", default: 0, null: false
     t.string "stock_status", default: "unlimited", null: false
+    t.boolean "track_variants", default: false, null: false
     t.index ["fundraiser_id", "active"], name: "index_wholesale_items_on_fundraiser_id_and_active"
     t.index ["fundraiser_id", "sort_order"], name: "index_wholesale_items_on_fundraiser_id_and_sort_order"
     t.index ["fundraiser_id"], name: "index_wholesale_items_on_fundraiser_id"
     t.index ["stock_status"], name: "index_wholesale_items_on_stock_status"
     t.index ["track_inventory", "stock_quantity"], name: "index_wholesale_items_on_track_inventory_and_stock_quantity"
     t.index ["track_inventory", "stock_status"], name: "index_wholesale_items_on_track_inventory_and_stock_status"
+    t.index ["track_variants"], name: "index_wholesale_items_on_track_variants"
   end
 
   create_table "wholesale_option_group_presets", force: :cascade do |t|
@@ -1035,6 +1042,28 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_28_033318) do
     t.index ["fundraiser_id"], name: "index_wholesale_participants_on_fundraiser_id"
   end
 
+  create_table "wholesale_variant_stock_audits", force: :cascade do |t|
+    t.bigint "wholesale_item_variant_id", null: false
+    t.string "audit_type", null: false
+    t.integer "quantity_change", default: 0, null: false
+    t.integer "previous_quantity", default: 0, null: false
+    t.integer "new_quantity", default: 0, null: false
+    t.text "reason"
+    t.bigint "user_id"
+    t.bigint "order_id"
+    t.json "metadata", default: {}
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["audit_type"], name: "index_wholesale_variant_stock_audits_on_audit_type"
+    t.index ["created_at"], name: "index_wholesale_variant_stock_audits_on_created_at"
+    t.index ["order_id", "created_at"], name: "index_variant_audits_on_order_and_created_at"
+    t.index ["order_id"], name: "index_wholesale_variant_stock_audits_on_order_id"
+    t.index ["user_id", "created_at"], name: "index_variant_audits_on_user_and_created_at"
+    t.index ["user_id"], name: "index_wholesale_variant_stock_audits_on_user_id"
+    t.index ["wholesale_item_variant_id", "created_at"], name: "index_variant_audits_on_variant_and_created_at"
+    t.index ["wholesale_item_variant_id"], name: "idx_on_wholesale_item_variant_id_898fdc04fe"
+  end
+
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
   add_foreign_key "audit_logs", "restaurants", on_delete: :cascade
@@ -1131,4 +1160,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_08_28_033318) do
   add_foreign_key "wholesale_orders", "wholesale_fundraisers", column: "fundraiser_id"
   add_foreign_key "wholesale_orders", "wholesale_participants", column: "participant_id"
   add_foreign_key "wholesale_participants", "wholesale_fundraisers", column: "fundraiser_id"
+  add_foreign_key "wholesale_variant_stock_audits", "users"
+  add_foreign_key "wholesale_variant_stock_audits", "wholesale_item_variants"
+  add_foreign_key "wholesale_variant_stock_audits", "wholesale_orders", column: "order_id"
 end

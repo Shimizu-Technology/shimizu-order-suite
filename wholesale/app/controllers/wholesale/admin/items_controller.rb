@@ -4,8 +4,8 @@ module Wholesale
   module Admin
     class ItemsController < Wholesale::ApplicationController
       before_action :require_admin!
-      before_action :set_fundraiser, only: [:index, :show, :create, :update, :destroy, :toggle_active, :bulk_update], if: :nested_route?
-      before_action :set_item, only: [:show, :update, :destroy, :toggle_active, :set_primary_image]
+      before_action :set_fundraiser, only: [:index, :show, :create, :update, :destroy, :toggle_active, :bulk_update, :generate_variants], if: :nested_route?
+      before_action :set_item, only: [:show, :update, :destroy, :toggle_active, :set_primary_image, :generate_variants]
       before_action :set_restaurant_context
       
       # GET /wholesale/admin/items
@@ -55,7 +55,8 @@ module Wholesale
         end
         
         # Ensure fundraiser_id is set correctly for nested routes
-        create_params = item_params.except(:images)
+        # Exclude variants and images from initial item creation
+        create_params = item_params.except(:images, :variants)
         create_params[:fundraiser_id] = fundraiser.id
         
         item = Wholesale::Item.new(create_params)
@@ -66,6 +67,9 @@ module Wholesale
           
           # Process image uploads if present
           process_image_uploads(item, item_params[:images]) if item_params[:images].present?
+          
+          # Skip variant creation during item creation - variants should be created after option groups are set up
+          # Use the generate_variants endpoint after creating option groups and options
           
           # Create audit trail for initial inventory setup
           create_initial_inventory_audit(item, create_params)
@@ -80,8 +84,8 @@ module Wholesale
       
       # PATCH/PUT /wholesale/admin/items/:id
       def update
-        # Separate image operations from item updates
-        update_params = item_params.except(:images, :delete_image_ids)
+        # Separate image operations and variants from item updates
+        update_params = item_params.except(:images, :delete_image_ids, :variants)
         
         # Track changes for audit trail
         old_track_inventory = @item.track_inventory
@@ -90,6 +94,9 @@ module Wholesale
         if @item.update(update_params)
           # Process legacy variant options and convert to option groups
           process_legacy_options(@item, update_params[:options]) if update_params[:options].present?
+          
+          # Process variant updates if present
+          process_variant_updates(@item, item_params[:variants]) if item_params[:variants].present?
           
           # Process image deletions if present
           process_image_deletions(@item, item_params[:delete_image_ids]) if item_params[:delete_image_ids].present?
@@ -114,6 +121,36 @@ module Wholesale
           render_success(message: 'Item deleted successfully!')
         else
           render_error('Failed to delete item', errors: @item.errors.full_messages)
+        end
+      end
+      
+      # POST /wholesale/admin/items/:id/generate_variants
+      def generate_variants
+        unless @item.track_variants?
+          render_error('Item does not have variant tracking enabled')
+          return
+        end
+        
+        unless @item.option_groups.any?
+          render_error('Item must have option groups before generating variants')
+          return
+        end
+        
+        begin
+          # Generate all possible variant combinations
+          created_variants = @item.create_all_variants!(0) # Start with 0 stock
+          
+          if created_variants.any?
+            render_success(
+              message: "Generated #{created_variants.length} variants successfully!",
+              variants: created_variants.map { |v| variant_json(v) }
+            )
+          else
+            render_error('No variants were created. Check that option groups have available options.')
+          end
+        rescue => e
+          Rails.logger.error "Error generating variants for item #{@item.id}: #{e.message}"
+          render_error('Failed to generate variants', errors: [e.message])
         end
       end
       
@@ -182,10 +219,11 @@ module Wholesale
       def item_params
         permitted_params = params.require(:item).permit(
           :fundraiser_id, :name, :description, :price, :price_cents, :sku, :image_url,
-          :stock_quantity, :low_stock_threshold, :track_inventory, :allow_sale_with_no_stock, :active,
+          :stock_quantity, :low_stock_threshold, :track_inventory, :track_variants, :allow_sale_with_no_stock, :active,
           :position, :sort_order, :options, :custom_variant_skus,
           images: [],
-          delete_image_ids: []
+          delete_image_ids: [],
+          variants: [:id, :variant_key, :variant_name, :stock_quantity, :damaged_quantity, :low_stock_threshold, :active]
         )
         
         # Convert price to price_cents if price is provided instead of price_cents
@@ -203,7 +241,7 @@ module Wholesale
         end
         
         # Boolean conversions  
-        [:track_inventory, :allow_sale_with_no_stock, :active].each do |field|
+        [:track_inventory, :track_variants, :allow_sale_with_no_stock, :active].each do |field|
           if permitted_params[field].present?
             permitted_params[field] = permitted_params[field].to_s.downcase.in?(['true', '1', 'yes', 'on'])
           end
@@ -366,6 +404,169 @@ module Wholesale
         end
       end
 
+      def process_variant_updates(item, variants_data)
+        return unless variants_data.is_a?(Array) && item.track_variants?
+        
+        Rails.logger.info "Processing variant updates for item #{item.id}: #{variants_data.length} variants"
+        
+        # If no variants exist yet, generate them first
+        if item.item_variants.count == 0 && item.option_groups.any?
+          Rails.logger.info "No variants exist for item #{item.id}, generating variants first..."
+          item.create_all_variants!(0) # Create with 0 stock initially
+        end
+        
+        variants_data.each do |variant_params|
+          begin
+            # Find existing variant by ID or by variant_name
+            variant = if variant_params[:id].present?
+              item.item_variants.find_by(id: variant_params[:id])
+            else
+              # Find by variant_name if no ID (for newly generated variants)
+              item.item_variants.find_by(variant_name: variant_params[:variant_name])
+            end
+            
+            next unless variant
+            
+            # Update variant with audit trail
+            update_attrs = {
+              stock_quantity: variant_params[:stock_quantity]&.to_i,
+              damaged_quantity: variant_params[:damaged_quantity]&.to_i,
+              low_stock_threshold: variant_params[:low_stock_threshold]&.to_i,
+              active: variant_params[:active].to_s.downcase.in?(['true', '1', 'yes', 'on'])
+            }.compact
+            
+            # Use the audit-enabled update method if stock quantity changed
+            if update_attrs[:stock_quantity] && update_attrs[:stock_quantity] != variant.stock_quantity
+              old_quantity = variant.stock_quantity || 0
+              new_quantity = update_attrs[:stock_quantity]
+              reason_details = "Stock updated via item edit: #{old_quantity} → #{new_quantity}"
+              
+              variant.update_stock_quantity(
+                new_quantity,                   # new_quantity (positional)
+                'manual_adjustment',           # reason (positional)
+                reason_details,                # reason_details (optional)
+                current_user                   # user (optional)
+              )
+              update_attrs.delete(:stock_quantity) # Remove since it was handled above
+            end
+            
+            # Update other attributes normally
+            variant.update!(update_attrs) if update_attrs.any?
+            
+            Rails.logger.info "Updated variant #{variant.id} (#{variant.variant_name})"
+            
+          rescue => e
+            Rails.logger.error "Error updating variant #{variant_params[:id]} for item #{item.id}: #{e.message}"
+            Rails.logger.error e.backtrace.first(5).join("\n")
+            # Continue with other variants even if one fails
+          end
+        end
+        
+      rescue StandardError => e
+        Rails.logger.error "Error processing variant updates for item #{item.id}: #{e.message}"
+        Rails.logger.error e.backtrace.first(5).join("\n")
+        # Don't raise the error - let the item update succeed even if variant updates fail
+      end
+      
+      def process_variant_creation(item, variants_data)
+        return unless variants_data.is_a?(Array) && item.track_variants?
+        
+        Rails.logger.info "Processing variant creation for item #{item.id}: #{variants_data.length} variants"
+        
+        variants_data.each do |variant_params|
+          begin
+            # Generate correct variant key from variant name
+            # The frontend sends variant_key as "[FILTERED]" due to Rails parameter filtering
+            # So we need to regenerate it from the variant_name
+            variant_key = generate_variant_key_from_name(item, variant_params[:variant_name])
+            
+            # Create new variant
+            variant_attrs = {
+              wholesale_item: item,
+              variant_key: variant_key,
+              variant_name: variant_params[:variant_name],
+              stock_quantity: variant_params[:stock_quantity]&.to_i || 0,
+              damaged_quantity: variant_params[:damaged_quantity]&.to_i || 0,
+              low_stock_threshold: variant_params[:low_stock_threshold]&.to_i || 5,
+              active: variant_params[:active].to_s.downcase.in?(['true', '1', 'yes', 'on'])
+            }
+            
+            variant = Wholesale::ItemVariant.create!(variant_attrs)
+            
+            # Create initial audit record if stock quantity > 0
+            if variant.stock_quantity > 0
+              Wholesale::VariantStockAudit.create_stock_record(
+                variant,
+                variant.stock_quantity,
+                'initial_stock',
+                "Initial stock setup: #{variant.stock_quantity} units",
+                current_user,
+                nil,
+                0 # previous_quantity was 0
+              )
+            end
+            
+            Rails.logger.info "Created variant #{variant.id} (#{variant.variant_name}) for item #{item.id}"
+            
+          rescue => e
+            Rails.logger.error "Error creating variant for item #{item.id}: #{e.message}"
+            Rails.logger.error e.backtrace.first(5).join("\n")
+            # Continue with other variants even if one fails
+          end
+        end
+        
+      rescue StandardError => e
+        Rails.logger.error "Error processing variant creation for item #{item.id}: #{e.message}"
+        Rails.logger.error e.backtrace.first(5).join("\n")
+        # Don't raise the error - let the item creation succeed even if variant creation fails
+      end
+      
+      # Helper method to generate variant key from variant name
+      # Used when frontend sends "[FILTERED]" for variant_key due to Rails parameter filtering
+      def generate_variant_key_from_name(item, variant_name)
+        return nil if variant_name.blank?
+        
+        # Reload item to ensure option_groups are loaded
+        item.reload
+        return nil unless item.option_groups.any?
+        
+        # Parse variant name (e.g., "XL, Navy" -> ["XL", "Navy"])
+        option_names = variant_name.split(',').map(&:strip)
+        selected_options = {}
+        
+        # Match option names to actual options and build selected_options hash
+        item.option_groups.includes(:options).each do |group|
+          group.options.each do |option|
+            if option_names.include?(option.name)
+              selected_options[group.id.to_s] ||= []
+              selected_options[group.id.to_s] << option.id
+            end
+          end
+        end
+        
+        # Generate variant key using the item's method
+        item.generate_variant_key(selected_options) if selected_options.any?
+      end
+      
+      def variant_json(variant)
+        {
+          id: variant.id,
+          variant_key: variant.variant_key,
+          variant_name: variant.variant_name,
+          stock_quantity: variant.stock_quantity,
+          damaged_quantity: variant.damaged_quantity,
+          low_stock_threshold: variant.low_stock_threshold,
+          available_stock: variant.available_stock,
+          active: variant.active,
+          stock_status: variant.stock_status,
+          in_stock: variant.in_stock?,
+          out_of_stock: variant.out_of_stock?,
+          low_stock: variant.low_stock?,
+          created_at: variant.created_at,
+          updated_at: variant.updated_at
+        }
+      end
+
       def item_with_computed_fields(item)
         # Calculate stock status
         stock_status = 'unlimited'
@@ -378,6 +579,21 @@ module Wholesale
             stock_status = 'low_stock'
           else
             stock_status = 'in_stock'
+          end
+        elsif item.track_variants?
+          # Variant-level inventory tracking
+          effective_qty = item.effective_available_quantity
+          if effective_qty.is_a?(Numeric)
+            # Calculate aggregate low stock threshold from all active variants
+            total_low_threshold = item.item_variants.active.sum { |v| v.low_stock_threshold || 0 }
+            
+            if effective_qty <= 0
+              stock_status = 'out_of_stock'
+            elsif total_low_threshold > 0 && effective_qty <= total_low_threshold
+              stock_status = 'low_stock'
+            else
+              stock_status = 'in_stock'
+            end
           end
         elsif item.uses_option_level_inventory?
           # Option-level inventory tracking
@@ -416,6 +632,7 @@ module Wholesale
           'total_ordered' => total_ordered,
           'total_revenue' => total_revenue_cents / 100.0,
           'images_count' => item.item_images.count,
+          'track_variants' => item.track_variants?,
           'item_images' => item.item_images.order(:position).map do |img|
             {
               id: img.id,

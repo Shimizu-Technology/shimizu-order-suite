@@ -12,6 +12,7 @@ Wholesale::Engine.routes.draw do
         member do
           patch :toggle_active
           patch :set_primary_image
+          post :generate_variants
         end
         collection do
           post :bulk_update
@@ -19,6 +20,9 @@ Wholesale::Engine.routes.draw do
         
         # Variant management (legacy) - DEPRECATED: Use option_groups instead
         # resources :variants, only: [:index, :show, :update, :destroy], controller: 'item_variants'
+        
+        # NEW: Item Variant management (new system)
+        resources :variants, only: [:index, :show], controller: 'item_variants_new'
         
         # Option Group management (new system)
         resources :option_groups, only: [:index, :show, :create, :update, :destroy] do
@@ -57,6 +61,7 @@ Wholesale::Engine.routes.draw do
     resources :items do
       member do
         patch :toggle_active
+        post :generate_variants
       end
       collection do
         post :bulk_update
@@ -64,6 +69,9 @@ Wholesale::Engine.routes.draw do
       
       # Variant management - DEPRECATED: Use option_groups instead
       # resources :variants, only: [:index, :show, :update, :destroy], controller: 'item_variants'
+      
+      # NEW: Item Variant management (new system)
+      resources :variants, only: [:index, :show], controller: 'item_variants_new'
     end
     
     resources :participants do
@@ -118,6 +126,12 @@ Wholesale::Engine.routes.draw do
     post 'inventory/options/:id/update_stock', to: 'inventory#update_option_stock', as: :update_option_stock
     post 'inventory/options/:id/mark_damaged', to: 'inventory#mark_option_damaged', as: :mark_option_damaged
     post 'inventory/options/:id/restock', to: 'inventory#restock_option', as: :restock_option
+    
+    # NEW: Variant-level inventory management
+    post 'inventory/variants/:id/update_stock', to: 'inventory#update_variant_stock', as: :update_variant_stock
+    post 'inventory/variants/:id/mark_damaged', to: 'inventory#mark_variant_damaged', as: :mark_variant_damaged
+    post 'inventory/variants/:id/restock', to: 'inventory#restock_variant', as: :restock_variant
+    post 'inventory/variants/:id/toggle_active', to: 'inventory#toggle_variant_active', as: :toggle_variant_active
   end
   
   # Health check
@@ -136,6 +150,26 @@ Wholesale::Engine.routes.draw do
   # Items (alternative direct access)
   resources :items, only: [:show] do
     member do
+      post :check_availability
+    end
+    
+    # NEW: Variant-specific endpoints for items
+    resources :variants, only: [:index, :show], controller: 'item_variants' do
+      member do
+        get :stock_status
+        post :check_availability
+      end
+      collection do
+        post :bulk_stock_check
+        post :validate_combinations
+      end
+    end
+  end
+  
+  # NEW: Direct variant access endpoints
+  resources :variants, only: [:show], controller: 'variants' do
+    member do
+      get :stock_status
       post :check_availability
     end
   end
