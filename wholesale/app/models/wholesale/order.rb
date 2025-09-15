@@ -232,7 +232,7 @@ module Wholesale
           end
           
           # Reverse sales tracking (legacy variant system - will be replaced by audit system)
-          if item.has_variants? && order_item.selected_options.present? && !item.track_variants?
+          if item.has_options? && order_item.selected_options.present? && !item.track_variants?
             variant = item.find_variant_by_options(order_item.selected_options)
             if variant
               revenue = order_item.quantity * order_item.price_cents / 100.0
@@ -277,7 +277,7 @@ module Wholesale
         elsif order_item.uses_option_groups?
           # Track option group sales
           item.track_option_sales!(order_item.selected_options, order_item.quantity, revenue)
-        elsif item.has_variants? && order_item.selected_options.present?
+        elsif item.has_options? && order_item.selected_options.present?
           # Track legacy variant sales
           variant = item.find_variant_by_options(order_item.selected_options)
           if variant
@@ -456,7 +456,7 @@ module Wholesale
         unless item.reduce_stock!(order_item.quantity, reason: 'order_placed', order: self)
           raise "Insufficient stock for #{order_item.variant_description}"
         end
-      elsif item.has_variants? && order_item.selected_options.present?
+      elsif item.has_options? && order_item.selected_options.present?
         # Legacy variant system
         variant = item.find_variant_by_options(order_item.selected_options)
         if variant

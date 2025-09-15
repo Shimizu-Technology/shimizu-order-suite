@@ -20,7 +20,7 @@ module Wholesale
           id: @item.id,
           name: @item.name,
           sku: @item.sku,
-          has_variants: @item.has_variants?
+          has_variants: @item.has_options?
         }
       )
     end

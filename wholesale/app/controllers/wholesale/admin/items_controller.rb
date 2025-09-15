@@ -659,7 +659,7 @@ module Wholesale
               can_purchase: variant.can_purchase?
             }
           end,
-          'has_variants' => item.has_variants?,
+          'has_variants' => item.has_options?,
           'variant_count' => item.variants.active.count,
           
           # Option Groups (new system)
