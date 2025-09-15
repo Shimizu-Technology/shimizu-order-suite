@@ -39,6 +39,11 @@ module Wholesale
           # Create audit trail for initial option inventory setup
           create_option_inventory_audit(option, 'created')
           
+          # Auto-expand variants if the item has variant tracking enabled
+          if @item.track_variants?
+            expand_variants_for_new_option(option)
+          end
+          
           render_success(
             option: option_json(option), 
             message: 'Option created successfully!'
@@ -69,6 +74,11 @@ module Wholesale
       # DELETE /wholesale/admin/items/:item_id/option_groups/:option_group_id/options/:id
       def destroy
         if @option.destroy
+          # Clean up variants that are no longer possible after option deletion
+          if @item.track_variants?
+            cleanup_variants_after_option_deletion
+          end
+          
           render_success(message: 'Option deleted successfully!')
         else
           render_error('Failed to delete option', errors: @option.errors.full_messages)
@@ -112,6 +122,81 @@ module Wholesale
       end
       
       private
+      
+      # Automatically expand variants when a new option is added
+      def expand_variants_for_new_option(new_option)
+        return unless @item.track_variants?
+        
+        Rails.logger.info "Auto-expanding variants for new option '#{new_option.name}' in item #{@item.id}"
+        
+        # Get current variants before expansion
+        existing_variants = @item.item_variants.to_a
+        existing_variant_keys = existing_variants.map(&:variant_key)
+        
+        # Generate all possible combinations (including new ones)
+        all_combinations = @item.generate_all_variant_combinations
+        
+        # Create only the new variants (preserve existing ones)
+        new_variants_created = 0
+        
+        all_combinations.each do |combination|
+          variant_key = @item.generate_variant_key(combination[:selected_options])
+          
+          # Skip if this variant already exists
+          next if existing_variant_keys.include?(variant_key)
+          
+          # Create the new variant
+          variant_name = @item.generate_variant_name(combination[:selected_options])
+          
+          variant = @item.item_variants.create!(
+            variant_key: variant_key,
+            variant_name: variant_name,
+            stock_quantity: 0,
+            damaged_quantity: 0,
+            low_stock_threshold: 5, # Default threshold
+            active: true
+          )
+          
+          new_variants_created += 1
+          Rails.logger.info "Created new variant: #{variant_name} (ID: #{variant.id})"
+        end
+        
+        Rails.logger.info "Auto-expansion complete: #{new_variants_created} new variants created"
+        
+      rescue StandardError => e
+        Rails.logger.error "Error auto-expanding variants for item #{@item.id}: #{e.message}"
+        Rails.logger.error e.backtrace.first(5).join("\n")
+        # Don't raise - let the option creation succeed even if variant expansion fails
+      end
+      
+      # Clean up variants that are no longer possible after option deletion
+      def cleanup_variants_after_option_deletion
+        Rails.logger.info "Cleaning up variants after option deletion for item #{@item.id}"
+        
+        # Get all valid combinations after the option deletion
+        valid_combinations = @item.generate_all_variant_combinations
+        valid_variant_keys = valid_combinations.map { |combo| @item.generate_variant_key(combo[:selected_options]) }
+        
+        # Find variants that are no longer valid
+        invalid_variants = @item.item_variants.where.not(variant_key: valid_variant_keys)
+        
+        if invalid_variants.any?
+          deleted_count = invalid_variants.count
+          variant_names = invalid_variants.pluck(:variant_name)
+          
+          # Delete invalid variants
+          invalid_variants.destroy_all
+          
+          Rails.logger.info "Deleted #{deleted_count} invalid variants: #{variant_names.join(', ')}"
+        else
+          Rails.logger.info "No invalid variants found after option deletion"
+        end
+        
+      rescue StandardError => e
+        Rails.logger.error "Error cleaning up variants for item #{@item.id}: #{e.message}"
+        Rails.logger.error e.backtrace.first(5).join("\n")
+        # Don't raise - let the option deletion succeed even if variant cleanup fails
+      end
       
       def set_item
         @item = Wholesale::Item.joins(:fundraiser)

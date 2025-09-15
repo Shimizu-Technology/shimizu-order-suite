@@ -431,7 +431,7 @@ module Wholesale
             update_attrs = {
               stock_quantity: variant_params[:stock_quantity]&.to_i,
               damaged_quantity: variant_params[:damaged_quantity]&.to_i,
-              low_stock_threshold: variant_params[:low_stock_threshold]&.to_i,
+              low_stock_threshold: variant_params[:low_stock_threshold].present? ? variant_params[:low_stock_threshold].to_i : nil,
               active: variant_params[:active].to_s.downcase.in?(['true', '1', 'yes', 'on'])
             }.compact
             
@@ -487,7 +487,7 @@ module Wholesale
               variant_name: variant_params[:variant_name],
               stock_quantity: variant_params[:stock_quantity]&.to_i || 0,
               damaged_quantity: variant_params[:damaged_quantity]&.to_i || 0,
-              low_stock_threshold: variant_params[:low_stock_threshold]&.to_i || 5,
+              low_stock_threshold: variant_params[:low_stock_threshold].present? ? variant_params[:low_stock_threshold].to_i : 5,
               active: variant_params[:active].to_s.downcase.in?(['true', '1', 'yes', 'on'])
             }
             

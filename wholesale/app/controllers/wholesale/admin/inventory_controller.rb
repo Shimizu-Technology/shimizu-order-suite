@@ -231,17 +231,27 @@ module Wholesale
       # NEW: Variant-level inventory management methods
       
       # POST /wholesale/admin/inventory/variants/:id/update_stock
-      # Update stock quantity for a specific variant
+      # Update stock quantity and optionally low stock threshold for a specific variant
       def update_variant_stock
         new_quantity = params[:quantity].to_i
         reason = params[:reason] || 'admin_adjustment'
         notes = params[:notes] || "Stock updated by admin"
+        low_stock_threshold = params[:low_stock_threshold]
         
         if new_quantity < 0
           return render_error("Stock quantity cannot be negative")
         end
         
+        # Update stock quantity first
         if @variant.update_stock_quantity(new_quantity, reason, notes, current_user)
+          # Update low stock threshold if provided
+          if low_stock_threshold.present?
+            threshold_value = low_stock_threshold.to_i
+            if threshold_value >= 0
+              @variant.update!(low_stock_threshold: threshold_value)
+            end
+          end
+          
           render_success(
             variant: variant_inventory_summary(@variant),
             message: "Stock updated successfully"
