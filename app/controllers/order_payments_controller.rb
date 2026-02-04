@@ -3,7 +3,7 @@ class OrderPaymentsController < ApplicationController
   
   before_action :authorize_request
   before_action :ensure_tenant_context
-  before_action :set_order, only: [:index, :create_refund]
+  before_action :set_order, only: [:index, :create_refund, :process_cash_payment, :create_additional, :capture_additional, :add_store_credit, :adjust_total, :create_payment_link]
 
   # GET /orders/:order_id/payments
   def index
@@ -351,11 +351,11 @@ def create_refund
   restaurant = @order.restaurant
   test_mode = restaurant.admin_settings&.dig("payment_gateway", "test_mode")
 
-    # Only validate refund amount in strict cases:
+    # Validate refund amount:
     # 1. If refund amount is <= 0 (always invalid)
-    # 2. If there's an actual payment recorded AND we're not in test mode AND refund amount > max_refundable
+    # 2. If there's an actual payment recorded AND refund amount > max_refundable
     if refund_amount <= 0 ||
-       (@order.total_paid > 0 && !test_mode && refund_amount > max_refundable)
+       (@order.total_paid > 0 && refund_amount > max_refundable)
       return render json: {
         error: "Invalid refund amount. Maximum refundable: #{max_refundable}"
       }, status: :unprocessable_entity
@@ -555,11 +555,19 @@ def create_refund
       end
 
       # Restore inventory for refunded items using OrderService
-      if refunded_items.present?
-        Rails.logger.info("Restoring inventory for refunded items: #{refunded_items.inspect}")
+      # If refunded_items not provided but order has items, use order items for full refund (BUG-10 / HL1-18)
+      items_to_restore = if refunded_items.present?
+        refunded_items
+      elsif @order.items.present? && is_full_refund
+        Rails.logger.info("No refunded_items provided for full refund, using order items for inventory restoration")
+        @order.items
+      end
+
+      if items_to_restore.present?
+        Rails.logger.info("Restoring inventory for refunded items: #{items_to_restore.inspect}")
         
         order_service = OrderService.new(@order.restaurant)
-        inventory_result = order_service.revert_order_inventory(refunded_items, @order, current_user)
+        inventory_result = order_service.revert_order_inventory(items_to_restore, @order, current_user)
         
         if inventory_result[:success]
           Rails.logger.info("Successfully restored inventory for refund: #{inventory_result[:inventory_changes].length} changes")

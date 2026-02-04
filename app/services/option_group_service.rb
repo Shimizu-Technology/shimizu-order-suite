@@ -20,6 +20,7 @@ class OptionGroupService < TenantScopedService
     option_group = menu_item.option_groups.build(option_group_params)
     
     if option_group.save
+      option_group.reload  # Reload to include nested options created via options_attributes
       { success: true, option_group: option_group, status: :created }
     else
       { success: false, errors: option_group.errors.full_messages, status: :unprocessable_entity }

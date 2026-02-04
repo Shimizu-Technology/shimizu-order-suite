@@ -526,6 +526,13 @@ class OrdersController < ApplicationController
 
       # Load them all in one query
       menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
+
+      # Validate all item IDs exist (BUG-7 / HL1-15)
+      missing_ids = item_ids - menu_items_by_id.keys
+      if missing_ids.any?
+        return render json: { error: "Menu items not found: #{missing_ids.join(', ')}" }, status: :unprocessable_entity
+      end
+
       max_required = 0
 
       @order.items.each do |item|
@@ -1148,7 +1155,7 @@ class OrdersController < ApplicationController
         
         if order.items.present?
           order_service = OrderService.new(order.restaurant)
-          inventory_result = order_service.revert_order_inventory(order.items, order, current_user, 'cancel')
+          inventory_result = order_service.revert_order_inventory(order.items, order, current_user)
           
           if inventory_result[:success]
             Rails.logger.info("Successfully restored inventory for cancelled order #{order.id}: #{inventory_result[:inventory_changes].length} changes")
