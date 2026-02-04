@@ -24,44 +24,66 @@ class RestaurantCounter < ApplicationRecord
   end
   
   # Generate a new order number with format: [PREFIX]-O-[COUNTER]
+  # Uses pessimistic locking to prevent race conditions under concurrency.
   def generate_order_number
-    # Check if we need to reset the daily counter
-    reset_daily_counter_if_needed
-    
-    # Get restaurant prefix (first 2-3 letters of restaurant name)
-    restaurant_prefix = get_restaurant_prefix
-    
-    # Increment counters
-    self.daily_order_counter += 1
-    self.total_order_counter += 1
-    
-    # Format daily counter with leading zeros (e.g., 001, 012, 123)
-    counter_str = daily_order_counter.to_s.rjust(3, '0')
-    
-    # Create the order number with O prefix and dashes for better readability
-    order_number = "#{restaurant_prefix}-O-#{counter_str}"
-    
-    # Check if the order number already exists in the database
-    # If it does, keep incrementing the counter until we find a unique one
-    while Order.exists?(order_number: order_number)
-      # Increment the counter and try again
-      self.daily_order_counter += 1
-      self.total_order_counter += 1
-      counter_str = daily_order_counter.to_s.rjust(3, '0')
-      order_number = "#{restaurant_prefix}-O-#{counter_str}"
-      
-      # Safety check: if we've gone beyond 999, start using 4-digit numbers
-      if daily_order_counter > 999
-        counter_str = daily_order_counter.to_s.rjust(4, '0')
+    max_attempts = 3
+    attempts = 0
+
+    begin
+      attempts += 1
+
+      RestaurantCounter.transaction do
+        # Lock the row for update to prevent concurrent reads
+        locked_counter = RestaurantCounter.lock("FOR UPDATE").find(id)
+
+        # Check if we need to reset the daily counter
+        if locked_counter.last_reset_date < Date.current
+          locked_counter.daily_order_counter = 0
+          locked_counter.last_reset_date = Date.current
+        end
+
+        # Get restaurant prefix (first 2-3 letters of restaurant name)
+        restaurant_prefix = get_restaurant_prefix
+
+        # Increment counters
+        locked_counter.daily_order_counter += 1
+        locked_counter.total_order_counter += 1
+
+        # Format daily counter with leading zeros (e.g., 001, 012, 123)
+        counter_str = locked_counter.daily_order_counter.to_s.rjust(3, '0')
+
+        # Safety check: if we've gone beyond 999, start using 4-digit numbers
+        if locked_counter.daily_order_counter > 999
+          counter_str = locked_counter.daily_order_counter.to_s.rjust(4, '0')
+        end
+
+        # Create the order number with O prefix and dashes for better readability
         order_number = "#{restaurant_prefix}-O-#{counter_str}"
+
+        # If a collision still somehow exists, keep incrementing within the lock
+        while Order.exists?(order_number: order_number)
+          locked_counter.daily_order_counter += 1
+          locked_counter.total_order_counter += 1
+          counter_str = locked_counter.daily_order_counter.to_s.rjust(locked_counter.daily_order_counter > 999 ? 4 : 3, '0')
+          order_number = "#{restaurant_prefix}-O-#{counter_str}"
+        end
+
+        # Save the updated counters atomically
+        locked_counter.save!
+
+        # Sync self with the locked values
+        self.daily_order_counter = locked_counter.daily_order_counter
+        self.total_order_counter = locked_counter.total_order_counter
+        self.last_reset_date = locked_counter.last_reset_date
+
+        # Return the generated order number
+        return order_number
       end
+    rescue ActiveRecord::RecordNotUnique => e
+      Rails.logger.warn("Order number collision (attempt #{attempts}/#{max_attempts}): #{e.message}")
+      retry if attempts < max_attempts
+      raise
     end
-    
-    # Save the updated counters
-    save!
-    
-    # Return the generated order number
-    order_number
   end
   
   private
