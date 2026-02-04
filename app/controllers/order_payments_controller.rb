@@ -481,6 +481,9 @@ def create_refund
       
       @refund = @order.order_payments.create(refund_attributes)
 
+      # Reload order to ensure computed methods (total_paid, total_refunded) reflect the new payment
+      @order.reload
+
       # Check if all items in the order have been refunded
       all_items_refunded = false
       
@@ -530,16 +533,23 @@ def create_refund
         Rails.logger.info("All items refunded: #{all_items_refunded}")
       end
       
-      # Determine if this is a full refund based on BOTH payment amount AND item quantities
+      # Determine if this is a full refund based on payment amount AND item quantities
       is_full_refund = false
       
       # Check if all money has been refunded (within a small margin of error)
-      payment_fully_refunded = (@order.total_paid - @order.total_refunded - refund_amount).abs < 0.01
+      # Note: @refund was already created above, so total_refunded already includes this refund.
+      # We compare total_paid vs total_refunded directly (no need to subtract refund_amount again).
+      payment_fully_refunded = (@order.total_paid - @order.total_refunded).abs < 0.01
       
-      # Only consider it a full refund if BOTH conditions are met:
-      # 1. All money has been refunded
-      # 2. All items have been refunded
-      is_full_refund = payment_fully_refunded && all_items_refunded
+      # Full refund if:
+      # 1. refunded_items provided AND all money refunded AND all items refunded, OR
+      # 2. refunded_items NOT provided AND all money refunded (BUG-10 / HL1-18:
+      #    when no explicit items list is given, a full monetary refund implies full item refund)
+      is_full_refund = if refunded_items.present?
+        payment_fully_refunded && all_items_refunded
+      else
+        payment_fully_refunded
+      end
       
       Rails.logger.info("Payment fully refunded: #{payment_fully_refunded}, All items refunded: #{all_items_refunded}")
       Rails.logger.info("Is full refund: #{is_full_refund}")
