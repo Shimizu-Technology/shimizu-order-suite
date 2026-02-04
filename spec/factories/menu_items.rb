@@ -1,6 +1,6 @@
 FactoryBot.define do
   factory :menu_item do
-    name { "Test Menu Item" }
+    sequence(:name) { |n| "Test Menu Item #{n}" }
     description { "A delicious test menu item" }
     price { 10.99 }
     available { true }
@@ -9,6 +9,14 @@ FactoryBot.define do
     featured { false }
     stock_status { :in_stock }
     association :menu
+
+    # Menu items must have at least one category
+    after(:build) do |menu_item|
+      if menu_item.categories.empty?
+        category = build(:category, menu: menu_item.menu)
+        menu_item.categories << category
+      end
+    end
 
     trait :with_option_groups do
       after(:create) do |menu_item|

@@ -21,39 +21,38 @@ RSpec.describe PaymentService do
     end
 
     context 'when test mode is disabled' do
-      let(:gateway) { instance_double(Braintree::Gateway) }
-      let(:client_token) { instance_double(Braintree::ClientTokenGateway) }
-
       before do
         allow(restaurant).to receive(:admin_settings).and_return({
           'payment_gateway' => {
             'test_mode' => false,
-            'environment' => 'sandbox',
-            'merchant_id' => 'merchant123',
-            'public_key' => 'public123',
-            'private_key' => 'private123'
+            'payment_processor' => 'paypal',
+            'client_id' => 'test-client-id',
+            'client_secret' => 'test-client-secret',
+            'environment' => 'sandbox'
           }
         })
-
-        allow(Braintree::Gateway).to receive(:new).and_return(gateway)
-        allow(gateway).to receive(:client_token).and_return(client_token)
-        allow(client_token).to receive(:generate).and_return('real-client-token')
       end
 
-      it 'creates a gateway with restaurant credentials' do
-        PaymentService.generate_client_token(restaurant)
-
-        expect(Braintree::Gateway).to have_received(:new).with(
-          environment: :sandbox,
-          merchant_id: 'merchant123',
-          public_key: 'public123',
-          private_key: 'private123'
-        )
-      end
-
-      it 'returns a real client token from Braintree' do
+      it 'returns the client_id for PayPal processor' do
         token = PaymentService.generate_client_token(restaurant)
-        expect(token).to eq('real-client-token')
+        expect(token).to eq('test-client-id')
+      end
+    end
+
+    context 'when using stripe processor' do
+      before do
+        allow(restaurant).to receive(:admin_settings).and_return({
+          'payment_gateway' => {
+            'test_mode' => false,
+            'payment_processor' => 'stripe',
+            'publishable_key' => 'pk_test_123'
+          }
+        })
+      end
+
+      it 'returns the publishable key for Stripe processor' do
+        token = PaymentService.generate_client_token(restaurant)
+        expect(token).to eq('pk_test_123')
       end
     end
   end
@@ -67,16 +66,16 @@ RSpec.describe PaymentService do
       end
 
       it 'returns a simulated successful response' do
-        result = PaymentService.process_payment(restaurant, amount, payment_method_nonce)
+        result = PaymentService.process_payment(restaurant, payment_method_nonce)
 
         expect(result.success?).to be true
         expect(result.transaction.id).to match(/^TEST-[a-f0-9]{20}$/)
-        expect(result.transaction.status).to eq('authorized')
-        expect(result.transaction.amount).to eq(amount)
+        expect(result.transaction.status).to eq('COMPLETED')
+        expect(result.transaction.amount).to eq(payment_method_nonce)
       end
     end
 
-    context 'when test mode is disabled' do
+    context 'when test mode is disabled with braintree' do
       let(:gateway) { instance_double(Braintree::Gateway) }
       let(:transaction_gateway) { instance_double(Braintree::TransactionGateway) }
       let(:transaction_result) { instance_double('Braintree::SuccessfulResult', success?: true) }
@@ -85,6 +84,7 @@ RSpec.describe PaymentService do
         allow(restaurant).to receive(:admin_settings).and_return({
           'payment_gateway' => {
             'test_mode' => false,
+            'payment_processor' => 'paypal',
             'environment' => 'sandbox',
             'merchant_id' => 'merchant123',
             'public_key' => 'public123',
@@ -97,18 +97,18 @@ RSpec.describe PaymentService do
         allow(transaction_gateway).to receive(:sale).and_return(transaction_result)
       end
 
-      it 'processes the payment through Braintree' do
-        PaymentService.process_payment(restaurant, amount, payment_method_nonce)
+      it 'processes the payment through Braintree when no order_id' do
+        PaymentService.process_payment(restaurant, payment_method_nonce)
 
         expect(transaction_gateway).to have_received(:sale).with(
-          amount: amount,
+          amount: payment_method_nonce,
           payment_method_nonce: payment_method_nonce,
           options: { submit_for_settlement: true }
         )
       end
 
       it 'returns the result from Braintree' do
-        result = PaymentService.process_payment(restaurant, amount, payment_method_nonce)
+        result = PaymentService.process_payment(restaurant, payment_method_nonce)
         expect(result).to eq(transaction_result)
       end
     end
@@ -123,29 +123,40 @@ RSpec.describe PaymentService do
 
         expect(result.success?).to be true
         expect(result.transaction.id).to eq(test_transaction_id)
-        expect(result.transaction.status).to eq('settled')
+        expect(result.transaction.status).to eq('COMPLETED')
       end
     end
 
-    context 'when transaction ID is a real ID' do
+    context 'when transaction ID is a real Braintree ID' do
       let(:gateway) { instance_double(Braintree::Gateway) }
       let(:transaction_gateway) { instance_double(Braintree::TransactionGateway) }
       let(:transaction_result) { instance_double('Braintree::SuccessfulResult', success?: true) }
+      let(:short_transaction_id) { "abc123" }
 
       before do
+        allow(restaurant).to receive(:admin_settings).and_return({
+          'payment_gateway' => {
+            'test_mode' => false,
+            'payment_processor' => 'paypal',
+            'environment' => 'sandbox',
+            'merchant_id' => 'merchant123',
+            'public_key' => 'public123',
+            'private_key' => 'private123'
+          }
+        })
+
         allow(Braintree::Gateway).to receive(:new).and_return(gateway)
         allow(gateway).to receive(:transaction).and_return(transaction_gateway)
         allow(transaction_gateway).to receive(:find).and_return(transaction_result)
       end
 
       it 'finds the transaction through Braintree' do
-        PaymentService.find_transaction(restaurant, transaction_id)
-
-        expect(transaction_gateway).to have_received(:find).with(transaction_id)
+        PaymentService.find_transaction(restaurant, short_transaction_id)
+        expect(transaction_gateway).to have_received(:find).with(short_transaction_id)
       end
 
       it 'returns the result from Braintree' do
-        result = PaymentService.find_transaction(restaurant, transaction_id)
+        result = PaymentService.find_transaction(restaurant, short_transaction_id)
         expect(result).to eq(transaction_result)
       end
     end

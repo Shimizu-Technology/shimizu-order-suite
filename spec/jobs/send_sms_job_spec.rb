@@ -32,7 +32,7 @@ RSpec.describe SendSmsJob, type: :job do
         )
       }.to have_enqueued_job(SendSmsJob)
         .with(to: phone_number, body: message_body, from: sender_id)
-        .on_queue('default')
+        .on_queue('sms')
     end
 
     context 'when ClicksendClient raises an error' do

@@ -139,4 +139,14 @@ class PaymentsController < ApplicationController
   rescue => e
     render json: { error: "Failed to retrieve transaction: #{e.message}" }, status: :unprocessable_entity
   end
+
+  private
+
+  def tenant_payment_service
+    @tenant_payment_service ||= begin
+      service = TenantPaymentService.new(current_restaurant)
+      service.current_user = current_user
+      service
+    end
+  end
 end

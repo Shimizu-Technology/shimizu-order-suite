@@ -1,11 +1,20 @@
 require 'rails_helper'
 
 RSpec.describe Admin::SiteSettingsController, type: :controller do
-  let(:admin_user) { create(:user, role: 'admin') }
-  let(:regular_user) { create(:user, role: 'customer') }
-  let(:site_setting) { create(:site_setting) }
+  let(:restaurant) { create(:restaurant) }
+  let(:admin_user) { create(:user, role: 'admin', restaurant: restaurant) }
+  let(:regular_user) { create(:user, role: 'customer', restaurant: restaurant) }
+  let(:site_setting) { create(:site_setting, restaurant: restaurant) }
   let(:valid_token) { JWT.encode({ user_id: admin_user.id }, Rails.application.credentials.secret_key_base) }
   let(:regular_token) { JWT.encode({ user_id: regular_user.id }, Rails.application.credentials.secret_key_base) }
+
+  before do
+    # Mock the tenant isolation and set the restaurant context
+    allow(controller).to receive(:set_current_tenant) do
+      controller.instance_variable_set(:@current_restaurant, restaurant)
+    end
+    allow(controller).to receive(:ensure_tenant_context)
+  end
 
   describe 'GET #show' do
     context 'when no settings exist' do

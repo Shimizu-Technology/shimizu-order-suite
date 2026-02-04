@@ -162,7 +162,7 @@ RSpec.describe ClicksendClient do
         result = ClicksendClient.send_text_message(to: to, body: body, from: from)
 
         expect(result).to be false
-        expect(Rails.logger).to have_received(:error).with(/HTTP Error code=400/)
+        expect(Rails.logger).to have_received(:error).with(/HTTP Error.*code=400/)
       end
     end
 
@@ -187,7 +187,7 @@ RSpec.describe ClicksendClient do
         result = ClicksendClient.send_text_message(to: to, body: body, from: from)
 
         expect(result).to be false
-        expect(Rails.logger).to have_received(:error).with(/Error response:/)
+        expect(Rails.logger).to have_received(:error).with(/API Error.*code=/)
       end
     end
 

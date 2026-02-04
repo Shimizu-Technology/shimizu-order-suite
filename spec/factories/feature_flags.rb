@@ -1,10 +1,10 @@
 FactoryBot.define do
   factory :feature_flag do
-    name { "MyString" }
-    description { "MyText" }
+    sequence(:name) { |n| "feature_flag_#{n}" }
+    description { "A test feature flag" }
     enabled { false }
     global { false }
-    restaurant_id { 1 }
-    configuration { "" }
+    association :restaurant
+    configuration { {} }
   end
 end

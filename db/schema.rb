@@ -76,7 +76,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_12_004646) do
     t.index ["restaurant_id", "start_time", "end_time"], name: "idx_blocked_periods_rest_times"
     t.index ["restaurant_id"], name: "index_blocked_periods_on_restaurant_id"
     t.index ["seat_section_id"], name: "index_blocked_periods_on_seat_section_id"
-    t.check_constraint "status::text = ANY (ARRAY['active'::character varying::text, 'cancelled'::character varying::text])", name: "check_blocked_period_status"
+    t.check_constraint "status::text = ANY (ARRAY['active'::character varying, 'cancelled'::character varying]::text[])", name: "check_blocked_period_status"
   end
 
   create_table "categories", force: :cascade do |t|
@@ -513,7 +513,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_12_004646) do
     t.index ["location_id"], name: "index_reservations_on_location_id"
     t.index ["reservation_number"], name: "index_reservations_on_reservation_number", unique: true
     t.index ["restaurant_id"], name: "index_reservations_on_restaurant_id"
-    t.check_constraint "status::text = ANY (ARRAY['booked'::character varying::text, 'reserved'::character varying::text, 'seated'::character varying::text, 'finished'::character varying::text, 'canceled'::character varying::text, 'no_show'::character varying::text])", name: "check_reservation_status"
+    t.check_constraint "status::text = ANY (ARRAY['booked'::character varying, 'reserved'::character varying, 'seated'::character varying, 'finished'::character varying, 'canceled'::character varying, 'no_show'::character varying]::text[])", name: "check_reservation_status"
   end
 
   create_table "restaurant_counters", force: :cascade do |t|
@@ -599,7 +599,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_12_004646) do
     t.string "category", default: "standard"
     t.index ["category"], name: "index_seats_on_category"
     t.index ["seat_section_id"], name: "index_seats_on_seat_section_id"
-    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying::text, 'booth'::character varying::text, 'outdoor'::character varying::text, 'bar'::character varying::text, 'private'::character varying::text, 'high_top'::character varying::text])", name: "check_seat_category_values"
+    t.check_constraint "category::text = ANY (ARRAY['standard'::character varying, 'booth'::character varying, 'outdoor'::character varying, 'bar'::character varying, 'private'::character varying, 'high_top'::character varying]::text[])", name: "check_seat_category_values"
     t.check_constraint "max_capacity IS NULL OR min_capacity <= max_capacity", name: "check_min_max_capacity"
   end
 
@@ -608,7 +608,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_12_004646) do
     t.string "spinner_image_url"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.bigint "restaurant_id", null: false
+    t.bigint "restaurant_id"
     t.index ["restaurant_id"], name: "index_site_settings_on_restaurant_id"
   end
 
@@ -647,7 +647,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_12_004646) do
     t.index ["restaurant_id", "is_active"], name: "idx_staff_discounts_restaurant_active"
     t.index ["restaurant_id"], name: "index_staff_discount_configurations_on_restaurant_id"
     t.check_constraint "discount_percentage >= 0::numeric AND discount_percentage <= 100::numeric", name: "chk_discount_percentage_range"
-    t.check_constraint "discount_type::text = ANY (ARRAY['percentage'::character varying::text, 'fixed_amount'::character varying::text])", name: "chk_discount_type_values"
+    t.check_constraint "discount_type::text = ANY (ARRAY['percentage'::character varying, 'fixed_amount'::character varying]::text[])", name: "chk_discount_type_values"
   end
 
   create_table "staff_members", force: :cascade do |t|

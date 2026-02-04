@@ -6,7 +6,18 @@ RSpec.describe TenantValidationMiddleware do
   let(:middleware) { described_class.new(app) }
   let(:restaurant) { create(:restaurant) }
   let(:user) { create(:user, restaurant: restaurant) }
-  let(:token) { TokenService.generate_token(user) }
+  let(:redis_mock) { instance_double(Redis, exists?: false, incr: 1, expire: true, get: nil, set: true, setex: true) }
+  let(:token) do
+    # Generate token manually since TokenService needs Redis
+    JWT.encode(
+      { user_id: user.id, restaurant_id: user.restaurant_id, role: user.role, jti: SecureRandom.uuid, iat: Time.current.to_i, exp: 24.hours.from_now.to_i },
+      Rails.application.secret_key_base
+    )
+  end
+
+  before do
+    allow(Redis).to receive(:new).and_return(redis_mock)
+  end
   
   describe '#call' do
     context 'with public endpoints' do

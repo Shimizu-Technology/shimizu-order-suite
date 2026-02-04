@@ -4,14 +4,17 @@ RSpec.describe MenusController, type: :controller do
   let(:restaurant) { create(:restaurant) }
   let(:menu) { create(:menu, restaurant: restaurant) }
   let(:admin_user) { create(:user, restaurant: restaurant, role: 'admin') }
-  let(:regular_user) { create(:user, restaurant: restaurant, role: 'user') }
+  let(:regular_user) { create(:user, restaurant: restaurant, role: 'customer') }
   let(:auth_token) { token_generator(admin_user.id) }
   let(:regular_auth_token) { token_generator(regular_user.id) }
 
   before do
-    # Mock the restaurant scope
-    allow(controller).to receive(:set_restaurant_scope)
-    allow(controller).to receive(:public_endpoint?).and_return(true)
+    # Mock the tenant isolation and set the restaurant context
+    allow(controller).to receive(:set_current_tenant) do
+      controller.instance_variable_set(:@current_restaurant, restaurant)
+    end
+    allow(controller).to receive(:ensure_tenant_context)
+    allow(controller).to receive(:optional_authorize)
   end
 
   describe 'GET #index' do

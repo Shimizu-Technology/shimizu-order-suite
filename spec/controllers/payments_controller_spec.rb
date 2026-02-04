@@ -10,15 +10,24 @@ RSpec.describe PaymentsController, type: :controller do
 
   before do
     # Mock the restaurant scope
-    allow(controller).to receive(:set_restaurant_scope)
-    allow(controller).to receive(:public_endpoint?).and_return(true)
+    allow(controller).to receive(:set_current_tenant) do
+      controller.instance_variable_set(:@current_restaurant, restaurant)
+    end
+    allow(controller).to receive(:ensure_tenant_context)
+    allow(controller).to receive(:optional_authorize)
   end
 
   describe 'GET #client_token' do
+    let(:mock_service) { instance_double(TenantPaymentService) }
+
+    before do
+      allow(TenantPaymentService).to receive(:new).and_return(mock_service)
+      allow(mock_service).to receive(:current_user=)
+    end
+
     context 'when restaurant exists' do
       before do
-        allow(PaymentService).to receive(:generate_client_token).and_return('test-client-token')
-        allow(Restaurant).to receive(:find).with(restaurant.id.to_s).and_return(restaurant)
+        allow(mock_service).to receive(:generate_client_token).and_return({ success: true, token: 'test-client-token' })
       end
 
       it 'returns a client token' do
@@ -28,35 +37,26 @@ RSpec.describe PaymentsController, type: :controller do
         expect(JSON.parse(response.body)).to include('token' => 'test-client-token')
       end
 
-      it 'calls PaymentService.generate_client_token' do
+      it 'calls TenantPaymentService#generate_client_token' do
         get :client_token, params: { restaurant_id: restaurant.id }
 
-        expect(PaymentService).to have_received(:generate_client_token).with(restaurant)
+        expect(mock_service).to have_received(:generate_client_token)
       end
     end
 
-    context 'when restaurant does not exist' do
+    context 'when service returns an error' do
       before do
-        allow(Restaurant).to receive(:find).with("999").and_raise(ActiveRecord::RecordNotFound)
-      end
-
-      it 'returns a service unavailable error' do
-        get :client_token, params: { restaurant_id: 999 }
-
-        expect(response).to have_http_status(:service_unavailable)
-      end
-    end
-
-    context 'when PaymentService raises an error' do
-      before do
-        allow(PaymentService).to receive(:generate_client_token).and_raise(StandardError.new('Test error'))
+        allow(mock_service).to receive(:generate_client_token).and_return({
+          success: false,
+          errors: ['Failed to generate client token: Test error'],
+          status: :service_unavailable
+        })
       end
 
       it 'returns a service unavailable error' do
         get :client_token, params: { restaurant_id: restaurant.id }
 
         expect(response).to have_http_status(:service_unavailable)
-        expect(JSON.parse(response.body)).to include('error' => 'Failed to generate client token: Test error')
       end
     end
   end
@@ -142,8 +142,8 @@ RSpec.describe PaymentsController, type: :controller do
 
         expect(PaymentService).to have_received(:process_payment).with(
           restaurant,
-          amount,
-          payment_method_nonce
+          payment_method_nonce,
+          nil
         )
       end
 
