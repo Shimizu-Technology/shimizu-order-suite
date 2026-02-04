@@ -289,8 +289,11 @@ class OptionGroupsController < ApplicationController
   private
 
   def option_group_params
-    # Include enable_inventory_tracking in permitted params
-    params.require(:option_group).permit(:name, :min_select, :max_select, :free_option_count, :enable_inventory_tracking)
+    # Include enable_inventory_tracking and nested options_attributes in permitted params (HL1-17)
+    params.require(:option_group).permit(
+      :name, :min_select, :max_select, :free_option_count, :enable_inventory_tracking,
+      options_attributes: [:id, :name, :additional_price, :is_available, :stock_quantity, :damaged_quantity, :_destroy]
+    )
   end
 
   def option_group_service
