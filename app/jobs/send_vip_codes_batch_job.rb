@@ -9,7 +9,7 @@ class SendVipCodesBatchJob < ApplicationJob
     # Check if we should use existing codes or generate new ones
     use_existing_codes = options[:use_existing_codes] || false
     existing_codes = options[:code_ids] || []
-    
+
     # Check if we should create one code per batch (default to true for new codes)
     one_code_per_batch = options.fetch(:one_code_per_batch, true)
 
@@ -19,15 +19,15 @@ class SendVipCodesBatchJob < ApplicationJob
     else
       []
     end
-    
+
     # Handle custom codes
     custom_codes_list = []
     if options[:custom_codes].present?
       custom_codes_list = parse_custom_codes(options[:custom_codes])
     elsif options[:custom_code].present?
-      custom_codes_list = [options[:custom_code]]
+      custom_codes_list = [ options[:custom_code] ]
     end
-    
+
     # For new codes with one_code_per_batch, create a single code for all emails
     shared_vip_code = nil
     if !use_existing_codes && one_code_per_batch
@@ -37,7 +37,7 @@ class SendVipCodesBatchJob < ApplicationJob
       else
         shared_vip_code = create_vip_code(options, restaurant)
       end
-      
+
       # If max_uses is set, ensure it's sufficient for all recipients
       if shared_vip_code.max_uses.present? && shared_vip_code.max_uses < email_list.length
         # Update max_uses to accommodate all recipients
@@ -89,11 +89,11 @@ class SendVipCodesBatchJob < ApplicationJob
       restaurant: restaurant
     )
   end
-  
+
   def create_custom_vip_code(custom_code, options, restaurant)
     # Validate and create a custom VIP code
     validated_code = validate_and_get_unique_code(restaurant, custom_code.strip)
-    
+
     VipAccessCode.create!(
       code: validated_code,
       name: options[:name] || "Custom VIP",
@@ -115,21 +115,21 @@ class SendVipCodesBatchJob < ApplicationJob
       break code unless VipAccessCode.exists?(code: code)
     end
   end
-  
+
   def validate_and_get_unique_code(restaurant, custom_code)
     # Basic validation
     raise ArgumentError, "Custom code cannot be blank" if custom_code.blank?
     raise ArgumentError, "Custom code is too long (maximum 50 characters)" if custom_code.length > 50
     raise ArgumentError, "Custom code contains invalid characters" unless custom_code.match?(/\A[A-Za-z0-9\-_]+\z/)
-    
+
     # Check uniqueness
     if VipAccessCode.where(restaurant_id: restaurant.id).exists?(code: custom_code)
       raise ArgumentError, "Custom code '#{custom_code}' already exists"
     end
-    
+
     custom_code
   end
-  
+
   def parse_custom_codes(custom_codes_input)
     # Handle both string input and array input
     if custom_codes_input.is_a?(String)

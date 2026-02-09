@@ -3,14 +3,14 @@ module Wholesale
     def initialize(restaurant)
       @restaurant = restaurant
     end
-    
+
     # Create a new preset with options
     def create_preset(preset_params, option_presets_data = [])
       preset = @restaurant.wholesale_option_group_presets.build(preset_params)
-      
+
       ActiveRecord::Base.transaction do
         preset.save!
-        
+
         option_presets_data.each_with_index do |option_data, index|
           preset.option_presets.create!(
             name: option_data[:name],
@@ -20,20 +20,20 @@ module Wholesale
           )
         end
       end
-      
+
       preset
     end
-    
+
     # Update a preset and its options
     def update_preset(preset, preset_params, option_presets_data = nil)
       ActiveRecord::Base.transaction do
         preset.update!(preset_params)
-        
+
         if option_presets_data.present?
           # For simplicity, replace all option presets
           # In production, you might want a more sophisticated merge
           preset.option_presets.destroy_all
-          
+
           option_presets_data.each_with_index do |option_data, index|
             preset.option_presets.create!(
               name: option_data[:name],
@@ -44,15 +44,15 @@ module Wholesale
           end
         end
       end
-      
+
       preset
     end
-    
+
     # Apply a preset to multiple items
     def apply_preset_to_items(preset, item_ids)
       items = @restaurant.wholesale_items.where(id: item_ids)
       results = []
-      
+
       items.each do |item|
         begin
           option_group = preset.apply_to_item!(item)
@@ -61,14 +61,14 @@ module Wholesale
           results << { item_id: item.id, success: false, error: e.message }
         end
       end
-      
+
       results
     end
-    
+
     # Create common presets for a restaurant
     def create_default_presets
       presets = []
-      
+
       # Youth & Adult Sizes preset
       if !@restaurant.wholesale_option_group_presets.exists?(name: "Youth & Adult Sizes")
         preset = create_preset(
@@ -96,7 +96,7 @@ module Wholesale
         )
         presets << preset
       end
-      
+
       # Standard Colors preset
       if !@restaurant.wholesale_option_group_presets.exists?(name: "Standard Colors")
         preset = create_preset(
@@ -119,7 +119,7 @@ module Wholesale
         )
         presets << preset
       end
-      
+
       # Adult Sizes Only preset
       if !@restaurant.wholesale_option_group_presets.exists?(name: "Adult Sizes Only")
         preset = create_preset(
@@ -142,10 +142,10 @@ module Wholesale
         )
         presets << preset
       end
-      
+
       presets
     end
-    
+
     # Get preset statistics
     def get_preset_stats(preset)
       {
@@ -157,9 +157,9 @@ module Wholesale
         created_at: preset.created_at
       }
     end
-    
+
     private
-    
+
     def count_preset_usage(preset)
       # Count how many times this preset has been applied by looking for option groups
       # with the same name and similar structure

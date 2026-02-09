@@ -7,13 +7,13 @@ module Wholesale
       before_action :require_admin!
       before_action :set_restaurant_context
       before_action :set_item
-      before_action :set_variant, only: [:show, :update, :destroy]
+      before_action :set_variant, only: [ :show, :update, :destroy ]
       before_action :log_deprecation_warning
-    
+
     # GET /wholesale/admin/items/:item_id/variants
     def index
       variants = @item.variants.active.includes(:wholesale_item)
-      
+
       render_success(
         variants: variants.map { |variant| variant_json(variant) },
         item: {
@@ -24,67 +24,67 @@ module Wholesale
         }
       )
     end
-    
+
     # GET /wholesale/admin/items/:item_id/variants/:id
     def show
       render_success(variant: variant_json(@variant))
     end
-    
+
     # PATCH/PUT /wholesale/admin/items/:item_id/variants/:id
     def update
       if @variant.update(variant_params)
         render_success(
           variant: variant_json(@variant),
-          message: 'Variant updated successfully!'
+          message: "Variant updated successfully!"
         )
       else
         render_error(
-          'Failed to update variant',
+          "Failed to update variant",
           errors: @variant.errors.full_messages
         )
       end
     end
-    
+
     # DELETE /wholesale/admin/items/:item_id/variants/:id
     def destroy
       if @variant.destroy
-        render_success(message: 'Variant deleted successfully!')
+        render_success(message: "Variant deleted successfully!")
       else
         render_error(
-          'Failed to delete variant',
+          "Failed to delete variant",
           errors: @variant.errors.full_messages
         )
       end
     end
-    
+
     private
-    
+
     def log_deprecation_warning
       Rails.logger.warn "DEPRECATED: ItemVariantsController is deprecated. Use OptionGroupsController instead. Called from #{request.path}"
     end
-    
+
     def set_item
       @item = Wholesale::Item.joins(:fundraiser)
         .where(wholesale_fundraisers: { restaurant_id: current_restaurant.id })
         .find_by(id: params[:item_id])
-      render_not_found('Item not found') unless @item
+      render_not_found("Item not found") unless @item
     end
-    
+
     def set_variant
       @variant = @item.variants.find(params[:id])
     rescue ActiveRecord::RecordNotFound
-      render_not_found('Variant not found')
+      render_not_found("Variant not found")
     end
-    
+
     def variant_params
       params.require(:variant).permit(
         :sku, :price_adjustment, :stock_quantity, :low_stock_threshold, :active
       )
     end
-    
+
     def set_restaurant_context
       unless current_restaurant
-        render_unauthorized('Restaurant context not set.')
+        render_unauthorized("Restaurant context not set.")
       end
     end
 

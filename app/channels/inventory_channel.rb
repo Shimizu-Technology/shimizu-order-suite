@@ -6,8 +6,8 @@ class InventoryChannel < ApplicationCable::Channel
       restaurant_id: restaurant_id,
       connection_id: connection.connection_identifier,
       subscription_id: identifier,
-      client_ip: connection.env['REMOTE_ADDR'],
-      user_agent: connection.env['HTTP_USER_AGENT']
+      client_ip: connection.env["REMOTE_ADDR"],
+      user_agent: connection.env["HTTP_USER_AGENT"]
     }.to_json)
 
     if restaurant_id.present?
@@ -46,7 +46,7 @@ class InventoryChannel < ApplicationCable::Channel
       restaurant_id: restaurant_id,
       connection_id: connection.connection_identifier,
       subscription_id: identifier,
-      duration: ((Time.current - subscription_start_time).round(2) rescue 'unknown'),
+      duration: ((Time.current - subscription_start_time).round(2) rescue "unknown"),
       reason: params[:reason]
     }.to_json)
   end

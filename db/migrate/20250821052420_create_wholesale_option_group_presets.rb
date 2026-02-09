@@ -12,8 +12,8 @@ class CreateWholesaleOptionGroupPresets < ActiveRecord::Migration[7.2]
 
       t.timestamps
     end
-    
-    add_index :wholesale_option_group_presets, [:restaurant_id, :name], unique: true
+
+    add_index :wholesale_option_group_presets, [ :restaurant_id, :name ], unique: true
     add_index :wholesale_option_group_presets, :position
   end
 end

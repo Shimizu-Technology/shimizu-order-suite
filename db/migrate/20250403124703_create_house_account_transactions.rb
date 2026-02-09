@@ -15,7 +15,7 @@ class CreateHouseAccountTransactions < ActiveRecord::Migration[7.2]
     # Add foreign key constraints
     add_foreign_key :house_account_transactions, :staff_members
     add_foreign_key :house_account_transactions, :orders, on_delete: :nullify
-    
+
     # Add indices for faster lookups
     add_index :house_account_transactions, :staff_member_id
     add_index :house_account_transactions, :order_id

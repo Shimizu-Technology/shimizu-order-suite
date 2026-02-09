@@ -12,10 +12,10 @@ class CreateWholesaleOptionStockAudits < ActiveRecord::Migration[7.2]
 
       t.timestamps
     end
-    
+
     # Add indexes for performance
     add_index :wholesale_option_stock_audits, :audit_type
     add_index :wholesale_option_stock_audits, :created_at
-    add_index :wholesale_option_stock_audits, [:wholesale_option_id, :created_at]
+    add_index :wholesale_option_stock_audits, [ :wholesale_option_id, :created_at ]
   end
 end

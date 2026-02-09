@@ -4,7 +4,7 @@ class MigrateCategoryAssociations < ActiveRecord::Migration[7.2]
     Restaurant.find_each do |restaurant|
       # Get all categories for this restaurant
       restaurant_categories = Category.where(restaurant_id: restaurant.id)
-      
+
       # For each menu in the restaurant
       restaurant.menus.find_each do |menu|
         # Duplicate each category for this menu
@@ -17,7 +17,7 @@ class MigrateCategoryAssociations < ActiveRecord::Migration[7.2]
             restaurant_id: restaurant.id, # Keep restaurant_id for now
             menu_id: menu.id # Associate with this menu
           )
-          
+
           # Update menu_item_categories for menu items in this menu
           menu.menu_items.joins(:menu_item_categories)
                          .where(menu_item_categories: { category_id: category.id })
@@ -30,19 +30,19 @@ class MigrateCategoryAssociations < ActiveRecord::Migration[7.2]
           end
         end
       end
-      
+
       # After creating duplicates for all menus, delete the original categories
       # This is safe because we've created duplicates and updated all associations
       restaurant_categories.destroy_all
     end
-    
+
     # Handle any remaining categories without a menu_id
     # This is a safety measure in case there are any categories not associated with a restaurant
     remaining_categories = Category.where(menu_id: nil)
     if remaining_categories.exists?
       # Find a default menu to associate these categories with
       default_menu = Menu.first
-      
+
       if default_menu
         remaining_categories.update_all(menu_id: default_menu.id)
       else

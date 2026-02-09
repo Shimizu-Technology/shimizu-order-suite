@@ -50,7 +50,7 @@ RSpec.describe "HL1 Stress Test Bug Fixes" do
 
     it "resets daily counter on new day" do
       counter.update!(daily_order_counter: 50, total_order_counter: 100, last_reset_date: Date.yesterday)
-      
+
       RestaurantCounter.next_order_number(restaurant.id)
       counter.reload
 
@@ -64,7 +64,7 @@ RSpec.describe "HL1 Stress Test Bug Fixes" do
   # BUG-2 (HL1-10): Order cancellation broken (argument count)
   # ============================================================
   describe "HL1-10: Order cancellation argument count", type: :controller do
-    controller(OrdersController) {}
+    controller(OrdersController) { }
 
     let(:restaurant) { create(:restaurant) }
     let(:location) { create(:location, restaurant: restaurant, is_default: true) }
@@ -199,7 +199,7 @@ RSpec.describe "HL1 Stress Test Bug Fixes" do
   # BUG-6 (HL1-14): Over-refund allowed in test mode
   # ============================================================
   describe "HL1-14: Refund validation in test mode", type: :controller do
-    controller(OrderPaymentsController) {}
+    controller(OrderPaymentsController) { }
 
     let(:restaurant) { create(:restaurant) }
     let(:admin_user) { create(:user, restaurant: restaurant, role: 'admin') }
@@ -242,7 +242,7 @@ RSpec.describe "HL1 Stress Test Bug Fixes" do
   # BUG-7 (HL1-15): No item ID validation
   # ============================================================
   describe "HL1-15: Menu item ID validation in order creation", type: :controller do
-    controller(OrdersController) {}
+    controller(OrdersController) { }
 
     let(:restaurant) { create(:restaurant) }
     let(:location) { create(:location, restaurant: restaurant, is_default: true) }
@@ -268,7 +268,7 @@ RSpec.describe "HL1 Stress Test Bug Fixes" do
 
     it "does not crash when item price is nil in notify_whatsapp" do
       order = build(:order, restaurant: restaurant, location: location,
-                    items: [{ 'name' => 'Test', 'quantity' => 1, 'price' => nil }],
+                    items: [ { 'name' => 'Test', 'quantity' => 1, 'price' => nil } ],
                     total: 10.0)
 
       # The format string with .to_f should handle nil gracefully
@@ -357,7 +357,7 @@ RSpec.describe "HL1 Stress Test Bug Fixes" do
       order_service = OrderService.new(restaurant)
 
       # Place order (reduces stock)
-      items = [{ 'id' => menu_item.id, 'quantity' => 3 }]
+      items = [ { 'id' => menu_item.id, 'quantity' => 3 } ]
       result = order_service.process_order_inventory(items, order, admin_user, 'order')
       expect(result[:success]).to be true
       menu_item.reload
@@ -373,7 +373,7 @@ RSpec.describe "HL1 Stress Test Bug Fixes" do
     it "rejects overselling and keeps stock unchanged" do
       order_service = OrderService.new(restaurant)
 
-      items = [{ 'id' => menu_item.id, 'quantity' => 10 }]
+      items = [ { 'id' => menu_item.id, 'quantity' => 10 } ]
       result = order_service.process_order_inventory(items, order, admin_user, 'order')
       expect(result[:success]).to be false
       expect(result[:errors].first).to include("Insufficient stock")

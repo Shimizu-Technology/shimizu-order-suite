@@ -16,6 +16,6 @@ class CreateWholesaleItemVariants < ActiveRecord::Migration[7.2]
     end
 
     add_index :wholesale_item_variants, :sku, unique: true
-    add_index :wholesale_item_variants, [:wholesale_item_id, :size, :color], unique: true, name: 'index_wholesale_variants_on_item_size_color'
+    add_index :wholesale_item_variants, [ :wholesale_item_id, :size, :color ], unique: true, name: 'index_wholesale_variants_on_item_size_color'
   end
 end

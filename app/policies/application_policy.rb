@@ -7,24 +7,24 @@ class ApplicationPolicy
     @user = user
     @record = record
   end
-  
+
   # Role-based helper methods
   def super_admin?
     user && user.super_admin?
   end
-  
+
   def admin?
     user && user.admin?
   end
-  
+
   def staff?
     user && user.staff?
   end
-  
+
   def admin_or_above?
     user && user.admin_or_above?
   end
-  
+
   def staff_or_above?
     user && user.staff_or_above?
   end

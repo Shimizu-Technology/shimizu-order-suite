@@ -10,9 +10,9 @@ class CreateWholesaleOptionGroups < ActiveRecord::Migration[7.2]
       t.boolean :enable_inventory_tracking, default: false # For future use
       t.timestamps
     end
-    
+
     add_index :wholesale_option_groups, :position
-    add_index :wholesale_option_groups, [:wholesale_item_id, :enable_inventory_tracking], 
+    add_index :wholesale_option_groups, [ :wholesale_item_id, :enable_inventory_tracking ],
               name: 'idx_wholesale_option_groups_item_inventory_tracking'
   end
 end

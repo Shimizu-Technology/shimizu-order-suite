@@ -1,10 +1,10 @@
 class AddPositionToOptions < ActiveRecord::Migration[7.2]
   def change
     add_column :options, :position, :integer, default: 0
-    
+
     # Add an index for efficient ordering
-    add_index :options, [:option_group_id, :position]
-    
+    add_index :options, [ :option_group_id, :position ]
+
     # Initialize position values for existing records
     reversible do |dir|
       dir.up do

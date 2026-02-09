@@ -26,10 +26,10 @@ class TenantPaymentService < TenantScopedService
     if token.present?
       { success: true, token: token }
     else
-      { success: false, errors: ["Payment gateway not configured"], status: :service_unavailable }
+      { success: false, errors: [ "Payment gateway not configured" ], status: :service_unavailable }
     end
   rescue => e
-    { success: false, errors: ["Failed to generate client token: #{e.message}"], status: :service_unavailable }
+    { success: false, errors: [ "Failed to generate client token: #{e.message}" ], status: :service_unavailable }
   end
 
   # Create an order for payment processing
@@ -37,9 +37,9 @@ class TenantPaymentService < TenantScopedService
     # Check if test mode is enabled
     if current_restaurant.admin_settings&.dig("payment_gateway", "test_mode") == true
       # Return a simulated successful response for testing
-      return { 
-        success: true, 
-        order_id: "TEST-ORDER-#{SecureRandom.hex(10)}" 
+      return {
+        success: true,
+        order_id: "TEST-ORDER-#{SecureRandom.hex(10)}"
       }
     end
 
@@ -47,7 +47,7 @@ class TenantPaymentService < TenantScopedService
     if !current_restaurant.admin_settings&.dig("payment_gateway", "client_id").present?
       return {
         success: false,
-        errors: ["Payment gateway not configured and test mode is disabled"],
+        errors: [ "Payment gateway not configured and test mode is disabled" ],
         status: :service_unavailable
       }
     end
@@ -59,10 +59,10 @@ class TenantPaymentService < TenantScopedService
     if result.success?
       { success: true, order_id: result.order_id }
     else
-      { success: false, errors: [result.error_message], status: :unprocessable_entity }
+      { success: false, errors: [ result.error_message ], status: :unprocessable_entity }
     end
   rescue => e
-    { success: false, errors: ["Failed to create order: #{e.message}"], status: :service_unavailable }
+    { success: false, errors: [ "Failed to create order: #{e.message}" ], status: :service_unavailable }
   end
 
   # Capture an existing order
@@ -70,9 +70,9 @@ class TenantPaymentService < TenantScopedService
     # Check if test mode is enabled
     if current_restaurant.admin_settings&.dig("payment_gateway", "test_mode") == true
       # Return a simulated successful response for testing
-      return { 
-        success: true, 
-        transaction_id: "TEST-TRANSACTION-#{SecureRandom.hex(10)}" 
+      return {
+        success: true,
+        transaction_id: "TEST-TRANSACTION-#{SecureRandom.hex(10)}"
       }
     end
 
@@ -80,7 +80,7 @@ class TenantPaymentService < TenantScopedService
     if !current_restaurant.admin_settings&.dig("payment_gateway", "client_id").present?
       return {
         success: false,
-        errors: ["Payment gateway not configured and test mode is disabled"],
+        errors: [ "Payment gateway not configured and test mode is disabled" ],
         status: :service_unavailable
       }
     end
@@ -89,16 +89,16 @@ class TenantPaymentService < TenantScopedService
     result = PaymentService.capture_order(current_restaurant, order_id)
 
     if result.success?
-      { 
-        success: true, 
+      {
+        success: true,
         transaction_id: result.transaction_id,
         details: result.details || {}
       }
     else
-      { success: false, errors: [result.error_message], status: :unprocessable_entity }
+      { success: false, errors: [ result.error_message ], status: :unprocessable_entity }
     end
   rescue => e
-    { success: false, errors: ["Failed to capture order: #{e.message}"], status: :service_unavailable }
+    { success: false, errors: [ "Failed to capture order: #{e.message}" ], status: :service_unavailable }
   end
 
   # Process a payment
@@ -106,9 +106,9 @@ class TenantPaymentService < TenantScopedService
     # Check if test mode is enabled
     if current_restaurant.admin_settings&.dig("payment_gateway", "test_mode") == true
       # Return a simulated successful response for testing
-      return { 
-        success: true, 
-        transaction_id: "TEST-TRANSACTION-#{SecureRandom.hex(10)}" 
+      return {
+        success: true,
+        transaction_id: "TEST-TRANSACTION-#{SecureRandom.hex(10)}"
       }
     end
 
@@ -116,7 +116,7 @@ class TenantPaymentService < TenantScopedService
     if !current_restaurant.admin_settings&.dig("payment_gateway", "client_id").present?
       return {
         success: false,
-        errors: ["Payment gateway not configured and test mode is disabled"],
+        errors: [ "Payment gateway not configured and test mode is disabled" ],
         status: :service_unavailable
       }
     end
@@ -125,15 +125,15 @@ class TenantPaymentService < TenantScopedService
     result = PaymentService.process_payment(current_restaurant, payment_method_nonce, amount)
 
     if result.success?
-      { 
-        success: true, 
+      {
+        success: true,
         transaction_id: result.transaction_id,
         details: result.details || {}
       }
     else
-      { success: false, errors: [result.error_message], status: :unprocessable_entity }
+      { success: false, errors: [ result.error_message ], status: :unprocessable_entity }
     end
   rescue => e
-    { success: false, errors: ["Failed to process payment: #{e.message}"], status: :service_unavailable }
+    { success: false, errors: [ "Failed to process payment: #{e.message}" ], status: :service_unavailable }
   end
 end

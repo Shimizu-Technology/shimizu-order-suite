@@ -12,11 +12,11 @@ class CreateLocations < ActiveRecord::Migration[7.2]
 
       t.timestamps
     end
-    
+
     # Add an index to improve query performance when filtering by restaurant and is_active
-    add_index :locations, [:restaurant_id, :is_active]
-    
+    add_index :locations, [ :restaurant_id, :is_active ]
+
     # Add a unique index to ensure only one default location per restaurant
-    add_index :locations, [:restaurant_id, :is_default], unique: true, where: "is_default = true", name: "index_locations_on_restaurant_id_and_default"
+    add_index :locations, [ :restaurant_id, :is_default ], unique: true, where: "is_default = true", name: "index_locations_on_restaurant_id_and_default"
   end
 end

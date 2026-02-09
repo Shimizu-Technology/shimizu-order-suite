@@ -3,7 +3,7 @@
 module Admin
   class AnalyticsController < ApplicationController
     include TenantIsolation
-    
+
     before_action :authorize_request
     before_action :require_admin!
     before_action :ensure_tenant_context
@@ -13,17 +13,17 @@ module Admin
       # Use Time.zone.parse to respect any timezone information in the input
       start_date = params[:start].present? ? Time.zone.parse(params[:start]) : (Time.zone.today - 30)
       end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.today
-      
+
       # Parse menu item IDs if provided
       menu_item_ids = nil
       if params[:menu_item_ids].present?
-        menu_item_ids = params[:menu_item_ids].split(',').map(&:strip).reject(&:blank?)
+        menu_item_ids = params[:menu_item_ids].split(",").map(&:strip).reject(&:blank?)
       end
-      
+
       # Use the AdminAnalyticsService to get tenant-scoped data
       # Note: staff_member_id parameter is actually a user_id for filtering by who created the order
       report = analytics_service.customer_orders_report(start_date, end_date, params[:staff_member_id], params[:payment_method], menu_item_ids)
-      
+
       render json: report
     end
 
@@ -33,10 +33,10 @@ module Admin
       # Parse with timezone consideration
       start_date = params[:start].present? ? Time.zone.parse(params[:start]) : 30.days.ago
       end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.now
-      
+
       # Use the AdminAnalyticsService to get tenant-scoped data
       report = analytics_service.revenue_trend_report(interval, start_date, end_date)
-      
+
       render json: report
     end
 
@@ -46,20 +46,20 @@ module Admin
       # Parse with timezone consideration
       start_date = params[:start].present? ? Time.zone.parse(params[:start]) : 30.days.ago
       end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.today
-      
+
       # Use the AdminAnalyticsService to get tenant-scoped data
       report = analytics_service.top_items_report(limit, start_date, end_date)
-      
+
       render json: report
     end
 
     # GET /admin/analytics/income_statement?year=2025
     def income_statement
       year = (params[:year] || Date.today.year).to_i
-      
+
       # Use the AdminAnalyticsService to get tenant-scoped data
       report = analytics_service.income_statement_report(year)
-      
+
       render json: report
     end
 
@@ -68,10 +68,10 @@ module Admin
       # Parse with timezone consideration
       start_date = params[:start].present? ? Time.zone.parse(params[:start]) : (Time.zone.today - 30)
       end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.today
-      
+
       # Use the AdminAnalyticsService to get tenant-scoped data
       report = analytics_service.user_signups_report(start_date, end_date)
-      
+
       render json: report
     end
 
@@ -80,17 +80,17 @@ module Admin
       # Parse with timezone consideration
       start_date = params[:start].present? ? Time.zone.parse(params[:start]) : (Time.zone.today - 30)
       end_date   = params[:end].present?   ? Time.zone.parse(params[:end])   : Time.zone.today
-      
+
       # Use the AdminAnalyticsService to get tenant-scoped data
       report = analytics_service.user_activity_heatmap_report(start_date, end_date)
-      
+
       render json: report
     end
 
     # GET /admin/analytics/staff_users
     def staff_users
       # Get users with staff-like roles who have created orders for the current restaurant
-      staff_users = User.where(role: ['staff', 'admin', 'super_admin'])
+      staff_users = User.where(role: [ "staff", "admin", "super_admin" ])
                        .where(restaurant_id: @current_restaurant.id)
                        .joins(:created_orders)
                        .where(orders: { staff_created: true, restaurant_id: @current_restaurant.id })
@@ -113,22 +113,22 @@ module Admin
     # GET /admin/analytics/menu_items_with_sales
     def menu_items_with_sales
       result = analytics_service.menu_items_with_sales
-      
+
       render json: result
     rescue => e
       Rails.logger.error("Error in menu_items_with_sales: #{e.message}")
-      render json: { error: 'Failed to load menu items' }, status: :internal_server_error
+      render json: { error: "Failed to load menu items" }, status: :internal_server_error
     end
 
     private
-    
+
     # Ensure tenant context is set for all analytics requests
     def ensure_tenant_context
       unless @current_restaurant
         render json: { error: "Restaurant context required" }, status: :unprocessable_entity
       end
     end
-    
+
     # Get the analytics service instance with proper tenant scoping
     def analytics_service
       @analytics_service ||= AdminAnalyticsService.new(@current_restaurant)

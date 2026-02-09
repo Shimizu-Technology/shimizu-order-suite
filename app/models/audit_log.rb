@@ -6,20 +6,20 @@
 #
 class AuditLog < ApplicationRecord
   include TenantScoped
-  
+
   # Associations
   belongs_to :user, optional: true
-  
+
   # Validations
   validates :action, presence: true
-  
+
   # Scopes
-  scope :tenant_access_logs, -> { where(action: 'tenant_access') }
+  scope :tenant_access_logs, -> { where(action: "tenant_access") }
   scope :data_modification_logs, -> { where(action: %w[create update delete]) }
-  scope :suspicious_activity, -> { where(action: 'suspicious_activity') }
-  
+  scope :suspicious_activity, -> { where(action: "suspicious_activity") }
+
   # Class methods for common audit logging scenarios
-  
+
   # Log tenant access
   # @param user [User] The user accessing the tenant
   # @param restaurant [Restaurant] The tenant being accessed
@@ -30,14 +30,14 @@ class AuditLog < ApplicationRecord
     create(
       user_id: user&.id,
       restaurant_id: restaurant&.id,
-      action: 'tenant_access',
-      resource_type: 'Restaurant',
+      action: "tenant_access",
+      resource_type: "Restaurant",
       resource_id: restaurant&.id,
       ip_address: ip_address,
       details: details
     )
   end
-  
+
   # Log cross-tenant access attempt
   # @param user [User] The user attempting cross-tenant access
   # @param target_restaurant_id [Integer] The ID of the tenant being accessed
@@ -48,18 +48,18 @@ class AuditLog < ApplicationRecord
     create(
       user_id: user&.id,
       restaurant_id: user&.restaurant_id,
-      action: 'suspicious_activity',
-      resource_type: 'Restaurant',
+      action: "suspicious_activity",
+      resource_type: "Restaurant",
       resource_id: target_restaurant_id,
       ip_address: ip_address,
       details: details.merge({
-        attempt_type: 'cross_tenant_access',
+        attempt_type: "cross_tenant_access",
         user_restaurant_id: user&.restaurant_id,
         target_restaurant_id: target_restaurant_id
       })
     )
   end
-  
+
   # Log data modification
   # @param user [User] The user modifying the data
   # @param action [String] The action being performed (create, update, delete)
