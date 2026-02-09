@@ -7,10 +7,10 @@ class CreatePushSubscriptions < ActiveRecord::Migration[7.2]
       t.string :auth_key, null: false
       t.string :user_agent
       t.boolean :active, default: true
-      
+
       t.timestamps
-      
-      t.index [:restaurant_id, :endpoint], unique: true
+
+      t.index [ :restaurant_id, :endpoint ], unique: true
     end
   end
 end

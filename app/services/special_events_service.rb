@@ -13,7 +13,7 @@ class SpecialEventsService < TenantScopedService
   # Create a new special event for the current restaurant
   def create_event(event_params)
     event = scope_query(SpecialEvent).new(event_params)
-    
+
     if event.save
       { success: true, event: event, status: :created }
     else
@@ -24,7 +24,7 @@ class SpecialEventsService < TenantScopedService
   # Update an existing special event for the current restaurant
   def update_event(id, event_params)
     event = scope_query(SpecialEvent).find(id)
-    
+
     if event.update(event_params)
       { success: true, event: event }
     else

@@ -8,19 +8,19 @@ class User < ApplicationRecord
   # Super admin users might not be associated with a specific restaurant
   # So we keep the restaurant association optional but add validation in a custom method
   belongs_to :restaurant, optional: true
-  
+
   # Custom validation for restaurant_id based on role
   validate :validate_restaurant_association
-  
+
   # Override default scope to handle super_admin users without restaurant context
   default_scope { with_restaurant_scope }
-  
+
   # Method to scope by current restaurant if applicable, with special handling for super_admin
   def self.with_restaurant_scope
     if ApplicationRecord.current_restaurant && column_names.include?("restaurant_id")
       # For queries, we want to include both users from the current restaurant
       # and super_admin users that might not have a restaurant_id
-      where("restaurant_id = ? OR (role = 'super_admin' AND restaurant_id IS NULL)", 
+      where("restaurant_id = ? OR (role = 'super_admin' AND restaurant_id IS NULL)",
             ApplicationRecord.current_restaurant.id)
     else
       all
@@ -30,12 +30,12 @@ class User < ApplicationRecord
   # Add associations for order acknowledgments
   has_many :order_acknowledgments, dependent: :destroy
   has_many :acknowledged_orders, through: :order_acknowledgments, source: :order
-  
+
   # Staff member association
   has_one :staff_member, dependent: :nullify
-  
+
   # Orders created by this user
-  has_many :created_orders, class_name: 'Order', foreign_key: 'created_by_user_id', dependent: :nullify
+  has_many :created_orders, class_name: "Order", foreign_key: "created_by_user_id", dependent: :nullify
 
   has_secure_password
 
@@ -71,25 +71,25 @@ class User < ApplicationRecord
   def super_admin?
     role == "super_admin"
   end
-  
+
   def admin?
     role == "admin"
   end
-  
+
   def staff?
     role == "staff"
   end
-  
+
   def customer?
     role == "customer"
   end
-  
+
   def admin_or_above?
-    role.in?(["admin", "super_admin"])
+    role.in?([ "admin", "super_admin" ])
   end
-  
+
   def staff_or_above?
-    role.in?(["staff", "admin", "super_admin"])
+    role.in?([ "staff", "admin", "super_admin" ])
   end
 
   # -----------------------------------------------------------
@@ -123,12 +123,12 @@ class User < ApplicationRecord
   def downcase_email
     self.email = email.downcase
   end
-  
+
   # Validate restaurant association based on role
   def validate_restaurant_association
     # Super admin users can exist without a restaurant association
     # All other user types must be associated with a restaurant
-    if role != 'super_admin' && restaurant_id.blank?
+    if role != "super_admin" && restaurant_id.blank?
       errors.add(:restaurant_id, "must be present for non-super_admin users")
     end
   end

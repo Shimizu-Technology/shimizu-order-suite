@@ -1,6 +1,6 @@
 class Reservation < ApplicationRecord
   include TenantScoped
-  
+
   # Force ActiveRecord to treat them as real columns:
   attribute :seat_preferences, :json, default: []
   attribute :duration_minutes, :integer, default: 60
@@ -15,7 +15,7 @@ class Reservation < ApplicationRecord
             numericality: { greater_than: 0 }
   validates :contact_name, presence: true
   validates :reservation_number, uniqueness: true, allow_nil: true
-  
+
   # Generate and assign a reservation number before creation
   before_create :assign_reservation_number
 
@@ -29,7 +29,7 @@ class Reservation < ApplicationRecord
 
   # Auto-calculate end_time from duration_minutes
   before_save :update_end_time_from_duration
-  
+
   # Set default location if none provided
   before_validation :set_default_location, on: :create
 
@@ -58,16 +58,16 @@ class Reservation < ApplicationRecord
 
   def assign_reservation_number
     return if reservation_number.present? # Skip if already assigned
-    
+
     # Make sure we have a restaurant_id
     unless restaurant_id.present?
       Rails.logger.error("Cannot assign reservation number: restaurant_id is missing for reservation")
       return
     end
-    
+
     # Generate a new reservation number using the ReservationCounter
     self.reservation_number = ReservationCounter.next_reservation_number(restaurant_id)
-    
+
     # Log for debugging
     Rails.logger.info("Assigned reservation number #{reservation_number} to reservation for restaurant #{restaurant_id}")
   rescue => e
@@ -75,26 +75,26 @@ class Reservation < ApplicationRecord
     Rails.logger.error("Error assigning reservation number: #{e.message}")
     Rails.logger.error(e.backtrace.join("\n"))
   end
-  
+
   def update_end_time_from_duration
     return if start_time.blank?
 
     self.duration_minutes ||= 60  # default to 60 if not provided
     self.end_time = start_time + duration_minutes.minutes
   end
-  
+
   def set_default_location
     # Only set default location if restaurant exists and no location is specified
     return unless restaurant_id.present? && location_id.blank?
-    
+
     begin
       # Find the restaurant
       restaurant = Restaurant.find_by(id: restaurant_id)
       return unless restaurant
-      
+
       # Try to find the default location for this restaurant
       default_location = restaurant.default_location
-      
+
       if default_location
         self.location_id = default_location.id
         Rails.logger.info "Setting default location (#{default_location.name}) for reservation"

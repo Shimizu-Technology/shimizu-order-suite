@@ -2,13 +2,13 @@
 
 class SeatSectionsController < ApplicationController
   include TenantIsolation
-  
+
   before_action :authorize_request
   before_action :ensure_tenant_context
 
   def index
     result = seat_section_service.list_seat_sections(params[:layout_id])
-    
+
     if result[:success]
       render json: result[:seat_sections]
     else
@@ -18,7 +18,7 @@ class SeatSectionsController < ApplicationController
 
   def show
     result = seat_section_service.find_seat_section(params[:id])
-    
+
     if result[:success]
       render json: result[:seat_section]
     else
@@ -29,18 +29,18 @@ class SeatSectionsController < ApplicationController
   def create
     # Process the section parameters
     section_params = prepare_section_params
-    
+
     # Add auto-generated seats if it's a table with capacity > 1
-    if section_params[:section_type] == "table" && 
-       section_params[:capacity].present? && 
+    if section_params[:section_type] == "table" &&
+       section_params[:capacity].present? &&
        section_params[:capacity] > 1
-      
+
       section_params[:seats] = generate_table_seats_params(section_params)
     end
-    
+
     # Create the seat section using the service
     result = seat_section_service.create_seat_section(section_params)
-    
+
     if result[:success]
       render json: result[:seat_section], status: :created
     else
@@ -51,10 +51,10 @@ class SeatSectionsController < ApplicationController
   def update
     # Process the section parameters
     update_params = prepare_update_params
-    
+
     # Update the seat section using the service
     result = seat_section_service.update_seat_section(params[:id], update_params)
-    
+
     if result[:success]
       render json: result[:seat_section]
     else
@@ -64,7 +64,7 @@ class SeatSectionsController < ApplicationController
 
   def destroy
     result = seat_section_service.delete_seat_section(params[:id])
-    
+
     if result[:success]
       head :no_content
     else
@@ -73,7 +73,7 @@ class SeatSectionsController < ApplicationController
   end
 
   private
-  
+
   def seat_section_service
     @seat_section_service ||= begin
       service = SeatSectionService.new(current_restaurant)
@@ -81,13 +81,13 @@ class SeatSectionsController < ApplicationController
       service
     end
   end
-  
+
   def ensure_tenant_context
     unless current_restaurant.present?
-      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+      render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
     end
   end
-  
+
   def prepare_section_params
     params.require(:seat_section).permit(
       :layout_id,
@@ -100,7 +100,7 @@ class SeatSectionsController < ApplicationController
       :floor_number
     ).to_h
   end
-  
+
   def prepare_update_params
     params.require(:seat_section).permit(
       :name,
@@ -112,7 +112,7 @@ class SeatSectionsController < ApplicationController
       :floor_number
     ).to_h
   end
-  
+
   # Generate seat parameters for a table
   def generate_table_seats_params(section_params)
     # e.g. place them in a line, or a small circle around offset_x, offset_y
@@ -120,7 +120,7 @@ class SeatSectionsController < ApplicationController
     base_x = 0
     base_y = 0
     seats = []
-    
+
     (1..section_params[:capacity]).each do |i|
       seats << {
         label: "#{section_params[:name]}#{i}",
@@ -129,7 +129,7 @@ class SeatSectionsController < ApplicationController
         capacity: 1
       }
     end
-    
+
     seats
   end
 end

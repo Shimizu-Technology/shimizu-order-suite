@@ -96,7 +96,7 @@ oh_data = [
 oh_data.each do |row|
   # First try to find existing record
   oh = OperatingHour.find_by(restaurant_id: crab_daddy.id, day_of_week: row[:day_of_week])
-  
+
   if oh
     # Update existing record
     oh.update!(
@@ -114,7 +114,7 @@ oh_data.each do |row|
       closed: row[:closed]
     )
   end
-  
+
   # Print the day name and hours
   day_names = %w[Sunday Monday Tuesday Wednesday Thursday Friday Saturday]
   puts " - #{day_names[row[:day_of_week]]} => #{row[:open_time].to_s[0..4]}–#{row[:close_time].to_s[0..4]}"
@@ -195,7 +195,7 @@ placeholder_image_url = "https://via.placeholder.com/300x200.png?text=Crab+Daddy
 def create_menu_item(menu, category, name, description = nil, price = 0.0, is_available = true)
   # Check if the menu item already exists
   existing_item = MenuItem.find_by(menu_id: menu.id, name: name)
-  
+
   if existing_item
     # Update the existing item
     existing_item.update!(
@@ -204,13 +204,13 @@ def create_menu_item(menu, category, name, description = nil, price = 0.0, is_av
       available: is_available,
       image_url: "https://via.placeholder.com/300x200.png?text=#{name.gsub(' ', '+')}"
     )
-    
+
     # Make sure it's associated with the category
     unless existing_item.categories.include?(category)
       existing_item.categories << category
     end
-    
-    return existing_item
+
+    existing_item
   else
     # Create a new item with category association in a transaction
     MenuItem.transaction do
@@ -223,13 +223,13 @@ def create_menu_item(menu, category, name, description = nil, price = 0.0, is_av
         available: is_available,
         image_url: "https://via.placeholder.com/300x200.png?text=#{name.gsub(' ', '+')}"
       )
-      
+
       # Associate with category before saving
       item.categories << category
-      
+
       # Save the item
       item.save!
-      
+
       return item
     end
   end
@@ -282,10 +282,10 @@ end
 # BUILD-YOUR-OWN SEAFOOD BOIL
 # Create the base menu item
 build_your_own = create_menu_item(
-  main_menu, 
-  categories[:build_your_own], 
-  "Build Your Own Seafood Boil", 
-  "Create your own custom seafood boil", 
+  main_menu,
+  categories[:build_your_own],
+  "Build Your Own Seafood Boil",
+  "Create your own custom seafood boil",
   15.95
 )
 
@@ -352,7 +352,7 @@ seafood_options.each do |option_data|
 end
 
 # Sauce options
-sauce_options = ["Cajun", "Garlic", "Lemon Pepper", "The Works"]
+sauce_options = [ "Cajun", "Garlic", "Lemon Pepper", "The Works" ]
 sauce_options.each do |sauce|
   Option.find_or_create_by!(
     option_group_id: sauce_group.id,
@@ -364,7 +364,7 @@ sauce_options.each do |sauce|
 end
 
 # Heat options
-heat_options = ["Non-Spicy", "Medium", "Hot", "Atomic"]
+heat_options = [ "Non-Spicy", "Medium", "Hot", "Atomic" ]
 heat_options.each do |heat|
   Option.find_or_create_by!(
     option_group_id: heat_group.id,

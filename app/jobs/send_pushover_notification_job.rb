@@ -20,30 +20,30 @@ class SendPushoverNotificationJob < ApplicationJob
     Rails.logger.info("Title: #{title}")
     Rails.logger.info("Priority: #{priority}")
     Rails.logger.info("Sound: #{sound}")
-    
+
     # Find the restaurant
     restaurant = Restaurant.find_by(id: restaurant_id)
-    
+
     # Return if restaurant not found or no Pushover keys are set
     unless restaurant
       Rails.logger.error("Restaurant not found with ID: #{restaurant_id}")
       return
     end
-    
+
     unless restaurant.pushover_enabled?
       Rails.logger.info("Pushover is not enabled for restaurant: #{restaurant.id} - #{restaurant.name}")
       return
     end
-    
+
     # Get the user key from the restaurant
     user_key = restaurant.pushover_recipient_key
     unless user_key.present?
       Rails.logger.error("No Pushover recipient key found for restaurant: #{restaurant.id} - #{restaurant.name}")
       return
     end
-    
+
     Rails.logger.info("Sending Pushover notification to user_key: #{user_key}")
-    
+
     # Send the notification
     result = PushoverClient.send_notification(
       user_key: user_key,
@@ -55,7 +55,7 @@ class SendPushoverNotificationJob < ApplicationJob
       url: url,
       url_title: url_title
     )
-    
+
     if result
       Rails.logger.info("Pushover notification sent successfully")
     else

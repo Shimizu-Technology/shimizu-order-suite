@@ -30,14 +30,14 @@ class Seat < ApplicationRecord
 
   # Staff can rename the seat by updating the :label field
   # Example: seat.update(label: "A1")
-  
+
   # Find seats with a specific category
   # @param category [String] The category to filter by
   # @return [ActiveRecord::Relation] Seats with the specified category
   def self.with_category(category)
     where(category: category)
   end
-  
+
   # Find seats in a specific location
   # @param location_id [Integer] The location ID to filter by
   # @return [ActiveRecord::Relation] Seats in the specified location
@@ -50,13 +50,13 @@ class Seat < ApplicationRecord
   # @return [Boolean] true if the seat can accommodate the party, false otherwise
   def is_available_for_party_size?(party_size)
     return false if party_size.nil? || !party_size.is_a?(Integer) || party_size <= 0
-    
+
     # A party must be at least as large as min_capacity
     return false if party_size < min_capacity
-    
+
     # If max_capacity is set, the party must not exceed it
     return false if max_capacity.present? && party_size > max_capacity
-    
+
     # Otherwise, the seat can accommodate the party
     true
   end
@@ -68,7 +68,7 @@ class Seat < ApplicationRecord
   after_update :debug_after_update
 
   private
-  
+
   # Validate that max_capacity is greater than or equal to min_capacity when present
   def max_capacity_is_valid
     if max_capacity.present? && max_capacity < min_capacity

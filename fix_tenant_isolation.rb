@@ -7,7 +7,7 @@ puts "Starting tenant isolation and CORS fix script..."
 hafaloha = Restaurant.find_by(name: "Hafaloha")
 if hafaloha
   puts "Found Hafaloha restaurant (ID: #{hafaloha.id})"
-  
+
   # Update allowed origins with all necessary domains
   hafaloha.update(
     allowed_origins: [
@@ -28,7 +28,7 @@ end
 shimizu = Restaurant.find_by(name: "Shimizu Technology")
 if shimizu
   puts "Found Shimizu Technology restaurant (ID: #{shimizu.id})"
-  
+
   # Update allowed origins with all necessary domains
   shimizu.update(
     allowed_origins: [
@@ -63,13 +63,13 @@ end
 Restaurant.all.each do |restaurant|
   puts "Restaurant: #{restaurant.name} (ID: #{restaurant.id})"
   puts "  Allowed origins: #{restaurant.allowed_origins.inspect}"
-  
+
   # Check if any important origins are missing
   if restaurant.name == "Hafaloha"
     missing_origins = []
     missing_origins << "https://hafaloha-orders.com" unless restaurant.allowed_origins.include?("https://hafaloha-orders.com")
     missing_origins << "https://hafaloha.netlify.app" unless restaurant.allowed_origins.include?("https://hafaloha.netlify.app")
-    
+
     if missing_origins.any?
       puts "  ❌ Missing important origins: #{missing_origins.join(', ')}"
     else
@@ -78,7 +78,7 @@ Restaurant.all.each do |restaurant|
   elsif restaurant.name == "Shimizu Technology"
     missing_origins = []
     missing_origins << "https://shimizu-order-suite.netlify.app" unless restaurant.allowed_origins.include?("https://shimizu-order-suite.netlify.app")
-    
+
     if missing_origins.any?
       puts "  ❌ Missing important origins: #{missing_origins.join(', ')}"
     else

@@ -48,7 +48,7 @@ RSpec.describe PaymentsController, type: :controller do
       before do
         allow(mock_service).to receive(:generate_client_token).and_return({
           success: false,
-          errors: ['Failed to generate client token: Test error'],
+          errors: [ 'Failed to generate client token: Test error' ],
           status: :service_unavailable
         })
       end

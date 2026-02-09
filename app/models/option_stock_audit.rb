@@ -1,8 +1,8 @@
 class OptionStockAudit < ApplicationRecord
   include IndirectTenantScoped
-  
+
   # Define the path to restaurant for tenant isolation (through option -> option_group -> menu_item -> menu)
-  tenant_path through: [:option, :option_group, :menu_item, :menu], foreign_key: 'restaurant_id'
+  tenant_path through: [ :option, :option_group, :menu_item, :menu ], foreign_key: "restaurant_id"
 
   belongs_to :option
   belongs_to :user, optional: true
@@ -48,9 +48,9 @@ class OptionStockAudit < ApplicationRecord
 
     full_reason = if reason_details.present?
                     "#{REASONS[reason_type.to_sym]}: #{reason_details}"
-                  else
+    else
                     REASONS[reason_type.to_sym]
-                  end
+    end
 
     create!(
       option: option,

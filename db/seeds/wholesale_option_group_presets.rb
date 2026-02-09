@@ -6,7 +6,7 @@ puts "Creating default wholesale option group presets..."
 # Find all restaurants to create presets for
 Restaurant.find_each do |restaurant|
   puts "  Creating presets for restaurant: #{restaurant.name}"
-  
+
   # Youth & Adult Sizes preset
   unless restaurant.wholesale_option_group_presets.exists?(name: "Youth & Adult Sizes")
     preset = restaurant.wholesale_option_group_presets.create!(
@@ -18,7 +18,7 @@ Restaurant.find_each do |restaurant|
       position: 1,
       enable_inventory_tracking: false
     )
-    
+
     # Create size options
     size_options = [
       { name: "Youth XS", additional_price: 0, available: true, position: 1 },
@@ -33,14 +33,14 @@ Restaurant.find_each do |restaurant|
       { name: "Adult 2XL", additional_price: 4, available: true, position: 10 },
       { name: "Adult 3XL", additional_price: 6, available: true, position: 11 }
     ]
-    
+
     size_options.each do |option_data|
       preset.option_presets.create!(option_data)
     end
-    
+
     puts "    Created: Youth & Adult Sizes preset with #{size_options.length} options"
   end
-  
+
   # Standard Colors preset
   unless restaurant.wholesale_option_group_presets.exists?(name: "Standard Colors")
     preset = restaurant.wholesale_option_group_presets.create!(
@@ -52,7 +52,7 @@ Restaurant.find_each do |restaurant|
       position: 2,
       enable_inventory_tracking: false
     )
-    
+
     # Create color options
     color_options = [
       { name: "Black", additional_price: 0, available: true, position: 1 },
@@ -64,14 +64,14 @@ Restaurant.find_each do |restaurant|
       { name: "Forest Green", additional_price: 0, available: true, position: 7 },
       { name: "Maroon", additional_price: 0, available: true, position: 8 }
     ]
-    
+
     color_options.each do |option_data|
       preset.option_presets.create!(option_data)
     end
-    
+
     puts "    Created: Standard Colors preset with #{color_options.length} options"
   end
-  
+
   # Adult Sizes Only preset
   unless restaurant.wholesale_option_group_presets.exists?(name: "Adult Sizes Only")
     preset = restaurant.wholesale_option_group_presets.create!(
@@ -83,7 +83,7 @@ Restaurant.find_each do |restaurant|
       position: 3,
       enable_inventory_tracking: false
     )
-    
+
     # Create adult size options
     adult_size_options = [
       { name: "S", additional_price: 0, available: true, position: 1 },
@@ -94,14 +94,14 @@ Restaurant.find_each do |restaurant|
       { name: "3XL", additional_price: 4, available: true, position: 6 },
       { name: "4XL", additional_price: 6, available: true, position: 7 }
     ]
-    
+
     adult_size_options.each do |option_data|
       preset.option_presets.create!(option_data)
     end
-    
+
     puts "    Created: Adult Sizes Only preset with #{adult_size_options.length} options"
   end
-  
+
   # Premium Colors preset
   unless restaurant.wholesale_option_group_presets.exists?(name: "Premium Colors")
     preset = restaurant.wholesale_option_group_presets.create!(
@@ -113,7 +113,7 @@ Restaurant.find_each do |restaurant|
       position: 4,
       enable_inventory_tracking: false
     )
-    
+
     # Create premium color options
     premium_color_options = [
       { name: "Black", additional_price: 0, available: true, position: 1 },
@@ -127,14 +127,14 @@ Restaurant.find_each do |restaurant|
       { name: "Deep Purple", additional_price: 2, available: true, position: 9 },
       { name: "Gold", additional_price: 3, available: true, position: 10 }
     ]
-    
+
     premium_color_options.each do |option_data|
       preset.option_presets.create!(option_data)
     end
-    
+
     puts "    Created: Premium Colors preset with #{premium_color_options.length} options"
   end
-  
+
   # Material Options preset
   unless restaurant.wholesale_option_group_presets.exists?(name: "Material Options")
     preset = restaurant.wholesale_option_group_presets.create!(
@@ -146,7 +146,7 @@ Restaurant.find_each do |restaurant|
       position: 5,
       enable_inventory_tracking: false
     )
-    
+
     # Create material options
     material_options = [
       { name: "Cotton", additional_price: 0, available: true, position: 1 },
@@ -155,14 +155,14 @@ Restaurant.find_each do |restaurant|
       { name: "Organic Cotton", additional_price: 2, available: true, position: 4 },
       { name: "Bamboo Blend", additional_price: 4, available: true, position: 5 }
     ]
-    
+
     material_options.each do |option_data|
       preset.option_presets.create!(option_data)
     end
-    
+
     puts "    Created: Material Options preset with #{material_options.length} options"
   end
-  
+
   puts "  Completed presets for restaurant: #{restaurant.name}"
 end
 

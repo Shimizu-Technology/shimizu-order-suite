@@ -2,23 +2,23 @@
 
 class PasswordsController < ApplicationController
   include TenantIsolation
-  
+
   # Override global_access_permitted to allow password reset endpoints to work without a tenant context
   def global_access_permitted?
     action_name.in?([ "forgot", "reset" ])
   end
-  
+
   # Skip ensure_tenant_context for password reset actions
-  skip_before_action :set_current_tenant, only: [:forgot, :reset]
+  skip_before_action :set_current_tenant, only: [ :forgot, :reset ]
 
   # POST /password/forgot
   def forgot
     # Extract restaurant_id from params or headers
-    restaurant_id = params[:restaurant_id] || request.headers['X-Frontend-Restaurant-ID']
-    
+    restaurant_id = params[:restaurant_id] || request.headers["X-Frontend-Restaurant-ID"]
+
     # Use the PasswordService to handle the forgot password request with restaurant context
     result = password_service.forgot_password(params[:email], restaurant_id)
-    
+
     if result[:success]
       render json: { message: result[:message] }
     else
@@ -29,8 +29,8 @@ class PasswordsController < ApplicationController
   # PATCH /password/reset
   def reset
     # Extract restaurant_id from params or headers
-    restaurant_id = params[:restaurant_id] || request.headers['X-Frontend-Restaurant-ID']
-    
+    restaurant_id = params[:restaurant_id] || request.headers["X-Frontend-Restaurant-ID"]
+
     # Use the PasswordService to handle the password reset with restaurant context
     result = password_service.reset_password(
       params[:email],
@@ -39,7 +39,7 @@ class PasswordsController < ApplicationController
       params[:new_password_confirmation],
       restaurant_id
     )
-    
+
     if result[:success]
       render json: {
         message: result[:message],
@@ -50,9 +50,9 @@ class PasswordsController < ApplicationController
       render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
   end
-  
+
   private
-  
+
   # Get the password service instance
   def password_service
     @password_service ||= PasswordService.new(analytics)

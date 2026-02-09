@@ -3,18 +3,18 @@
 class MenuItem < ApplicationRecord
   # First define the belongs_to association before any has_many :through associations
   belongs_to :menu
-  
+
   # Include IndirectTenantScoped after defining the menu association
   include IndirectTenantScoped
-  
+
   # Define the path to restaurant for tenant isolation
-  tenant_path through: :menu, foreign_key: 'restaurant_id'
-  
+  tenant_path through: :menu, foreign_key: "restaurant_id"
+
   # Include Broadcastable after defining the associations it depends on
   include Broadcastable
-  
+
   # Define which attributes should trigger broadcasts
-  broadcasts_on :name, :price, :description, :stock_quantity, :damaged_quantity, 
+  broadcasts_on :name, :price, :description, :stock_quantity, :damaged_quantity,
                :low_stock_threshold, :enable_stock_tracking, :hidden, :featured
 
   has_many :option_groups, dependent: :destroy
@@ -175,9 +175,9 @@ class MenuItem < ApplicationRecord
     # Only update if status has changed
     if stock_status != new_status.to_s
       update_column(:stock_status, stock_status_before_type_cast)
-      
+
       # Broadcast low stock notification if status changed to low_stock
-      if new_status == :low_stock && old_status != 'low_stock'
+      if new_status == :low_stock && old_status != "low_stock"
         # Use the WebsocketBroadcastService to broadcast the low stock notification
         WebsocketBroadcastService.broadcast_low_stock(self)
       end
@@ -193,7 +193,7 @@ class MenuItem < ApplicationRecord
 
   scope :currently_available, -> {
     day_of_week = Date.current.wday
-    
+
     where(available: true)
       .where(<<-SQL.squish, today: Date.current)
         (
@@ -207,21 +207,21 @@ class MenuItem < ApplicationRecord
       SQL
       .where("available_days IS NULL OR available_days = '[]' OR available_days::jsonb ? :day", day: day_of_week.to_s)
   }
-  
+
   # Check if item is available on the current day based on restaurant's time zone
   def available_on_current_day?
     return true if available_days.blank? || available_days.empty?
-    
+
     restaurant_time = Time.current.in_time_zone(restaurant.time_zone)
     current_day = restaurant_time.wday
-    
+
     # Convert available_days to an array of integers if it's not already
     days_array = if available_days.is_a?(Array)
                    available_days.map(&:to_i)
-                 else
-                   [available_days.to_i]
-                 end
-    
+    else
+                   [ available_days.to_i ]
+    end
+
     days_array.include?(current_day)
   end
 
@@ -229,7 +229,7 @@ class MenuItem < ApplicationRecord
   def has_required_groups_with_unavailable_options?
     option_groups.any? { |group| group.required_but_unavailable? }
   end
-  
+
   # Get the list of required option groups with all options unavailable
   def required_groups_with_unavailable_options
     option_groups.select { |group| group.required_but_unavailable? }
@@ -251,29 +251,29 @@ class MenuItem < ApplicationRecord
   # Check if option inventory totals match menu item inventory
   def option_inventory_matches_item_inventory?
     return true unless uses_option_level_inventory?
-    
+
     tracking_group = option_inventory_tracking_group
     return true unless tracking_group
-    
+
     tracking_group.total_option_stock == stock_quantity.to_i
   end
 
   # Sync option inventory with menu item inventory
   def sync_option_inventory_with_item!
     return false unless uses_option_level_inventory?
-    
+
     tracking_group = option_inventory_tracking_group
     return false unless tracking_group
-    
+
     current_total = tracking_group.total_option_stock
     target_total = stock_quantity.to_i
-    
+
     if current_total != target_total
       difference = target_total - current_total
       # Distribute the difference proportionally across options
       distribute_stock_difference_to_options(tracking_group, difference)
     end
-    
+
     true
   end
 
@@ -296,7 +296,7 @@ class MenuItem < ApplicationRecord
       enable_stock_tracking && available_quantity <= 0
     end
   end
-  
+
   # as_json => only expose category_ids, not full objects
   def as_json(options = {})
     result = super(options).merge(
@@ -342,16 +342,16 @@ class MenuItem < ApplicationRecord
 
   # Distribute stock difference across options proportionally
   def distribute_stock_difference_to_options(tracking_group, difference)
-    options_with_stock = tracking_group.options.where('stock_quantity > 0')
+    options_with_stock = tracking_group.options.where("stock_quantity > 0")
     return if options_with_stock.empty?
-    
+
     # Simple proportional distribution
     per_option = difference / options_with_stock.count
     remainder = difference % options_with_stock.count
-    
+
     options_with_stock.each_with_index do |option, index|
       additional = index < remainder ? 1 : 0
-      new_quantity = [option.stock_quantity + per_option + additional, 0].max
+      new_quantity = [ option.stock_quantity + per_option + additional, 0 ].max
       option.update_column(:stock_quantity, new_quantity)
     end
   end
@@ -376,9 +376,9 @@ class MenuItem < ApplicationRecord
   def reset_damaged_quantity_if_tracking_enabled
     if enable_stock_tracking_changed? && enable_stock_tracking
       self.damaged_quantity = 0
-      
+
       Rails.logger.info("Menu item #{id} (#{name}) - Inventory tracking enabled: damaged_quantity reset to 0 for fresh start")
-      
+
       # Also reset ALL option quantities when menu item tracking is enabled for fresh start
       reset_all_option_quantities("Menu item inventory tracking enabled - fresh start")
     end
@@ -431,13 +431,13 @@ class MenuItem < ApplicationRecord
   # Reset all option quantities when menu item inventory tracking is disabled
   def reset_all_option_quantities(reason)
     return unless option_groups.exists?
-    
+
     Rails.logger.info("Menu item #{id} (#{name}) - Resetting all option quantities: #{reason}")
-    
+
     option_groups.each do |group|
       group.reset_quantities(reason)
     end
-    
+
     Rails.logger.info("Menu item #{id} (#{name}) - Completed resetting option quantities for #{option_groups.count} option groups")
   end
 end
