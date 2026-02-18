@@ -26,10 +26,10 @@ class UserManagementService < TenantScopedService
     if params[:role].present? && params[:role] != "all"
       users = users.where(role: params[:role])
     end
-    
+
     # Exclude super_admin users for non-super_admin users
-    if params[:exclude_super_admin] == 'true' && !current_user.super_admin?
-      users = users.where.not(role: 'super_admin')
+    if params[:exclude_super_admin] == "true" && !current_user.super_admin?
+      users = users.where.not(role: "super_admin")
     end
 
     total_count = users.count
@@ -48,18 +48,18 @@ class UserManagementService < TenantScopedService
   # Create a new user
   def create_user(user_params, current_user)
     user = User.new(user_params)
-    
+
     # Set restaurant_id to current restaurant if not explicitly set
     user.restaurant_id ||= @restaurant.id
-    
+
     # Check if trying to create super_admin when not authorized
-    if user.role == 'super_admin' && !current_user.super_admin?
-      return { success: false, errors: ["Only Super Admins can create Super Admin accounts"], status: :forbidden }
+    if user.role == "super_admin" && !current_user.super_admin?
+      return { success: false, errors: [ "Only Super Admins can create Super Admin accounts" ], status: :forbidden }
     end
 
     # Track whether admin provided a password
     password_provided = user_params[:password].present?
-    
+
     # If admin didn't supply a password => generate random and prepare for invite email
     if user_params[:password].blank?
       user.password = SecureRandom.hex(10)  # random 20-char hex
@@ -73,7 +73,7 @@ class UserManagementService < TenantScopedService
         raw_token = user.generate_reset_password_token!
         PasswordMailer.reset_password(user, raw_token).deliver_later
       end
-      
+
       { success: true, user: user, status: :created }
     else
       { success: false, errors: user.errors.full_messages, status: :unprocessable_entity }
@@ -83,17 +83,17 @@ class UserManagementService < TenantScopedService
   # Update an existing user
   def update_user(user_id, user_params, current_user)
     user = scope_query(User).find(user_id)
-    
+
     # Check if trying to update to super_admin when not authorized
-    if user_params[:role] == 'super_admin' && !current_user.super_admin?
-      return { success: false, errors: ["Only Super Admins can assign the Super Admin role"], status: :forbidden }
+    if user_params[:role] == "super_admin" && !current_user.super_admin?
+      return { success: false, errors: [ "Only Super Admins can assign the Super Admin role" ], status: :forbidden }
     end
-    
+
     # Prevent non-super_admin from updating super_admin users
-    if user.role == 'super_admin' && !current_user.super_admin?
-      return { success: false, errors: ["You do not have permission to edit Super Admin users"], status: :forbidden }
+    if user.role == "super_admin" && !current_user.super_admin?
+      return { success: false, errors: [ "You do not have permission to edit Super Admin users" ], status: :forbidden }
     end
-    
+
     if user.update(user_params)
       { success: true, user: user }
     else
@@ -135,7 +135,7 @@ class UserManagementService < TenantScopedService
   # Resend invitation to a user
   def resend_invite(user_id)
     user = scope_query(User).find(user_id)
-    
+
     # Re-generate reset token & re-send the same "reset password" email
     raw_token = user.generate_reset_password_token!
     PasswordMailer.reset_password(user, raw_token).deliver_later
@@ -149,7 +149,7 @@ class UserManagementService < TenantScopedService
 
     # Validate password
     if new_password.blank? || new_password.length < 6
-      return { success: false, errors: ["Password must be at least 6 characters"], status: :unprocessable_entity }
+      return { success: false, errors: [ "Password must be at least 6 characters" ], status: :unprocessable_entity }
     end
 
     # Update the user's password
@@ -161,16 +161,16 @@ class UserManagementService < TenantScopedService
       { success: false, errors: user.errors.full_messages, status: :unprocessable_entity }
     end
   end
-  
+
   # Get the current user from the service context
   def current_user
     @current_user
   end
-  
+
   # Set the current user for the service
   def current_user=(user)
     @current_user = user
   end
-  
+
   private
 end

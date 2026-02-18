@@ -2,7 +2,7 @@
 
 class OrdersController < ApplicationController
   include TenantIsolation
-  
+
   before_action :authorize_request, except: [ :create, :show ]
   before_action :ensure_tenant_context
 
@@ -13,18 +13,18 @@ class OrdersController < ApplicationController
     @orders = policy_scope(Order)
 
     # Enhanced filtering logic consolidated from staff_orders method
-    
+
     # Filter for online orders only (customer orders)
-    if params[:online_orders_only].present? && params[:online_orders_only] == 'true'
+    if params[:online_orders_only].present? && params[:online_orders_only] == "true"
       @orders = @orders.where(staff_created: false, is_staff_order: false)
     end
 
     # Filter by staff member if provided
     if params[:staff_member_id].present?
       # Handle both user ID (admin/super_admin) or staff member ID formats
-      if params[:staff_member_id].to_s.include?('user_')
+      if params[:staff_member_id].to_s.include?("user_")
         # Extract user ID from 'user_123' format
-        user_id = params[:staff_member_id].to_s.gsub('user_', '')
+        user_id = params[:staff_member_id].to_s.gsub("user_", "")
         @orders = @orders.where(created_by_user_id: user_id)
       else
         # This is a staff member ID
@@ -35,9 +35,9 @@ class OrdersController < ApplicationController
     # Filter by user_id if provided (for admin-created orders)
     if params[:user_id].present?
       user_orders = @orders.where(created_by_user_id: params[:user_id])
-      
+
       # Include online orders if requested
-      if params[:include_online_orders].present? && params[:include_online_orders] == 'true'
+      if params[:include_online_orders].present? && params[:include_online_orders] == "true"
         online_orders = @orders.where(staff_created: false, is_staff_order: false)
         @orders = user_orders.or(online_orders)
       else
@@ -71,39 +71,39 @@ class OrdersController < ApplicationController
         Rails.logger.info("[DATE FILTER DEBUG] date_from: #{params[:date_from]}")
         Rails.logger.info("[DATE FILTER DEBUG] date_to: #{params[:date_to]}")
         Rails.logger.info("[DATE FILTER DEBUG] Current time in Rails: #{Time.zone.now}")
-        
+
         # Parse the dates with timezone information preserved
         date_from_str = params[:date_from]
         date_to_str = params[:date_to]
-        
+
         # Parse the dates - Time.zone.parse will handle the timezone conversion
         date_from = Time.zone.parse(date_from_str)
         date_to = Time.zone.parse(date_to_str)
-        
+
         # For dates in UTC (ending with Z), adjust for timezone
-        if date_from_str.end_with?('Z') || date_to_str.end_with?('Z')
+        if date_from_str.end_with?("Z") || date_to_str.end_with?("Z")
           Rails.logger.info("[DATE FILTER DEBUG] Detected UTC dates, adjusting for timezone")
           date_from = date_from.beginning_of_day
           date_to = date_to.end_of_day
         end
-        
+
         # Debug log for parsed dates
         Rails.logger.info("[DATE FILTER DEBUG] Parsed dates:")
         Rails.logger.info("[DATE FILTER DEBUG] date_from parsed: #{date_from}")
         Rails.logger.info("[DATE FILTER DEBUG] date_to parsed: #{date_to}")
-        
+
         # Extend the range slightly to ensure we capture all orders
         date_from = date_from - 1.second
         date_to = date_to + 1.second
-        
+
         # Apply date filter
         orders_before_filter = @orders.count
         @orders = @orders.where(created_at: date_from..date_to)
         orders_after_filter = @orders.count
-        
+
         Rails.logger.info("[DATE FILTER DEBUG] Orders count before filter: #{orders_before_filter}")
         Rails.logger.info("[DATE FILTER DEBUG] Orders count after filter: #{orders_after_filter}")
-        
+
       rescue => e
         # Log the error but continue with unfiltered orders
         Rails.logger.error("Error parsing date range: #{e.message}")
@@ -114,48 +114,48 @@ class OrdersController < ApplicationController
     # Search functionality
     if params[:search].present?
       search_term = "%#{params[:search]}%"
-      
+
       # Performance optimization: Use different strategies based on search pattern
       search_queries = []
-      
+
       # 1. Order number search with multiple strategies for better UX
       if params[:search].present?
         raw_search = params[:search].strip
-        
+
         # Strategy 1: Exact order number match (fastest)
         search_queries << @orders.where("order_number = ?", raw_search)
-        
+
         # Strategy 2: Partial order number match (for "HAF-O-123" format)
         search_queries << @orders.where("order_number ILIKE ?", search_term)
-        
+
         # Strategy 3: Handle numeric-only searches (e.g., "123" should match "HAF-O-123")
         if raw_search.match?(/^\d+$/)
           # For numeric searches, look for the number part after the last dash
           numeric_pattern = "%-#{raw_search}"
           search_queries << @orders.where("order_number ILIKE ?", numeric_pattern)
-          
+
           # Also try with leading zeros (e.g., "1" matches "HAF-O-001")
           if raw_search.length <= 3
-            padded_number = raw_search.rjust(3, '0')
+            padded_number = raw_search.rjust(3, "0")
             padded_pattern = "%-#{padded_number}"
             search_queries << @orders.where("order_number ILIKE ?", padded_pattern)
           end
         end
-        
+
         # Strategy 4: Handle partial prefix searches (e.g., "HAF" matches "HAF-O-123")
         if raw_search.match?(/^[A-Za-z]+$/) && raw_search.length >= 2
           prefix_pattern = "#{raw_search}%"
           search_queries << @orders.where("order_number ILIKE ?", prefix_pattern)
         end
       end
-      
+
       # 2. Basic order fields search (existing functionality)
       basic_search = @orders.where(
         "id::text ILIKE ? OR contact_name ILIKE ? OR contact_email ILIKE ? OR contact_phone ILIKE ? OR special_instructions ILIKE ?",
         search_term, search_term, search_term, search_term, search_term
       )
       search_queries << basic_search
-      
+
       # 3. Order items search using JSON operators (existing functionality)
       item_search = @orders.where(
         "EXISTS (
@@ -164,7 +164,7 @@ class OrdersController < ApplicationController
         )", search_term, search_term
       )
       search_queries << item_search
-      
+
       # Combine all search results using UNION for better performance
       # This is more efficient than multiple OR conditions
       if search_queries.length > 1
@@ -186,16 +186,16 @@ class OrdersController < ApplicationController
     per_page = (params[:per_page] || 10).to_i
 
     # Apply sorting
-    sort_by = params[:sort_by] || 'created_at'
-    sort_direction = params[:sort_direction] || 'desc'
-    
+    sort_by = params[:sort_by] || "created_at"
+    sort_direction = params[:sort_direction] || "desc"
+
     # Validate sort parameters to prevent SQL injection
-    valid_sort_columns = ['id', 'created_at', 'updated_at', 'status', 'total']
-    valid_sort_directions = ['asc', 'desc']
-    
-    sort_by = 'created_at' unless valid_sort_columns.include?(sort_by)
-    sort_direction = 'desc' unless valid_sort_directions.include?(sort_direction)
-    
+    valid_sort_columns = [ "id", "created_at", "updated_at", "status", "total" ]
+    valid_sort_directions = [ "asc", "desc" ]
+
+    sort_by = "created_at" unless valid_sort_columns.include?(sort_by)
+    sort_direction = "desc" unless valid_sort_directions.include?(sort_direction)
+
     # Include location association to ensure location data is available in the response
     @orders = @orders.includes(:location)
                      .order("#{sort_by} #{sort_direction}")
@@ -215,7 +215,6 @@ class OrdersController < ApplicationController
       per_page: per_page,
       total_pages: total_pages
     }, status: :ok
-
   end
 
   # GET /orders/:id
@@ -229,11 +228,11 @@ class OrdersController < ApplicationController
   def new_since
     # Only allow staff or above to access this endpoint
     authorize Order, :index?
-    
+
     last_id = params[:id].to_i
     # Apply policy scope to ensure proper filtering based on role
     new_orders = policy_scope(Order).where("id > ?", last_id)
-                      .where(staff_created: [false, nil]) # Exclude staff-created orders
+                      .where(staff_created: [ false, nil ]) # Exclude staff-created orders
                       .order(:id)
     render json: new_orders, status: :ok
   end
@@ -247,35 +246,35 @@ class OrdersController < ApplicationController
     unless current_user&.admin_or_above?
       return render json: { error: "Forbidden" }, status: :forbidden
     end
-    
+
     # Find all users who have created orders for the current restaurant
     # Get unique user_ids from orders where created_by_user_id is not null and restaurant_id matches current restaurant
     user_ids = Order.where(restaurant_id: current_restaurant.id)
                    .where.not(created_by_user_id: nil)
                    .distinct
                    .pluck(:created_by_user_id)
-    
+
     # Get users with those IDs who are staff or admin by default
     # Only include users who belong to the current restaurant
     @users = User.where(id: user_ids)
-                .where(role: ['staff', 'admin'])
+                .where(role: [ "staff", "admin" ])
                 .where(restaurant_id: current_restaurant.id)
-    
+
     # Format the response
     creators = @users.map do |user|
       {
         id: "user_#{user.id}",
         name: "#{user.first_name} #{user.last_name}",
-        type: 'user',
+        type: "user",
         role: user.role
       }
     end
-    
+
     # Log the response for debugging
     Rails.logger.info("[TENANT ISOLATION] Returning #{creators.length} order creators for restaurant #{current_restaurant.id}")
     Rails.logger.info("[TENANT ISOLATION] Current user role: #{current_user.role}, restaurant_id: #{current_user.restaurant_id}")
     Rails.logger.info("[TENANT ISOLATION] Current restaurant: #{current_restaurant.id}")
-    
+
     # Return only users who have created orders for this restaurant
     render json: creators
   end
@@ -298,13 +297,13 @@ class OrdersController < ApplicationController
       # Regular case: Return orders not acknowledged by this specific user
       unacknowledged_orders = Order.where("created_at > ?", time_threshold)
                                    .where.not(id: current_user.acknowledged_orders.pluck(:id))
-                                   .where(staff_created: [false, nil]) # Exclude staff-created orders
+                                   .where(staff_created: [ false, nil ]) # Exclude staff-created orders
                                    .order(created_at: :desc)
     else
       # First-time user case: Only return orders that haven't been acknowledged by anyone
       # OR orders that came in after the last global acknowledgment
       unacknowledged_orders = Order.where("created_at > ?", time_threshold)
-                                   .where(staff_created: [false, nil]) # Exclude staff-created orders
+                                   .where(staff_created: [ false, nil ]) # Exclude staff-created orders
                                    .where("global_last_acknowledged_at IS NULL OR created_at > global_last_acknowledged_at")
                                    .order(created_at: :desc)
     end
@@ -315,7 +314,7 @@ class OrdersController < ApplicationController
   # POST /orders/:id/acknowledge
   def acknowledge
     order = Order.find(params[:id])
-    
+
     # Use Pundit to authorize the action
     authorize order, :acknowledge?
 
@@ -328,10 +327,10 @@ class OrdersController < ApplicationController
     if acknowledgment.new_record? && acknowledgment.save
       # Update the global_last_acknowledged_at timestamp
       order.update(global_last_acknowledged_at: Time.current)
-      
+
       # Broadcast the order update via WebSockets
       WebsocketBroadcastService.broadcast_order_update(order)
-      
+
       render json: { message: "Order #{order.order_number.presence || order.id} acknowledged" }, status: :ok
     else
       render json: { error: "Failed to acknowledge order" }, status: :unprocessable_entity
@@ -341,40 +340,40 @@ class OrdersController < ApplicationController
   # POST /orders/:id/notify
   def notify
     order = Order.find(params[:id])
-    
+
     # Only allow staff or above to send notifications
     unless current_user&.role.in?(%w[admin super_admin staff])
       return render json: { error: "Forbidden" }, status: :forbidden
     end
 
-    notification_type = params[:notification_type] || 'order_ready'
-    
+    notification_type = params[:notification_type] || "order_ready"
+
     begin
       case notification_type
-      when 'order_ready'
-        if order.status == 'ready'
+      when "order_ready"
+        if order.status == "ready"
           send_order_ready_notifications(order)
-          render json: { 
-            success: true, 
-            message: 'Order ready notification sent successfully' 
+          render json: {
+            success: true,
+            message: "Order ready notification sent successfully"
           }, status: :ok
         else
-          render json: { 
-            success: false, 
-            message: 'Order must be in ready status to send notification' 
+          render json: {
+            success: false,
+            message: "Order must be in ready status to send notification"
           }, status: :unprocessable_entity
         end
       else
-        render json: { 
-          success: false, 
-          message: 'Invalid notification type' 
+        render json: {
+          success: false,
+          message: "Invalid notification type"
         }, status: :bad_request
       end
     rescue StandardError => e
       Rails.logger.error "Failed to send notification for order #{order.id}: #{e.message}"
-      render json: { 
-        success: false, 
-        message: "Failed to send notification: #{e.message}" 
+      render json: {
+        success: false,
+        message: "Failed to send notification: #{e.message}"
       }, status: :internal_server_error
     end
   end
@@ -408,11 +407,11 @@ class OrdersController < ApplicationController
       # Skip VIP validation for admin/staff users OR when using staff modal
       # This allows staff to create orders through StaffOrderModal even when VIP mode is enabled
       is_admin_user = @current_user && @current_user.role.in?(%w[admin super_admin staff])
-      is_staff_modal = params[:order][:staff_modal] == true || params[:order][:staff_modal] == 'true'
-      
+      is_staff_modal = params[:order][:staff_modal] == true || params[:order][:staff_modal] == "true"
+
       # Log the VIP mode bypass for debugging
       Rails.logger.info("VIP Mode Check - User: #{@current_user&.id}, Is Admin/Staff: #{is_admin_user}, Is Staff Modal: #{is_staff_modal}, Restaurant: #{restaurant.id}")
-      
+
       # Only enforce VIP code for non-admin/staff users AND non-staff modal orders
       if !is_admin_user && !is_staff_modal
         vip_code = params[:order][:vip_code]
@@ -474,27 +473,27 @@ class OrdersController < ApplicationController
 
     # Get permitted parameters through strong parameters
     new_params = order_params_admin
-    
+
     # Set essential attributes that might not be in the params
     new_params[:restaurant_id] ||= params[:restaurant_id] || 1
     new_params[:user_id] = @current_user&.id
     new_params[:created_by_user_id] = @current_user&.id if @current_user
-    
+
     # Use OrderService to handle location_id assignment
     # This will automatically use the default location if none is provided
     order_service = OrderService.new(current_restaurant)
-    
+
     # We'll let the OrderService handle the location assignment during creation
-    
+
     # Set payment status and amount
     new_params[:payment_status] = "completed"
     new_params[:payment_amount] = new_params[:total]
-    
+
     # Set VIP access code if found
     if defined?(vip_access_code) && vip_access_code
       new_params[:vip_access_code_id] = vip_access_code.id
     end
-    
+
     # Handle staff-specific logic if needed
     if new_params[:is_staff_order] == true
       # IMPORTANT: Always use the pre_discount_total from the frontend parameters
@@ -505,11 +504,42 @@ class OrdersController < ApplicationController
         Rails.logger.info("No pre_discount_total provided, using total: #{new_params[:total]}")
         new_params[:pre_discount_total] = new_params[:total]
       end
-      
+
       # If no created_by_staff_id was provided but the user has a staff record, use that
       if new_params[:created_by_staff_id].blank? && @current_user&.staff_member.present?
         new_params[:created_by_staff_id] = @current_user.staff_member.id
         Rails.logger.info("Fallback: Setting created_by_staff_id to #{@current_user.staff_member.id} for user #{@current_user.id}")
+      end
+    end
+
+    # ── PRE-SAVE VALIDATIONS (BUG-7 / HL1-15 and BUG-3 / HL1-11) ──
+    # Must run BEFORE create_order because OrderService.create_record persists immediately.
+    order_items = params[:order][:items]
+    if order_items.present?
+      item_ids = order_items.map { |i| (i[:id] || i["id"]).to_i }.select { |id| id > 0 }.uniq
+
+      menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
+
+      # Validate all item IDs exist (BUG-7 / HL1-15)
+      missing_ids = item_ids - menu_items_by_id.keys
+      if missing_ids.any?
+        return render json: { error: "Menu items not found: #{missing_ids.join(', ')}" }, status: :unprocessable_entity
+      end
+
+      # Validate stock availability (BUG-3 / HL1-11)
+      stock_errors = []
+      order_items.each do |item|
+        item_id = (item[:id] || item["id"]).to_i
+        menu_item = menu_items_by_id[item_id]
+        next unless menu_item&.enable_stock_tracking
+        quantity = (item[:quantity] || item["quantity"] || 1).to_i
+        available = menu_item.available_quantity || 0
+        if available < quantity
+          stock_errors << "#{menu_item.name}: only #{available} available (requested #{quantity})"
+        end
+      end
+      if stock_errors.any?
+        return render json: { error: "Insufficient stock", details: stock_errors }, status: :unprocessable_entity
       end
     end
 
@@ -521,15 +551,17 @@ class OrdersController < ApplicationController
 
     # Single-query for MenuItems => avoids N+1
     if @order.items.present?
-      # Gather unique item IDs in the request
-      item_ids = @order.items.map { |i| i[:id] }.compact.uniq
+      # Gather unique item IDs (JSONB stores keys as strings)
+      item_ids = @order.items.map { |i| (i["id"] || i[:id]).to_i }.select { |id| id > 0 }.uniq
 
       # Load them all in one query
       menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
+
       max_required = 0
 
       @order.items.each do |item|
-        if (menu_item = menu_items_by_id[item[:id]])
+        item_id = (item["id"] || item[:id]).to_i
+        if (menu_item = menu_items_by_id[item_id])
           max_required = [ max_required, menu_item.advance_notice_hours ].max
         end
       end
@@ -551,11 +583,11 @@ class OrdersController < ApplicationController
 
       @order.items.each do |item|
         # Check if the menu item has required groups with all options unavailable
-        menu_item = menu_items_by_id[item[:id]]
+        menu_item = menu_items_by_id[(item["id"] || item[:id]).to_i]
         if menu_item && menu_item.has_required_groups_with_unavailable_options?
           # Get the names of the problematic option groups
           unavailable_groups = menu_item.required_groups_with_unavailable_options.map(&:name)
-          
+
           items_with_unavailable_required_groups << {
             item_name: menu_item.name,
             item_id: menu_item.id,
@@ -563,23 +595,24 @@ class OrdersController < ApplicationController
           }
           next # Skip further validation for this item
         end
-        
+
         # Skip items without selected options
-        next unless item[:selected_options].is_a?(Array) && item[:selected_options].any?
+        selected_opts = item["selected_options"] || item[:selected_options]
+        next unless selected_opts.is_a?(Array) && selected_opts.any?
 
         # Get all option IDs from the item
-        option_ids = item[:selected_options].map { |opt| opt[:id] }.compact
-        
+        option_ids = selected_opts.map { |opt| opt["id"] || opt[:id] }.compact
+
         # Skip if no valid option IDs
         next if option_ids.empty?
-        
+
         # Find any unavailable options
         unavailable = Option.where(id: option_ids, is_available: false)
-        
+
         if unavailable.any?
-          menu_item = menu_items_by_id[item[:id]]
+          menu_item = menu_items_by_id[(item["id"] || item[:id]).to_i]
           item_name = menu_item ? menu_item.name : "Unknown item"
-          
+
           unavailable.each do |option|
             unavailable_options << {
               item_name: item_name,
@@ -597,7 +630,7 @@ class OrdersController < ApplicationController
           items_with_unavailable_required_groups: items_with_unavailable_required_groups
         }, status: :unprocessable_entity
       end
-      
+
       # Then check for individual unavailable options
       if unavailable_options.any?
         return render json: {
@@ -610,29 +643,29 @@ class OrdersController < ApplicationController
     # Validate option inventory stock levels for menu items with option-level tracking
     if @order.items.present?
       insufficient_options = []
-      
+
       @order.items.each do |item|
-        menu_item = menu_items_by_id[item[:id]]
+        menu_item = menu_items_by_id[(item["id"] || item[:id]).to_i]
         next unless menu_item&.uses_option_level_inventory?
-        
+
         # Get the option inventory tracking group
         tracking_group = menu_item.option_inventory_tracking_group
         next unless tracking_group
-        
+
         # Extract customizations to find selected options for inventory tracking
-        customizations = item[:customizations] || {}
-        quantity_ordered = (item[:quantity] || 1).to_i
-        
+        customizations = item["customizations"] || item[:customizations] || {}
+        quantity_ordered = (item["quantity"] || item[:quantity] || 1).to_i
+
         # Check inventory for each customization that maps to tracked options
         customizations.each do |key, value|
           # Check if this customization corresponds to the tracking group
           if key.to_s == tracking_group.id.to_s || key.to_s == tracking_group.name
             # Find the selected option
             selected_option = tracking_group.options.find_by(id: value) || tracking_group.options.find_by(name: value)
-            
+
             if selected_option
               available_stock = selected_option.available_stock
-              
+
               if available_stock < quantity_ordered
                 insufficient_options << {
                   item_name: menu_item.name,
@@ -645,18 +678,19 @@ class OrdersController < ApplicationController
             end
           end
         end
-        
+
         # Also check selected_options array format (alternative format)
-        if item[:selected_options].is_a?(Array)
-          item[:selected_options].each do |selected_option_data|
-            option_id = selected_option_data[:id] || selected_option_data["id"]
+        item_selected_options = item["selected_options"] || item[:selected_options]
+        if item_selected_options.is_a?(Array)
+          item_selected_options.each do |selected_option_data|
+            option_id = selected_option_data["id"] || selected_option_data[:id]
             next unless option_id
-            
+
             # Check if this option belongs to the tracking group
             tracked_option = tracking_group.options.find_by(id: option_id)
             if tracked_option
               available_stock = tracked_option.available_stock
-              
+
               if available_stock < quantity_ordered
                 insufficient_options << {
                   item_name: menu_item.name,
@@ -670,7 +704,7 @@ class OrdersController < ApplicationController
           end
         end
       end
-      
+
       if insufficient_options.any?
         return render json: {
           error: "Some selected options have insufficient inventory",
@@ -707,7 +741,7 @@ class OrdersController < ApplicationController
     if @order.save
       # Broadcast the new order via WebSockets
       WebsocketBroadcastService.broadcast_new_order(@order)
-      
+
       # Log payment information for debugging
       Rails.logger.info("Order saved with payment_id: #{@order.payment_id}, transaction_id: #{@order.transaction_id}, payment_method: #{@order.payment_method}")
 
@@ -725,30 +759,30 @@ class OrdersController < ApplicationController
 
         # Format payment details to ensure proper display in UI
         payment_details = @order.payment_details || params[:order][:payment_details]
-        
+
         # Format staff order params if present
-        if payment_details && payment_details['staffOrderParams'].present?
-          staff_params = payment_details['staffOrderParams']
-          
+        if payment_details && payment_details["staffOrderParams"].present?
+          staff_params = payment_details["staffOrderParams"]
+
           # Convert staff params to string representation
           # Use the order's actual is_staff_order value to ensure consistency
           formatted_staff_params = {
-            'is_staff_order' => @order.is_staff_order ? 'true' : 'false',
-            'staff_member_id' => @order.staff_member_id.to_s,
-            'staff_on_duty' => @order.staff_on_duty ? 'true' : 'false',
-            'discount_type' => staff_params['discount_type'].to_s,
-            'no_discount' => staff_params['no_discount'].to_s,
-            'use_house_account' => @order.use_house_account ? 'true' : 'false',
-            'created_by_staff_id' => @order.created_by_staff_id.to_s,
-            'pre_discount_total' => @order.pre_discount_total.to_s
+            "is_staff_order" => @order.is_staff_order ? "true" : "false",
+            "staff_member_id" => @order.staff_member_id.to_s,
+            "staff_on_duty" => @order.staff_on_duty ? "true" : "false",
+            "discount_type" => staff_params["discount_type"].to_s,
+            "no_discount" => staff_params["no_discount"].to_s,
+            "use_house_account" => @order.use_house_account ? "true" : "false",
+            "created_by_staff_id" => @order.created_by_staff_id.to_s,
+            "pre_discount_total" => @order.pre_discount_total.to_s
           }
-          
+
           # Replace the object with the formatted version
-          payment_details['staffOrderParams'] = formatted_staff_params
+          payment_details["staffOrderParams"] = formatted_staff_params
         # If staffOrderParams is not present but this is a staff order, add it
         elsif @order.is_staff_order
           payment_details ||= {}
-          
+
           # Get the original pre_discount_total from different possible locations
           original_pre_discount_total = if params.dig(:order, :pre_discount_total).present?
             params.dig(:order, :pre_discount_total)
@@ -757,7 +791,7 @@ class OrdersController < ApplicationController
           else
             nil
           end
-          
+
           # Always use the original pre_discount_total from params if available
           # This is critical for staff orders to ensure correct discount calculation
           pre_discount_value = if original_pre_discount_total.present?
@@ -767,10 +801,10 @@ class OrdersController < ApplicationController
             # This is a fallback and should be avoided if possible
             @order.pre_discount_total.to_s
           end
-          
+
           # Log the values for debugging
           Rails.logger.info("OrderPayment staffOrderParams: Using pre_discount_total #{pre_discount_value} (from params: #{original_pre_discount_total}, from order: #{@order.pre_discount_total})")
-          
+
           # Get discount_type from original parameters if available
           original_discount_type = if params.dig(:order, :discount_type).present?
             params.dig(:order, :discount_type)
@@ -778,30 +812,30 @@ class OrdersController < ApplicationController
             params.dig(:order, :payment_details, :staffOrderParams, :discount_type)
           else
             # Fallback: infer from staff_on_duty for backward compatibility
-            @order.staff_on_duty ? 'on_duty' : 'off_duty'
+            @order.staff_on_duty ? "on_duty" : "off_duty"
           end
-          
+
           # Get no_discount flag from original parameters if available
           original_no_discount = if params.dig(:order, :no_discount).present?
             params.dig(:order, :no_discount)
           elsif params.dig(:order, :payment_details, :staffOrderParams, :no_discount).present?
             params.dig(:order, :payment_details, :staffOrderParams, :no_discount)
           else
-            'false'
+            "false"
           end
-          
-          payment_details['staffOrderParams'] = {
-            'is_staff_order' => 'true',
-            'staff_member_id' => @order.staff_member_id.to_s,
-            'staff_on_duty' => @order.staff_on_duty ? 'true' : 'false',
-            'discount_type' => original_discount_type.to_s,
-            'no_discount' => original_no_discount.to_s,
-            'use_house_account' => @order.use_house_account ? 'true' : 'false',
-            'created_by_staff_id' => @order.created_by_staff_id.to_s,
-            'pre_discount_total' => pre_discount_value
+
+          payment_details["staffOrderParams"] = {
+            "is_staff_order" => "true",
+            "staff_member_id" => @order.staff_member_id.to_s,
+            "staff_on_duty" => @order.staff_on_duty ? "true" : "false",
+            "discount_type" => original_discount_type.to_s,
+            "no_discount" => original_no_discount.to_s,
+            "use_house_account" => @order.use_house_account ? "true" : "false",
+            "created_by_staff_id" => @order.created_by_staff_id.to_s,
+            "pre_discount_total" => pre_discount_value
           }
         end
-        
+
         payment = @order.order_payments.create(
           payment_type: "initial",
           amount: @order.payment_amount,
@@ -844,20 +878,20 @@ class OrdersController < ApplicationController
           Rails.logger.debug("Order items: #{@order.items.inspect}")
 
           order_service = OrderService.new(@order.restaurant)
-          inventory_result = order_service.process_order_inventory(@order.items, @order, @current_user, 'order')
-          
+          inventory_result = order_service.process_order_inventory(@order.items, @order, @current_user, "order")
+
           unless inventory_result[:success]
             Rails.logger.error("Order creation inventory processing failed: #{inventory_result[:errors]}")
             # Rollback the transaction if inventory processing failed
             raise ActiveRecord::Rollback
-            end
+          end
 
           Rails.logger.info("Successfully processed inventory for order #{@order.id}: #{inventory_result[:inventory_changes].length} changes")
-          
+
           # Check for low stock notifications (preserved from original logic)
           inventory_result[:inventory_changes].each do |change|
-            next unless change[:type] == 'item_level'
-            
+            next unless change[:type] == "item_level"
+
             menu_item = MenuItem.find_by(id: change[:menu_item_id])
             if menu_item&.stock_status == "low_stock" && !Rails.env.test? && !test_mode
               # TODO: implement menu item low-stock notifications if needed
@@ -880,10 +914,10 @@ class OrdersController < ApplicationController
         sms_sender = @order.restaurant.phone_number.presence ||
                      @order.restaurant.admin_settings&.dig("sms_sender_id").presence ||
                      restaurant_name
-        
+
         # Format phone numbers for ClickSend (remove dashes, keep only digits)
-        if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, '').length >= 10
-          sms_sender = sms_sender.gsub(/\D/, '').gsub(/^1/, '')
+        if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, "").length >= 10
+          sms_sender = sms_sender.gsub(/\D/, "").gsub(/^1/, "")
         end
 
         item_list = @order.items.map { |i| "#{i['quantity']}x #{i['name']}" }.join(", ")
@@ -932,15 +966,15 @@ class OrdersController < ApplicationController
     # If admin => allow full params, else only partial
     permitted_params = if current_user&.role.in?(%w[admin super_admin])
                          order_params_admin
-                       else
+    else
                          order_params_user
-                       end
-    
+    end
+
     # IMPORTANT: Don't allow frontend to set or override refund status
     # This prevents inconsistencies between payment_status and status
-    if permitted_params[:status].present? && 
-       (['refunded'].include?(permitted_params[:status]) || 
-        ['refunded'].include?(order.status))
+    if permitted_params[:status].present? &&
+       ([ "refunded" ].include?(permitted_params[:status]) ||
+        [ "refunded" ].include?(order.status))
       # Remove status from permitted params to preserve the server-calculated refund status
       # or prevent the frontend from setting a refund status
       Rails.logger.info("Preventing frontend refund status change: #{permitted_params[:status]} -> #{order.status}")
@@ -950,35 +984,35 @@ class OrdersController < ApplicationController
     # Pre-validate option inventory if items are being updated
     if permitted_params[:items].present?
       insufficient_options = []
-      
+
       # Get updated item list
       new_items = permitted_params[:items]
-      
+
       # Load menu items for validation
       item_ids = new_items.map { |i| i[:id] || i["id"] }.compact.uniq
       menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
-      
+
       new_items.each do |item|
         item_id = item[:id] || item["id"]
         menu_item = menu_items_by_id[item_id]
         next unless menu_item&.uses_option_level_inventory?
-        
+
         # Get the option inventory tracking group
         tracking_group = menu_item.option_inventory_tracking_group
         next unless tracking_group
-        
+
         # Extract customizations and quantity
         customizations = item[:customizations] || item["customizations"] || {}
         quantity_ordered = (item[:quantity] || item["quantity"] || 1).to_i
-        
+
         # Check inventory for customizations
         customizations.each do |key, value|
           if key.to_s == tracking_group.id.to_s || key.to_s == tracking_group.name
             selected_option = tracking_group.options.find_by(id: value) || tracking_group.options.find_by(name: value)
-            
+
             if selected_option
               available_stock = selected_option.available_stock
-              
+
               if available_stock < quantity_ordered
                 insufficient_options << {
                   item_name: menu_item.name,
@@ -991,18 +1025,18 @@ class OrdersController < ApplicationController
             end
           end
         end
-        
+
         # Check selected_options array format
         selected_options = item[:selected_options] || item["selected_options"]
         if selected_options.is_a?(Array)
           selected_options.each do |selected_option_data|
             option_id = selected_option_data[:id] || selected_option_data["id"]
             next unless option_id
-            
+
             tracked_option = tracking_group.options.find_by(id: option_id)
             if tracked_option
               available_stock = tracked_option.available_stock
-              
+
               if available_stock < quantity_ordered
                 insufficient_options << {
                   item_name: menu_item.name,
@@ -1016,7 +1050,7 @@ class OrdersController < ApplicationController
           end
         end
       end
-      
+
       if insufficient_options.any?
         return render json: {
           error: "Some selected options have insufficient inventory for this update",
@@ -1028,7 +1062,7 @@ class OrdersController < ApplicationController
     if order.update(permitted_params)
       # Broadcast the order update via WebSockets
       WebsocketBroadcastService.broadcast_order_update(order)
-      
+
       # 2) If items changed, process inventory diffs
       # Skip inventory processing if order has refunds (refunds handle their own inventory)
       if permitted_params[:items].present? && !order.has_refunds?
@@ -1049,10 +1083,10 @@ class OrdersController < ApplicationController
       sms_sender = order.restaurant.phone_number.presence ||
                    order.restaurant.admin_settings&.dig("sms_sender_id").presence ||
                    restaurant_name
-      
+
       # Format phone numbers for ClickSend (remove dashes, keep only digits)
-      if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, '').length >= 10
-        sms_sender = sms_sender.gsub(/\D/, '').gsub(/^1/, '')
+      if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, "").length >= 10
+        sms_sender = sms_sender.gsub(/\D/, "").gsub(/^1/, "")
       end
 
       # If status changed from 'pending' to 'preparing'
@@ -1074,7 +1108,7 @@ class OrdersController < ApplicationController
           end
           SendSmsJob.perform_later(to: order.contact_phone, body: txt_body, from: sms_sender)
         end
-        
+
         # Send Pushover notification for order status change to preparing
         if order.restaurant.pushover_enabled?
           message = "Order ##{order.order_number.presence || order.id} is now being prepared.\n\n"
@@ -1088,7 +1122,7 @@ class OrdersController < ApplicationController
               message += "ETA: #{eta_str} TODAY"
             end
           end
-          
+
           order.restaurant.send_pushover_notification(
             message,
             "Order Status Update",
@@ -1120,7 +1154,7 @@ class OrdersController < ApplicationController
           end
           SendSmsJob.perform_later(to: order.contact_phone, body: txt_body, from: sms_sender)
         end
-        
+
         # Send Pushover notification for ETA update
         if order.restaurant.pushover_enabled?
           message = "Order ##{order.order_number.presence || order.id} pickup time updated.\n\n"
@@ -1132,9 +1166,9 @@ class OrdersController < ApplicationController
             eta_str = order.estimated_pickup_time.strftime("%-I:%M %p")
             message += "New ETA: #{eta_str} TODAY"
           end
-          
+
           message += "\nCustomer: #{order.contact_name}" if order.contact_name.present?
-          
+
           order.restaurant.send_pushover_notification(
             message,
             "Order ETA Updated",
@@ -1145,11 +1179,11 @@ class OrdersController < ApplicationController
       # If status changed to 'cancelled', restore inventory for all items
       elsif old_status != "cancelled" && order.status == "cancelled"
         Rails.logger.info("Order #{order.id} was cancelled, restoring inventory for all items")
-        
+
         if order.items.present?
           order_service = OrderService.new(order.restaurant)
-          inventory_result = order_service.revert_order_inventory(order.items, order, current_user, 'cancel')
-          
+          inventory_result = order_service.revert_order_inventory(order.items, order, current_user)
+
           if inventory_result[:success]
             Rails.logger.info("Successfully restored inventory for cancelled order #{order.id}: #{inventory_result[:inventory_changes].length} changes")
           else
@@ -1193,29 +1227,29 @@ class OrdersController < ApplicationController
   def order_params_admin
     # Use Rails' strong parameters with proper nesting
     permitted_params = params.require(:order).permit(
-      :id, :restaurant_id, :user_id, :status, :total, :subtotal, :tax, 
-      :tip, :service_fee, :transaction_id, :payment_id, :payment_method, 
-      :payment_status, :payment_amount, :contact_name, :contact_email, 
-      :contact_phone, :special_instructions, :estimated_pickup_time, 
-      :pickup_time, :is_staff_order, :staff_member_id, :staff_on_duty, 
-      :use_house_account, :created_by_staff_id, :created_by_user_id, 
+      :id, :restaurant_id, :user_id, :status, :total, :subtotal, :tax,
+      :tip, :service_fee, :transaction_id, :payment_id, :payment_method,
+      :payment_status, :payment_amount, :contact_name, :contact_email,
+      :contact_phone, :special_instructions, :estimated_pickup_time,
+      :pickup_time, :is_staff_order, :staff_member_id, :staff_on_duty,
+      :use_house_account, :created_by_staff_id, :created_by_user_id,
       :pre_discount_total, :vip_code, :vip_access_code_id, :staff_modal, :location_id,
       :staff_discount_configuration_id, # Add support for configurable staff discounts
       # Handle nested attributes properly
-      items: [:id, :name, :price, :quantity, :notes, :menu_id, :category_id, { customizations: {} }],
-      merchandise_items: [:id, :name, :price, :quantity, :merchandise_variant_id, :notes],
+      items: [ :id, :name, :price, :quantity, :notes, :menu_id, :category_id, { customizations: {} } ],
+      merchandise_items: [ :id, :name, :price, :quantity, :merchandise_variant_id, :notes ],
       # Allow all payment details attributes to be passed through
       payment_details: {})
-    
+
     # Convert payment_details to a hash if it's present
     if permitted_params[:payment_details].present?
       # Ensure payment_details is a hash
       permitted_params[:payment_details] = permitted_params[:payment_details].to_h
     end
-    
+
     # Log what we're doing for debugging
     Rails.logger.info("Using strong parameters for order with staff_modal=#{permitted_params[:staff_modal]}")
-    
+
     # Return the permitted parameters
     permitted_params
   end
@@ -1240,7 +1274,7 @@ class OrdersController < ApplicationController
     Rails.logger.debug("New items: #{new_items.inspect}")
 
     order_service = OrderService.new(order.restaurant)
-    
+
     begin
       # Step 1: Revert inventory for original items
       if original_items.present?
@@ -1251,25 +1285,25 @@ class OrdersController < ApplicationController
         end
         Rails.logger.info("Reverted inventory for #{revert_result[:inventory_changes].length} original items")
       end
-      
+
       # Step 2: Process inventory for new items
       if new_items.present?
-        process_result = order_service.process_order_inventory(new_items, order, @current_user, 'order')
+        process_result = order_service.process_order_inventory(new_items, order, @current_user, "order")
         unless process_result[:success]
           Rails.logger.error("Failed to process new inventory: #{process_result[:errors]}")
           # If processing new items fails, we need to restore the original items
           if original_items.present?
-            restore_result = order_service.process_order_inventory(original_items, order, @current_user, 'order')
+            restore_result = order_service.process_order_inventory(original_items, order, @current_user, "order")
             Rails.logger.warn("Attempted to restore original inventory: #{restore_result[:success] ? 'success' : 'failed'}")
           end
           return false
         end
         Rails.logger.info("Processed inventory for #{process_result[:inventory_changes].length} new items")
       end
-      
+
       Rails.logger.info("Successfully processed inventory changes for order #{order.id}")
       true
-      
+
     rescue StandardError => e
       Rails.logger.error("Error processing inventory changes: #{e.message}")
       Rails.logger.error(e.backtrace.join("\n"))
@@ -1287,10 +1321,10 @@ class OrdersController < ApplicationController
     sms_sender = order.restaurant.phone_number.presence ||
                  order.restaurant.admin_settings&.dig("sms_sender_id").presence ||
                  restaurant_name
-    
+
     # Format phone numbers for ClickSend (remove dashes, keep only digits)
-    if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, '').length >= 10
-      sms_sender = sms_sender.gsub(/\D/, '').gsub(/^1/, '')
+    if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, "").length >= 10
+      sms_sender = sms_sender.gsub(/\D/, "").gsub(/^1/, "")
     end
 
     # Send email notification
@@ -1304,17 +1338,17 @@ class OrdersController < ApplicationController
             "is now ready for pickup! Thank you for choosing #{restaurant_name}."
       SendSmsJob.perform_later(to: order.contact_phone, body: msg, from: sms_sender)
     end
-    
+
     # Send Pushover notification
     if order.restaurant.pushover_enabled?
       message = "Order ##{order.order_number.presence || order.id} is now ready for pickup!\n\n"
       message += "Customer: #{order.contact_name}\n" if order.contact_name.present?
       message += "Phone: #{order.contact_phone}" if order.contact_phone.present?
-      
+
       order.restaurant.send_pushover_notification(
         message,
         "Order Ready for Pickup",
-        { 
+        {
           priority: 1,  # High priority to bypass quiet hours
           sound: "siren"  # Attention-grabbing sound for ready orders
         }

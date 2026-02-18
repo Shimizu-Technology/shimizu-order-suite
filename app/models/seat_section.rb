@@ -11,7 +11,7 @@ class SeatSection < ApplicationRecord
 
   # Valid section types
   VALID_SECTION_TYPES = %w[counter table bar booth].freeze
-  
+
   # Section types (table, counter, etc.)
 
   validates :name, presence: true
@@ -24,7 +24,7 @@ class SeatSection < ApplicationRecord
               message: "%{value} is not a valid section_type"
             },
             allow_blank: true
-            
+
   # Note: Shape, dimension, and rotation validation is handled at the Layout model level
   # since these properties are stored in the Layout's sections_data JSON field
 

@@ -133,7 +133,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     last_name: "Three",
     phone: "+11234567892"
   )
-  
+
   admin4 = User.create!(
     email: "admin4@example.com",
     password: ENV.fetch('SEED_ADMIN_PASSWORD', 'password123'),
@@ -144,7 +144,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     last_name: "Four",
     phone: "+11234567893"
   )
-  
+
   admin5 = User.create!(
     email: "admin5@example.com",
     password: ENV.fetch('SEED_ADMIN_PASSWORD', 'password123'),
@@ -231,7 +231,7 @@ unless Restaurant.exists?(name: "Hafaloha")
   # 5) MENU ITEMS
   # ------------------------------------------------------------------------------
   # Create sample menu items for each category with their associations
-  
+
   # Desserts
   build_a_bowl = MenuItem.create!(
     menu_id: main_menu.id,
@@ -241,7 +241,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: true,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_26_1739747052.webp",
-    category_ids: [desserts_category.id]
+    category_ids: [ desserts_category.id ]
   )
 
   shave_ice = MenuItem.create!(
@@ -252,7 +252,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_21_1739747735.webp",
-    category_ids: [desserts_category.id]
+    category_ids: [ desserts_category.id ]
   )
 
   # Drinks
@@ -264,7 +264,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_34_1742862792.jpg",
-    category_ids: [drinks_category.id]
+    category_ids: [ drinks_category.id ]
   )
 
   # Plates
@@ -276,7 +276,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_74_1741976564.jpg",
-    category_ids: [plates_category.id]
+    category_ids: [ plates_category.id ]
   )
 
   # Appetizers
@@ -288,7 +288,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_6_1739747976.webp",
-    category_ids: [appetizers_category.id]
+    category_ids: [ appetizers_category.id ]
   )
 
   # Bowls
@@ -300,7 +300,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_12_1741982347.jpg",
-    category_ids: [bowls_category.id]
+    category_ids: [ bowls_category.id ]
   )
 
   # Burgers
@@ -312,7 +312,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_15_1741978996.jpg",
-    category_ids: [burgers_category.id]
+    category_ids: [ burgers_category.id ]
   )
 
   # Platters
@@ -323,7 +323,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/menu_item_248_1743192972.png",
-    category_ids: [platters_category.id]
+    category_ids: [ platters_category.id ]
   )
 
   puts "Created menu items with category associations"
@@ -332,7 +332,7 @@ unless Restaurant.exists?(name: "Hafaloha")
   # 5B) OPTION GROUPS AND OPTIONS
   # ------------------------------------------------------------------------------
   # Create option groups and options for menu items
-  
+
   # Shave Ice Options
   flavor_group = OptionGroup.create!(
     name: "Flavors",
@@ -340,9 +340,9 @@ unless Restaurant.exists?(name: "Hafaloha")
     max_select: 3,
     menu_item_id: shave_ice.id
   )
-  
-  ["Blue Hawaii", "Cherry", "Coconut", "Grape", "Green Apple", "Guava", "Lemon", "Lilikoi", "Lime", "Mango", 
-   "Orange", "Pineapple", "Strawberry", "Vanilla", "Watermelon"].each_with_index do |flavor, index|
+
+  [ "Blue Hawaii", "Cherry", "Coconut", "Grape", "Green Apple", "Guava", "Lemon", "Lilikoi", "Lime", "Mango",
+   "Orange", "Pineapple", "Strawberry", "Vanilla", "Watermelon" ].each_with_index do |flavor, index|
     Option.create!(
       name: flavor,
       additional_price: 0.0,
@@ -350,9 +350,9 @@ unless Restaurant.exists?(name: "Hafaloha")
       option_group_id: flavor_group.id
     )
   end
-  
+
   # Option group is already associated with menu item via menu_item_id
-  
+
   # Smoothie Options
   smoothie_flavor_group = OptionGroup.create!(
     name: "Flavors",
@@ -360,8 +360,8 @@ unless Restaurant.exists?(name: "Hafaloha")
     max_select: 1,
     menu_item_id: smoothies.id
   )
-  
-  ["Strawberry", "Mango", "Pineapple", "Mixed Berry", "Banana"].each_with_index do |flavor, index|
+
+  [ "Strawberry", "Mango", "Pineapple", "Mixed Berry", "Banana" ].each_with_index do |flavor, index|
     Option.create!(
       name: flavor,
       additional_price: 0.0,
@@ -369,9 +369,9 @@ unless Restaurant.exists?(name: "Hafaloha")
       option_group_id: smoothie_flavor_group.id
     )
   end
-  
+
   # Option group is already associated with menu item via menu_item_id
-  
+
   # Burger Options
   burger_addon_group = OptionGroup.create!(
     name: "Add-ons",
@@ -379,13 +379,13 @@ unless Restaurant.exists?(name: "Hafaloha")
     max_select: 5,
     menu_item_id: hafaloha_burger.id
   )
-  
+
   [
-    {name: "Extra Patty", price: 3.95},
-    {name: "Bacon", price: 1.95},
-    {name: "Cheese", price: 0.95},
-    {name: "Avocado", price: 1.50},
-    {name: "Fried Egg", price: 1.25}
+    { name: "Extra Patty", price: 3.95 },
+    { name: "Bacon", price: 1.95 },
+    { name: "Cheese", price: 0.95 },
+    { name: "Avocado", price: 1.50 },
+    { name: "Fried Egg", price: 1.25 }
   ].each_with_index do |addon, index|
     Option.create!(
       name: addon[:name],
@@ -394,9 +394,9 @@ unless Restaurant.exists?(name: "Hafaloha")
       option_group_id: burger_addon_group.id
     )
   end
-  
+
   # Option group is already associated with menu item via menu_item_id
-  
+
   # Poke Bowl Protein Options
   protein_group = OptionGroup.create!(
     name: "Protein",
@@ -404,12 +404,12 @@ unless Restaurant.exists?(name: "Hafaloha")
     max_select: 1,
     menu_item_id: build_a_bowl.id
   )
-  
+
   [
-    {name: "Ahi Poke", price: 0.0},
-    {name: "Salmon Poke", price: 0.0},
-    {name: "Cooked Shrimp", price: 0.0},
-    {name: "Tofu", price: 0.0}
+    { name: "Ahi Poke", price: 0.0 },
+    { name: "Salmon Poke", price: 0.0 },
+    { name: "Cooked Shrimp", price: 0.0 },
+    { name: "Tofu", price: 0.0 }
   ].each_with_index do |protein, index|
     Option.create!(
       name: protein[:name],
@@ -418,7 +418,7 @@ unless Restaurant.exists?(name: "Hafaloha")
       option_group_id: protein_group.id
     )
   end
-  
+
   # Option group is already associated with menu item via menu_item_id
   puts "Created option groups and options"
 
@@ -510,13 +510,13 @@ unless Restaurant.exists?(name: "Hafaloha")
   # ------------------------------------------------------------------------------
   # Create feature flags for the restaurant
   [
-    {name: "online_ordering", enabled: true, description: "Enable online ordering functionality"},
-    {name: "reservations", enabled: true, description: "Enable reservations functionality"},
-    {name: "merchandise", enabled: true, description: "Enable merchandise sales"},
-    {name: "loyalty_program", enabled: false, description: "Enable loyalty program functionality"},
-    {name: "gift_cards", enabled: true, description: "Enable gift card sales"},
-    {name: "pickup_scheduling", enabled: true, description: "Enable pickup time scheduling"},
-    {name: "delivery", enabled: false, description: "Enable delivery options"}
+    { name: "online_ordering", enabled: true, description: "Enable online ordering functionality" },
+    { name: "reservations", enabled: true, description: "Enable reservations functionality" },
+    { name: "merchandise", enabled: true, description: "Enable merchandise sales" },
+    { name: "loyalty_program", enabled: false, description: "Enable loyalty program functionality" },
+    { name: "gift_cards", enabled: true, description: "Enable gift card sales" },
+    { name: "pickup_scheduling", enabled: true, description: "Enable pickup time scheduling" },
+    { name: "delivery", enabled: false, description: "Enable delivery options" }
   ].each do |flag|
     FeatureFlag.create!(
       restaurant_id: restaurant.id,
@@ -553,7 +553,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/merchandise_tshirt.jpg",
-    category_ids: [retail_category.id]
+    category_ids: [ retail_category.id ]
   )
 
   MerchandiseItem.create!(
@@ -572,7 +572,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/merchandise_hat.jpg",
-    category_ids: [retail_category.id]
+    category_ids: [ retail_category.id ]
   )
 
   MerchandiseItem.create!(
@@ -591,7 +591,7 @@ unless Restaurant.exists?(name: "Hafaloha")
     available: true,
     featured: false,
     image_url: "https://hafaloha.s3.ap-southeast-2.amazonaws.com/merchandise_mug.jpg",
-    category_ids: [retail_category.id]
+    category_ids: [ retail_category.id ]
   )
 
   MerchandiseItem.create!(
@@ -609,11 +609,11 @@ unless Restaurant.exists?(name: "Hafaloha")
   # ------------------------------------------------------------------------------
   # Create sample audit logs for the restaurant
   [
-    {action: "restaurant.created", actor_id: admin1.id, actor_type: "User", target_id: restaurant.id, target_type: "Restaurant", changes: {name: [nil, "Hafaloha"], address: [nil, "955 Pale San Vitores Rd, Tamuning, Guam 96913"]}},
-    {action: "menu.created", actor_id: admin1.id, actor_type: "User", target_id: main_menu.id, target_type: "Menu", changes: {name: [nil, "Main Menu"], active: [nil, true]}},
-    {action: "user.created", actor_id: admin1.id, actor_type: "User", target_id: admin2.id, target_type: "User", changes: {email: [nil, "admin2@example.com"], role: [nil, "admin"]}},
-    {action: "menu_item.created", actor_id: admin2.id, actor_type: "User", target_id: build_a_bowl.id, target_type: "MenuItem", changes: {name: [nil, "Build-A-Bowl"], price: [nil, 8.0]}},
-    {action: "layout.created", actor_id: admin3.id, actor_type: "User", target_id: layout.id, target_type: "Layout", changes: {name: [nil, "Main Layout"]}}
+    { action: "restaurant.created", actor_id: admin1.id, actor_type: "User", target_id: restaurant.id, target_type: "Restaurant", changes: { name: [ nil, "Hafaloha" ], address: [ nil, "955 Pale San Vitores Rd, Tamuning, Guam 96913" ] } },
+    { action: "menu.created", actor_id: admin1.id, actor_type: "User", target_id: main_menu.id, target_type: "Menu", changes: { name: [ nil, "Main Menu" ], active: [ nil, true ] } },
+    { action: "user.created", actor_id: admin1.id, actor_type: "User", target_id: admin2.id, target_type: "User", changes: { email: [ nil, "admin2@example.com" ], role: [ nil, "admin" ] } },
+    { action: "menu_item.created", actor_id: admin2.id, actor_type: "User", target_id: build_a_bowl.id, target_type: "MenuItem", changes: { name: [ nil, "Build-A-Bowl" ], price: [ nil, 8.0 ] } },
+    { action: "layout.created", actor_id: admin3.id, actor_type: "User", target_id: layout.id, target_type: "Layout", changes: { name: [ nil, "Main Layout" ] } }
   ].each do |log|
     AuditLog.create!(
       restaurant_id: restaurant.id,

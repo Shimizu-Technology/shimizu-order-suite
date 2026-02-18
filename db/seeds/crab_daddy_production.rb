@@ -28,32 +28,32 @@ begin
   # Find the restaurant by name
   restaurant = Restaurant.find_by!(name: restaurant_name)
   log "Setting up menu for restaurant: #{restaurant.name} (ID: #{restaurant.id})", :info
-  
+
   # Set the tenant context for proper isolation
   ActiveRecord::Base.current_restaurant = restaurant
-  
+
   # Verify tenant context
   log "Tenant context set to restaurant ID: #{ActiveRecord::Base.current_restaurant&.id}", :info
-  
+
   # Transaction to ensure all or nothing
   ActiveRecord::Base.transaction do
     # 1. Create a new menu
     log "Creating new menu...", :info
     # Generate a unique name with timestamp to avoid conflicts
     menu_name = "Crab Daddy Menu #{Time.now.strftime('%Y%m%d_%H%M%S')}"
-    
+
     main_menu = Menu.create!(
       restaurant_id: restaurant.id,
       name: menu_name,
       active: false # Set to false as requested
     )
-    
+
     log "Created new menu: #{main_menu.name} (ID: #{main_menu.id})", :info
-    
+
     # 2. Create categories
     log "Creating categories...", :info
     categories = {}
-    
+
     # Define categories for Crab Daddy
     category_names = {
       cocktails: "COCKTAILS",
@@ -74,7 +74,7 @@ begin
       wine: "WINE",
       fish_bowl_cocktails: "FISH-BOWL COCKTAILS"
     }
-    
+
     category_names.each do |key, name|
       categories[key] = Category.find_or_create_by!(
         menu_id: main_menu.id,
@@ -84,12 +84,12 @@ begin
       end
       log "Created/found category: #{categories[key].name} (ID: #{categories[key].id})", :info
     end
-    
+
     # Helper method to create a menu item and associate it with a category
     def create_menu_item(menu, category, name, description = nil, price = 0.0, is_available = true)
       # Check if the menu item already exists
       existing_item = MenuItem.find_by(menu_id: menu.id, name: name)
-      
+
       if existing_item
         # Update the existing item
         existing_item.update!(
@@ -98,14 +98,14 @@ begin
           available: is_available,
           image_url: "https://via.placeholder.com/300x200.png?text=#{name.gsub(' ', '+')}"
         )
-        
+
         # Make sure it's associated with the category
         unless existing_item.categories.include?(category)
           MenuItemCategory.create!(menu_item_id: existing_item.id, category_id: category.id)
         end
-        
+
         log "Updated menu item: #{existing_item.name} (ID: #{existing_item.id})", :info
-        return existing_item
+        existing_item
       else
         # Create a new item with category association
         MenuItem.transaction do
@@ -118,22 +118,22 @@ begin
             available: is_available,
             image_url: "https://via.placeholder.com/300x200.png?text=#{name.gsub(' ', '+')}"
           )
-          
+
           # Create the category association before saving
           item.categories << category
-          
+
           # Now save the item with its association
           item.save!
-          
+
           log "Created menu item: #{item.name} (ID: #{item.id})", :info
           return item
         end
       end
     end
-    
+
     # 3. Create menu items for each category
     log "Creating menu items...", :info
-    
+
     # COCKTAILS - $8.99 each
     log "Creating cocktail items...", :info
     cocktail_items = [
@@ -148,11 +148,11 @@ begin
       { name: "Sex on the Beach", description: "Vodka, peach schnapps, orange & cranberry juices", price: 8.99 },
       { name: "Zombie", description: "Light & dark rum, apricot brandy, lime juice, pineapple juice", price: 8.99 }
     ]
-    
+
     cocktail_items.each do |item|
       create_menu_item(main_menu, categories[:cocktails], item[:name], item[:description], item[:price])
     end
-    
+
     # SHAREABLES
     log "Creating shareable items...", :info
     shareable_items = [
@@ -160,11 +160,11 @@ begin
       { name: "Lobster & Crab Feast", description: "1 whole lobster, 1 lb snow crab, corn, potatoes & sausage in garlic butter sauce", price: 89.95 },
       { name: "Seafood Boil Family Pack", description: "2 lbs of mixed seafood with corn, potatoes & sausage in your choice of sauce", price: 69.95 }
     ]
-    
+
     shareable_items.each do |item|
       create_menu_item(main_menu, categories[:shareables], item[:name], item[:description], item[:price])
     end
-    
+
     # SEAFOOD COMBOS
     log "Creating seafood combo items...", :info
     combo_items = [
@@ -174,23 +174,23 @@ begin
       { name: "Combo #4", description: "1/2 lb lobster, 1/2 lb shrimp, 1/2 lb mussels, corn, potatoes & sausage", price: 59.95 },
       { name: "Combo #5", description: "1/2 lb dungeness crab, 1/2 lb shrimp, 1/2 lb clams, corn, potatoes & sausage", price: 59.95 }
     ]
-    
+
     combo_items.each do |item|
       create_menu_item(main_menu, categories[:seafood_combos], item[:name], item[:description], item[:price])
     end
-    
+
     # BUILD-YOUR-OWN SEAFOOD BOIL
     log "Creating Build Your Own Seafood Boil with option groups...", :info
-    
+
     # Create the base menu item
     build_your_own = create_menu_item(
-      main_menu, 
-      categories[:build_your_own], 
-      "Build Your Own Seafood Boil", 
-      "Create your own custom seafood boil", 
+      main_menu,
+      categories[:build_your_own],
+      "Build Your Own Seafood Boil",
+      "Create your own custom seafood boil",
       15.95
     )
-    
+
     # Create option groups and options
     seafood_group = OptionGroup.find_or_create_by!(
       menu_item_id: build_your_own.id,
@@ -200,7 +200,7 @@ begin
       group.max_select = 5
       group.free_option_count = 0
     end
-    
+
     sauce_group = OptionGroup.find_or_create_by!(
       menu_item_id: build_your_own.id,
       name: "Step 2 - Sauce It!"
@@ -209,7 +209,7 @@ begin
       group.max_select = 1
       group.free_option_count = 1
     end
-    
+
     heat_group = OptionGroup.find_or_create_by!(
       menu_item_id: build_your_own.id,
       name: "Step 3 - Heat It!"
@@ -218,7 +218,7 @@ begin
       group.max_select = 1
       group.free_option_count = 1
     end
-    
+
     add_on_group = OptionGroup.find_or_create_by!(
       menu_item_id: build_your_own.id,
       name: "Step 4 - Add It!"
@@ -227,7 +227,7 @@ begin
       group.max_select = 10
       group.free_option_count = 0
     end
-    
+
     # Seafood options
     seafood_options = [
       { name: "Dungeness Crab (1.75 lb)", price: 45.00 },
@@ -242,7 +242,7 @@ begin
       { name: "Squid Rings", price: 17.95 },
       { name: "White Clams", price: 15.95 }
     ]
-    
+
     seafood_options.each do |option_data|
       Option.find_or_create_by!(
         option_group_id: seafood_group.id,
@@ -252,9 +252,9 @@ begin
         option.is_available = true
       end
     end
-    
+
     # Sauce options
-    sauce_options = ["Cajun", "Garlic", "Lemon Pepper", "The Works"]
+    sauce_options = [ "Cajun", "Garlic", "Lemon Pepper", "The Works" ]
     sauce_options.each do |sauce|
       Option.find_or_create_by!(
         option_group_id: sauce_group.id,
@@ -264,9 +264,9 @@ begin
         option.is_available = true
       end
     end
-    
+
     # Heat options
-    heat_options = ["Non-Spicy", "Medium", "Hot", "Atomic"]
+    heat_options = [ "Non-Spicy", "Medium", "Hot", "Atomic" ]
     heat_options.each do |heat|
       Option.find_or_create_by!(
         option_group_id: heat_group.id,
@@ -276,7 +276,7 @@ begin
         option.is_available = true
       end
     end
-    
+
     # Add-on options
     add_on_options = [
       { name: "Boiled Egg", price: 1.95 },
@@ -286,7 +286,7 @@ begin
       { name: "Sausages (3 pc)", price: 4.95 },
       { name: "Rice Cakes", price: 4.95 }
     ]
-    
+
     add_on_options.each do |option_data|
       Option.find_or_create_by!(
         option_group_id: add_on_group.id,
@@ -296,9 +296,9 @@ begin
         option.is_available = true
       end
     end
-    
+
     log "Created Build Your Own Seafood Boil with option groups", :info
-    
+
     # APPETIZERS
     log "Creating appetizer items...", :info
     appetizer_items = [
@@ -319,11 +319,11 @@ begin
       { name: "Seafood Sampler", price: 24.95 },
       { name: "Voodoo Wings", description: "Available in Cajun, Lemon Pepper, Works, or Garlic Parmesan", price: 12.95 }
     ]
-    
+
     appetizer_items.each do |item|
       create_menu_item(main_menu, categories[:appetizers], item[:name], item[:description], item[:price])
     end
-    
+
     # SALADS
     log "Creating salad items...", :info
     salad_items = [
@@ -333,11 +333,11 @@ begin
       { name: "House Salad", price: 8.95 },
       { name: "Seafood Salad", description: "Mixed greens with shrimp, crab meat & calamari", price: 16.95 }
     ]
-    
+
     salad_items.each do |item|
       create_menu_item(main_menu, categories[:salads], item[:name], item[:description], item[:price])
     end
-    
+
     # PO' BOYS
     log "Creating po' boy items...", :info
     po_boy_items = [
@@ -346,11 +346,11 @@ begin
       { name: "Shrimp Po' Boy", description: "Served with fries", price: 15.95 },
       { name: "Soft Shell Crab Po' Boy", description: "Served with fries", price: 17.95 }
     ]
-    
+
     po_boy_items.each do |item|
       create_menu_item(main_menu, categories[:po_boys], item[:name], item[:description], item[:price])
     end
-    
+
     # KID'S MENU
     log "Creating kids menu items...", :info
     kids_items = [
@@ -359,11 +359,11 @@ begin
       { name: "Grilled Cheese", description: "Served with fries", price: 7.95 },
       { name: "Mac & Cheese", price: 7.95 }
     ]
-    
+
     kids_items.each do |item|
       create_menu_item(main_menu, categories[:kids_menu], item[:name], item[:description], item[:price])
     end
-    
+
     # BASKETS
     log "Creating basket items...", :info
     basket_items = [
@@ -372,11 +372,11 @@ begin
       { name: "Oyster Basket", description: "Served with fries & coleslaw", price: 16.95 },
       { name: "Shrimp Basket", description: "Served with fries & coleslaw", price: 16.95 }
     ]
-    
+
     basket_items.each do |item|
       create_menu_item(main_menu, categories[:baskets], item[:name], item[:description], item[:price])
     end
-    
+
     # GRILLED ENTRÉES
     log "Creating entrée items...", :info
     entree_items = [
@@ -389,11 +389,11 @@ begin
       { name: "Grilled Shrimp", description: "Served with rice, coleslaw & steamed vegetables", price: 19.95 },
       { name: "Grilled Tilapia", description: "Served with rice, coleslaw & steamed vegetables", price: 17.95 }
     ]
-    
+
     entree_items.each do |item|
       create_menu_item(main_menu, categories[:entrees], item[:name], item[:description], item[:price])
     end
-    
+
     # EXTRAS
     log "Creating extra items...", :info
     extra_items = [
@@ -409,11 +409,11 @@ begin
       { name: "Sausages (3 pc)", price: 5.95 },
       { name: "Steamed Vegetables", price: 4.95 }
     ]
-    
+
     extra_items.each do |item|
       create_menu_item(main_menu, categories[:extras], item[:name], item[:description], item[:price])
     end
-    
+
     # BEVERAGES
     log "Creating beverage items...", :info
     beverage_items = [
@@ -423,11 +423,11 @@ begin
       { name: "Iced Tea", price: 2.95 },
       { name: "Juice", description: "Orange, Apple, Cranberry, Pineapple", price: 3.50 }
     ]
-    
+
     beverage_items.each do |item|
       create_menu_item(main_menu, categories[:beverages], item[:name], item[:description], item[:price])
     end
-    
+
     # MILKSHAKES
     log "Creating milkshake items...", :info
     milkshake_items = [
@@ -435,11 +435,11 @@ begin
       { name: "Strawberry Milkshake", price: 6.95 },
       { name: "Vanilla Milkshake", price: 6.95 }
     ]
-    
+
     milkshake_items.each do |item|
       create_menu_item(main_menu, categories[:milkshakes], item[:name], item[:description], item[:price])
     end
-    
+
     # ICE CREAM
     log "Creating ice cream items...", :info
     ice_cream_items = [
@@ -447,11 +447,11 @@ begin
       { name: "Strawberry Ice Cream", price: 4.95 },
       { name: "Vanilla Ice Cream", price: 4.95 }
     ]
-    
+
     ice_cream_items.each do |item|
       create_menu_item(main_menu, categories[:ice_cream], item[:name], item[:description], item[:price])
     end
-    
+
     # BEER
     log "Creating beer items...", :info
     beer_items = [
@@ -464,11 +464,11 @@ begin
       { name: "Modelo", price: 6.00 },
       { name: "Stella Artois", price: 6.50 }
     ]
-    
+
     beer_items.each do |item|
       create_menu_item(main_menu, categories[:beer], item[:name], item[:description], item[:price])
     end
-    
+
     # WINE
     log "Creating wine items...", :info
     wine_items = [
@@ -479,11 +479,11 @@ begin
       { name: "Cabernet Sauvignon", description: "Glass", price: 8.00 },
       { name: "White Zinfandel", description: "Glass", price: 8.00 }
     ]
-    
+
     wine_items.each do |item|
       create_menu_item(main_menu, categories[:wine], item[:name], item[:description], item[:price])
     end
-    
+
     # FISH-BOWL COCKTAILS
     log "Creating fish bowl cocktail items...", :info
     fish_bowl_items = [
@@ -493,14 +493,14 @@ begin
       { name: "Shark Attack", description: "Vodka, rum, blue curacao, sweet & sour, grenadine (serves 2-4)", price: 24.95 },
       { name: "Tropical Tsunami", description: "Light & dark rum, orange & pineapple juices, grenadine (serves 2-4)", price: 24.95 }
     ]
-    
+
     fish_bowl_items.each do |item|
       create_menu_item(main_menu, categories[:fish_bowl_cocktails], item[:name], item[:description], item[:price])
     end
-    
+
     log "All menu items created successfully for Crab Daddy!", :info
   end
-  
+
 rescue => e
   log "ERROR: #{e.message}", :error
   log e.backtrace.join("\n"), :error

@@ -112,7 +112,7 @@ RSpec.describe MenuItemsController, type: :controller do
           price: 12.99,
           available: true,
           menu_id: menu.id,
-          category_ids: [default_category.id]
+          category_ids: [ default_category.id ]
         }
       end
 

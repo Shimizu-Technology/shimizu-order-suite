@@ -114,9 +114,9 @@ unless Restaurant.exists?(name: "Shimizu Technology")
     featured: true,
     stock_status: "in_stock"
   )
-  
+
   # Save the menu item with categories
-  menu_item.category_ids = [category.id]
+  menu_item.category_ids = [ category.id ]
   menu_item.save!
 
   puts "Created main menu with sample item and category"

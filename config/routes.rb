@@ -2,20 +2,20 @@
 
 Rails.application.routes.draw do
   # Mount Action Cable server
-  mount ActionCable.server => '/cable'
-  
+  mount ActionCable.server => "/cable"
+
   # Mount Wholesale Engine
   mount Wholesale::Engine, at: "/wholesale"
-  
+
   # Health check endpoints
   get "/health/check", to: "health#index"
   get "/health/sidekiq", to: "health#sidekiq_stats"
-  
+
   # Public endpoints (no authentication required)
   namespace :public do
     # Restaurant schedule (operating hours & special events) for the reservation system
-    get '/restaurant_schedule/:restaurant_id', to: 'restaurant_schedule#show'
-    resources :restaurant_schedule, only: [:show]
+    get "/restaurant_schedule/:restaurant_id", to: "restaurant_schedule#show"
+    resources :restaurant_schedule, only: [ :show ]
   end
   # Authentication
   post "/signup", to: "users#create"
@@ -24,7 +24,7 @@ Rails.application.routes.draw do
   # Phone verification
   post "/verify_phone", to: "users#verify_phone"
   post "/resend_code",  to: "users#resend_code"
-  
+
   # User management (for staff assignment)
   get "/users", to: "users#index"
   get "/users/:id", to: "users#show"
@@ -37,25 +37,25 @@ Rails.application.routes.draw do
   resources :staff_members do
     member do
       get :transactions
-      post :transactions, to: 'staff_members#add_transaction'
+      post :transactions, to: "staff_members#add_transaction"
       patch :link_user
       patch :unlink_user
     end
   end
-  
+
   # Staff Discount Configurations
-  resources :staff_discount_configurations, only: [:index, :show, :create, :update, :destroy] do
+  resources :staff_discount_configurations, only: [ :index, :show, :create, :update, :destroy ] do
     collection do
-      get :admin, to: 'staff_discount_configurations#admin_index'
+      get :admin, to: "staff_discount_configurations#admin_index"
     end
   end
-  
+
   # Reports routes
   namespace :reports do
-    get 'house_account_balances'
-    get 'staff_orders'
-    get 'discount_summary'
-    get 'house_account_activity/:staff_id', to: 'reports#house_account_activity', as: 'house_account_activity'
+    get "house_account_balances"
+    get "staff_orders"
+    get "discount_summary"
+    get "house_account_activity/:staff_id", to: "reports#house_account_activity", as: "house_account_activity"
   end
 
   # Standard REST resources
@@ -99,16 +99,16 @@ Rails.application.routes.draw do
 
   resources :reservations, only: [ :index, :show, :create, :update, :destroy ]
   resources :waitlist_entries, only: [ :index, :show, :create, :update, :destroy ]
-  
+
   # API namespace for newer endpoints
   namespace :api do
     namespace :v1 do
       # Table management endpoints
       resources :blocked_periods, only: [ :index, :show, :create, :update, :destroy ]
       resources :location_capacities, only: [ :index, :show, :create, :update ]
-      
+
       # Location capacity endpoint
-      get 'locations/:location_id/available_capacity', to: 'location_capacities#available_capacity'
+      get "locations/:location_id/available_capacity", to: "location_capacities#available_capacity"
     end
   end
 
@@ -128,7 +128,7 @@ Rails.application.routes.draw do
       post :set_active
       post :clone
     end
-    
+
     # Nest categories under menus
     resources :categories, only: [ :index, :create, :update, :destroy ] do
       collection do
@@ -208,13 +208,13 @@ Rails.application.routes.draw do
     get "analytics/user_activity_heatmap", to: "analytics#user_activity_heatmap"
     get "analytics/staff_users",       to: "analytics#staff_users"
     get "analytics/menu_items_with_sales", to: "analytics#menu_items_with_sales"
-    
+
     # VIP Reports
     get "reports/menu_items",         to: "reports#menu_items"
     get "reports/payment_methods",     to: "reports#payment_methods"
     get "reports/vip_customers",      to: "reports#vip_customers"
     get "reports/refunds",            to: "reports#refunds"
-    
+
     # System utilities
     post "test_sms", to: "system#test_sms"
     post "test_pushover", to: "system#test_pushover"
@@ -224,10 +224,10 @@ Rails.application.routes.draw do
     # Restaurant settings
     get "restaurant/allowed_origins",  to: "restaurant#allowed_origins"
     post "restaurant/allowed_origins", to: "restaurant#update_allowed_origins"
-    
+
     # Restaurant list for admin dashboard
     get "restaurants", to: "restaurant#index"
-    
+
     # Feature Flags management
     resources :feature_flags do
       collection do
@@ -237,9 +237,9 @@ Rails.application.routes.draw do
         post :disable_globally
       end
     end
-    
+
     # Tenant Metrics and Analytics
-    resources :tenant_metrics, only: [:index, :show] do
+    resources :tenant_metrics, only: [ :index, :show ] do
       member do
         get :usage_stats
         get :health_metrics
@@ -250,17 +250,17 @@ Rails.application.routes.draw do
         get :tenant_comparison
       end
     end
-    
+
     # Tenant Backup and Disaster Recovery
     namespace :tenant_backup do
-      get 'backups', to: 'tenant_backup#backups'
-      post 'export_tenant/:id', to: 'tenant_backup#export_tenant'
-      post 'import_tenant', to: 'tenant_backup#import_tenant'
-      post 'clone_tenant', to: 'tenant_backup#clone_tenant'
-      post 'migrate_tenant', to: 'tenant_backup#migrate_tenant'
-      delete 'delete_backup/:id', to: 'tenant_backup#delete_backup'
-      get 'validate_backup/:id', to: 'tenant_backup#validate_backup'
-      get 'backup_status/:job_id', to: 'tenant_backup#backup_status'
+      get "backups", to: "tenant_backup#backups"
+      post "export_tenant/:id", to: "tenant_backup#export_tenant"
+      post "import_tenant", to: "tenant_backup#import_tenant"
+      post "clone_tenant", to: "tenant_backup#clone_tenant"
+      post "migrate_tenant", to: "tenant_backup#migrate_tenant"
+      delete "delete_backup/:id", to: "tenant_backup#delete_backup"
+      get "validate_backup/:id", to: "tenant_backup#validate_backup"
+      get "backup_status/:job_id", to: "tenant_backup#backup_status"
     end
 
     # Admin users => create/edit/delete + resend_invite + reset password
@@ -288,7 +288,7 @@ Rails.application.routes.draw do
 
     collection do
       get :unacknowledged
-      get :creators, to: 'orders#order_creators'
+      get :creators, to: "orders#order_creators"
     end
 
     # Order payments routes
@@ -354,7 +354,7 @@ Rails.application.routes.draw do
       post :force_synchronize_option_inventory
       get :validate_option_inventory_sync
     end
-    
+
     collection do
       # Global inventory synchronization audit
       get :audit_inventory_synchronization
@@ -379,7 +379,7 @@ Rails.application.routes.draw do
       post :force_synchronize_inventory
       get :validate_synchronization
     end
-    
+
     # For creating options under a specific option group:
     resources :options, only: [ :create ]
   end
@@ -394,7 +394,7 @@ Rails.application.routes.draw do
       post :restock
       get :audit_history
     end
-    
+
     collection do
       patch :batch_update
       patch :batch_update_positions
@@ -429,20 +429,20 @@ Rails.application.routes.draw do
   # Profile
   get   "/profile", to: "users#show_profile"
   patch "/profile", to: "users#update_profile"
-  
+
   # Web Push Notifications
-  resources :push_subscriptions, only: [:index, :create, :destroy] do
+  resources :push_subscriptions, only: [ :index, :create, :destroy ] do
     collection do
       post :unsubscribe
       get :vapid_public_key
     end
   end
-  
+
   # Example routes for analytics demonstration (not for production use)
   namespace :examples do
-    get 'analytics', to: 'analytics_example#index'
-    get 'analytics/track_event', to: 'analytics_example#track_event'
-    get 'analytics/identify_user', to: 'analytics_example#identify_user'
-    get 'analytics/group_identify', to: 'analytics_example#group_identify'
+    get "analytics", to: "analytics_example#index"
+    get "analytics/track_event", to: "analytics_example#track_event"
+    get "analytics/identify_user", to: "analytics_example#identify_user"
+    get "analytics/group_identify", to: "analytics_example#group_identify"
   end
 end

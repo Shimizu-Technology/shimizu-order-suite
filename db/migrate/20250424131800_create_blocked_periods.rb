@@ -13,9 +13,9 @@ class CreateBlockedPeriods < ActiveRecord::Migration[7.0]
       t.timestamps
     end
 
-    add_index :blocked_periods, [:restaurant_id, :start_time, :end_time], name: 'idx_blocked_periods_rest_times'
-    add_index :blocked_periods, [:location_id, :start_time, :end_time], name: 'idx_blocked_periods_loc_times'
-    
+    add_index :blocked_periods, [ :restaurant_id, :start_time, :end_time ], name: 'idx_blocked_periods_rest_times'
+    add_index :blocked_periods, [ :location_id, :start_time, :end_time ], name: 'idx_blocked_periods_loc_times'
+
     # Add check constraint to ensure status is valid
     execute <<-SQL
       ALTER TABLE blocked_periods

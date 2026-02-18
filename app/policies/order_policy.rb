@@ -3,10 +3,10 @@ class OrderPolicy < ApplicationPolicy
   class Scope < Scope
     def resolve
       case user.role
-      when 'admin', 'super_admin'
+      when "admin", "super_admin"
         # Admins and super admins can see all orders
         scope.all
-      when 'staff'
+      when "staff"
         # Staff can only see orders they created via the staff modal (for customers or staff members)
         scope.where(created_by_user_id: user.id, staff_created: true)
       else
@@ -25,14 +25,14 @@ class OrderPolicy < ApplicationPolicy
     # Admins can see any order
     # Staff can only see orders they created via the staff modal (for customers or staff members)
     # Customers can only see their own orders
-    user.role.in?(['admin', 'super_admin']) || 
-    record.user_id == user.id || 
-    (user.role == 'staff' && record.created_by_user_id == user.id && record.staff_created?)
+    user.role.in?([ "admin", "super_admin" ]) ||
+    record.user_id == user.id ||
+    (user.role == "staff" && record.created_by_user_id == user.id && record.staff_created?)
   end
 
   def acknowledge?
     # Only admin or above can acknowledge orders
-    user.role.in?(['admin', 'super_admin'])
+    user.role.in?([ "admin", "super_admin" ])
   end
 
   def create?
@@ -44,13 +44,13 @@ class OrderPolicy < ApplicationPolicy
     # Admins can update any order
     # Staff can update orders they created via the staff modal (for customers or staff members)
     # Customers cannot update orders
-    user.role.in?(['admin', 'super_admin']) || 
-    (user.role == 'staff' && record.created_by_user_id == user.id && record.staff_created?)
+    user.role.in?([ "admin", "super_admin" ]) ||
+    (user.role == "staff" && record.created_by_user_id == user.id && record.staff_created?)
   end
 
   def destroy?
     # Only admins can destroy orders
-    user.role.in?(['admin', 'super_admin'])
+    user.role.in?([ "admin", "super_admin" ])
   end
 
   def unacknowledge?

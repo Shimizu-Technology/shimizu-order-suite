@@ -6,26 +6,26 @@
 # Define explicit allowed origins for ActionCable
 # This needs to run as early as possible in the initialization process
 allowed_origins = [
-  'https://hafaloha.netlify.app',
-  'https://hafaloha-lvmt0.kinsta.page',
-  'https://hafaloha-orders.com',
-  'https://shimizu-order-suite.netlify.app',
-  'https://house-of-chin-fe.netlify.app',
-  'https://crab-daddy.netlify.app',
-  'https://shimizu-order-suite.com'
+  "https://hafaloha.netlify.app",
+  "https://hafaloha-lvmt0.kinsta.page",
+  "https://hafaloha-orders.com",
+  "https://shimizu-order-suite.netlify.app",
+  "https://house-of-chin-fe.netlify.app",
+  "https://crab-daddy.netlify.app",
+  "https://shimizu-order-suite.com"
 ]
 
 # Also add origins with trailing slashes to handle both formats
-trailing_slash_origins = allowed_origins.map { |origin| origin + '/' }
+trailing_slash_origins = allowed_origins.map { |origin| origin + "/" }
 allowed_origins = allowed_origins + trailing_slash_origins
 
 # Add localhost origins for development
 if Rails.env.development?
   allowed_origins += [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://localhost:5175',
-    'http://localhost:5176'
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:5176"
   ]
 end
 

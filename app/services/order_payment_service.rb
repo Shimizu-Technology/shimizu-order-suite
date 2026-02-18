@@ -6,18 +6,18 @@ class OrderPaymentService < TenantScopedService
   def list_payments(order_id)
     order = find_order_with_tenant_scope(order_id)
     return [] unless order
-    
+
     payments = order.order_payments
-    
+
     # Enhance payment details with created_by_user_id
     payments.map do |payment|
       payment_hash = payment.as_json
-      
+
       # Add created_by_user_id to payment_details if not already present
-      if payment_hash['payment_details'].is_a?(Hash) && !payment_hash['payment_details']['created_by_user_id']
-        payment_hash['payment_details']['created_by_user_id'] = order.created_by_user_id
+      if payment_hash["payment_details"].is_a?(Hash) && !payment_hash["payment_details"]["created_by_user_id"]
+        payment_hash["payment_details"]["created_by_user_id"] = order.created_by_user_id
       end
-      
+
       payment_hash
     end
   end
@@ -26,7 +26,7 @@ class OrderPaymentService < TenantScopedService
   def get_payment_summary(order_id)
     order = find_order_with_tenant_scope(order_id)
     return nil unless order
-    
+
     {
       total_paid: order.total_paid,
       total_refunded: order.total_refunded,
@@ -37,10 +37,10 @@ class OrderPaymentService < TenantScopedService
   # Create a new payment for an order
   def create_payment(order_id, payment_params)
     order = find_order_with_tenant_scope(order_id)
-    return { success: false, errors: ["Order not found"], status: :not_found } unless order
-    
+    return { success: false, errors: [ "Order not found" ], status: :not_found } unless order
+
     payment = order.order_payments.new(payment_params)
-    
+
     if payment.save
       { success: true, payment: payment, status: :created }
     else
@@ -51,37 +51,37 @@ class OrderPaymentService < TenantScopedService
   # Create an additional payment for added items
   def create_additional_payment(order_id, items, payment_method, payment_details = {})
     order = find_order_with_tenant_scope(order_id)
-    return { success: false, errors: ["Order not found"], status: :not_found } unless order
-    
+    return { success: false, errors: [ "Order not found" ], status: :not_found } unless order
+
     # Calculate the price of added items
     additional_amount = calculate_additional_amount(order, items)
-    
+
     if additional_amount <= 0
-      return { success: false, errors: ["No additional payment needed"], status: :unprocessable_entity }
+      return { success: false, errors: [ "No additional payment needed" ], status: :unprocessable_entity }
     end
-    
+
     # Handle manual payment methods (cash, stripe_reader, clover, revel, other)
-    if ["cash", "stripe_reader", "clover", "revel", "other"].include?(payment_method.downcase)
+    if [ "cash", "stripe_reader", "clover", "revel", "other" ].include?(payment_method.downcase)
       # Format staff order params if present
-      if payment_details && payment_details['staffOrderParams'].present?
-        staff_params = payment_details['staffOrderParams']
-        
+      if payment_details && payment_details["staffOrderParams"].present?
+        staff_params = payment_details["staffOrderParams"]
+
         # Convert staff params to string representation
         formatted_staff_params = {
-          'is_staff_order' => staff_params['is_staff_order'].to_s == 'true' || staff_params['is_staff_order'] == true ? 'true' : 'false',
-          'staff_member_id' => staff_params['staff_member_id'].to_s,
-          'staff_on_duty' => staff_params['staff_on_duty'].to_s == 'true' || staff_params['staff_on_duty'] == true ? 'true' : 'false',
-          'discount_type' => staff_params['discount_type'].to_s,
-          'no_discount' => staff_params['no_discount'].to_s == 'true' || staff_params['no_discount'] == true ? 'true' : 'false',
-          'use_house_account' => staff_params['use_house_account'].to_s == 'true' || staff_params['use_house_account'] == true ? 'true' : 'false',
-          'created_by_staff_id' => staff_params['created_by_staff_id'].to_s,
-          'pre_discount_total' => staff_params['pre_discount_total'].to_s
+          "is_staff_order" => staff_params["is_staff_order"].to_s == "true" || staff_params["is_staff_order"] == true ? "true" : "false",
+          "staff_member_id" => staff_params["staff_member_id"].to_s,
+          "staff_on_duty" => staff_params["staff_on_duty"].to_s == "true" || staff_params["staff_on_duty"] == true ? "true" : "false",
+          "discount_type" => staff_params["discount_type"].to_s,
+          "no_discount" => staff_params["no_discount"].to_s == "true" || staff_params["no_discount"] == true ? "true" : "false",
+          "use_house_account" => staff_params["use_house_account"].to_s == "true" || staff_params["use_house_account"] == true ? "true" : "false",
+          "created_by_staff_id" => staff_params["created_by_staff_id"].to_s,
+          "pre_discount_total" => staff_params["pre_discount_total"].to_s
         }
-        
+
         # Replace the object with the formatted version
-        payment_details['staffOrderParams'] = formatted_staff_params
+        payment_details["staffOrderParams"] = formatted_staff_params
       end
-      
+
       payment = order.order_payments.create(
         payment_type: "additional",
         amount: additional_amount,
@@ -93,13 +93,13 @@ class OrderPaymentService < TenantScopedService
         cash_received: payment_details["cash_received"],
         change_due: payment_details["change_due"]
       )
-      
+
       return { success: true, payment: payment }
     end
-    
+
     # For standard payment processors, return the amount needed for client-side processing
-    { 
-      success: true, 
+    {
+      success: true,
       additional_amount: additional_amount,
       requires_payment_processing: true
     }
@@ -108,24 +108,24 @@ class OrderPaymentService < TenantScopedService
   # Find a payment for an order
   def find_payment(order_id, payment_id)
     order = find_order_with_tenant_scope(order_id)
-    return { success: false, errors: ["Order not found"], status: :not_found } unless order
-    
+    return { success: false, errors: [ "Order not found" ], status: :not_found } unless order
+
     payment = order.order_payments.find_by(id: payment_id)
-    return { success: false, errors: ["Payment not found"], status: :not_found } unless payment
-    
+    return { success: false, errors: [ "Payment not found" ], status: :not_found } unless payment
+
     { success: true, payment: payment }
   end
-  
+
   # Process a refund for an order
   def process_refund(order_id, refund_params)
     order = find_order_with_tenant_scope(order_id)
-    return { success: false, errors: ["Order not found"], status: :not_found } unless order
-    
+    return { success: false, errors: [ "Order not found" ], status: :not_found } unless order
+
     # Additional authorization check for refunds
     unless is_admin?
-      return { success: false, errors: ["Forbidden"], status: :forbidden }
+      return { success: false, errors: [ "Forbidden" ], status: :forbidden }
     end
-    
+
     # Create a refund payment
     refund_payment = order.order_payments.new(
       payment_type: "refund",
@@ -140,7 +140,7 @@ class OrderPaymentService < TenantScopedService
         original_payment_id: refund_params[:original_payment_id]
       }
     )
-    
+
     if refund_payment.save
       { success: true, payment: refund_payment }
     else
@@ -158,19 +158,19 @@ class OrderPaymentService < TenantScopedService
   # Calculate additional amount for new items
   def calculate_additional_amount(order, items)
     return 0 unless items.present?
-    
+
     total = 0
-    
+
     items.each do |item|
       menu_item = scope_query(MenuItem).find_by(id: item[:menu_item_id])
       next unless menu_item
-      
+
       quantity = item[:quantity].to_i
       price = menu_item.price.to_f
-      
+
       total += quantity * price
     end
-    
+
     total
   end
 

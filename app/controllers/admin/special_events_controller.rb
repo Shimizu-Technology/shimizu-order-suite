@@ -3,7 +3,7 @@
 module Admin
   class SpecialEventsController < ApplicationController
     include TenantIsolation
-    
+
     before_action :authorize_request
     before_action :require_admin!
     before_action :ensure_tenant_context
@@ -23,7 +23,7 @@ module Admin
     def create
       # Use the SpecialEventsService to create an event with tenant isolation
       result = special_events_service.create_event(event_params)
-      
+
       if result[:success]
         render json: result[:event], status: result[:status] || :created
       else
@@ -34,7 +34,7 @@ module Admin
     def update
       # Use the SpecialEventsService to update an event with tenant isolation
       result = special_events_service.update_event(params[:id], event_params)
-      
+
       if result[:success]
         render json: result[:event]
       else
@@ -55,14 +55,14 @@ module Admin
         render json: { error: "Forbidden: admin only" }, status: :forbidden
       end
     end
-    
+
     def special_events_service
       @special_events_service ||= SpecialEventsService.new(current_restaurant)
     end
-    
+
     def ensure_tenant_context
       unless current_restaurant.present?
-        render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+        render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
       end
     end
 

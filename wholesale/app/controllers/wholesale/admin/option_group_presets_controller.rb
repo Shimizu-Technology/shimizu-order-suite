@@ -3,44 +3,44 @@ module Wholesale
     class OptionGroupPresetsController < Wholesale::ApplicationController
       before_action :require_admin!
       before_action :set_restaurant_context
-      before_action :set_option_group_preset, only: [:show, :update, :destroy, :duplicate, :apply_to_item]
-      
+      before_action :set_option_group_preset, only: [ :show, :update, :destroy, :duplicate, :apply_to_item ]
+
       # GET /wholesale/admin/option_group_presets
       def index
         presets = current_restaurant.wholesale_option_group_presets
                                    .includes(:option_presets)
                                    .order(:position, :name)
-        
+
         render_success(
           option_group_presets: presets.map { |preset| option_group_preset_json(preset) },
           total_count: presets.count
         )
       end
-      
+
       # GET /wholesale/admin/option_group_presets/:id
       def show
         render_success(option_group_preset: option_group_preset_json(@option_group_preset))
       end
-      
+
       # POST /wholesale/admin/option_group_presets
       def create
         preset = current_restaurant.wholesale_option_group_presets.build(option_group_preset_params)
-        
+
         if preset.save
           # Create option presets if provided
           if params[:option_presets].present?
             create_option_presets(preset, params[:option_presets])
           end
-          
+
           render_success(
-            option_group_preset: option_group_preset_json(preset.reload), 
-            message: 'Option group preset created successfully!'
+            option_group_preset: option_group_preset_json(preset.reload),
+            message: "Option group preset created successfully!"
           )
         else
-          render_error('Failed to create option group preset', errors: preset.errors.full_messages)
+          render_error("Failed to create option group preset", errors: preset.errors.full_messages)
         end
       end
-      
+
       # PATCH/PUT /wholesale/admin/option_group_presets/:id
       def update
         if @option_group_preset.update(option_group_preset_params)
@@ -48,81 +48,81 @@ module Wholesale
           if params[:option_presets].present?
             update_option_presets(@option_group_preset, params[:option_presets])
           end
-          
+
           render_success(
-            option_group_preset: option_group_preset_json(@option_group_preset.reload), 
-            message: 'Option group preset updated successfully!'
+            option_group_preset: option_group_preset_json(@option_group_preset.reload),
+            message: "Option group preset updated successfully!"
           )
         else
-          render_error('Failed to update option group preset', errors: @option_group_preset.errors.full_messages)
+          render_error("Failed to update option group preset", errors: @option_group_preset.errors.full_messages)
         end
       end
-      
+
       # DELETE /wholesale/admin/option_group_presets/:id
       def destroy
         if @option_group_preset.destroy
-          render_success(message: 'Option group preset deleted successfully!')
+          render_success(message: "Option group preset deleted successfully!")
         else
-          render_error('Failed to delete option group preset', errors: @option_group_preset.errors.full_messages)
+          render_error("Failed to delete option group preset", errors: @option_group_preset.errors.full_messages)
         end
       end
-      
+
       # POST /wholesale/admin/option_group_presets/:id/duplicate
       def duplicate
         begin
           new_preset = @option_group_preset.duplicate!(params[:name])
           render_success(
             option_group_preset: option_group_preset_json(new_preset),
-            message: 'Option group preset duplicated successfully!'
+            message: "Option group preset duplicated successfully!"
           )
         rescue => e
-          render_error('Failed to duplicate option group preset', errors: [e.message])
+          render_error("Failed to duplicate option group preset", errors: [ e.message ])
         end
       end
-      
+
       # POST /wholesale/admin/option_group_presets/:id/apply_to_item
       def apply_to_item
         item_id = params[:item_id]
         item = current_restaurant.wholesale_items.find_by(id: item_id)
-        
+
         unless item
-          render_not_found('Item not found')
+          render_not_found("Item not found")
           return
         end
-        
+
         begin
           option_group = @option_group_preset.apply_to_item!(item)
           render_success(
             option_group: option_group_json(option_group),
-            message: 'Preset applied to item successfully!'
+            message: "Preset applied to item successfully!"
           )
         rescue => e
-          render_error('Failed to apply preset to item', errors: [e.message])
+          render_error("Failed to apply preset to item", errors: [ e.message ])
         end
       end
-      
+
       private
-      
+
       def set_option_group_preset
         @option_group_preset = current_restaurant.wholesale_option_group_presets
                                                 .includes(:option_presets)
                                                 .find(params[:id])
       rescue ActiveRecord::RecordNotFound
-        render_not_found('Option group preset not found')
+        render_not_found("Option group preset not found")
       end
-      
+
       def option_group_preset_params
         params.require(:option_group_preset).permit(
           :name, :description, :min_select, :max_select, :required, :position, :enable_inventory_tracking
         )
       end
-      
+
       def set_restaurant_context
         unless current_restaurant
-          render_unauthorized('Restaurant context not set.')
+          render_unauthorized("Restaurant context not set.")
         end
       end
-      
+
       def create_option_presets(preset, option_presets_data)
         option_presets_data.each_with_index do |option_data, index|
           preset.option_presets.create!(
@@ -133,14 +133,14 @@ module Wholesale
           )
         end
       end
-      
+
       def update_option_presets(preset, option_presets_data)
         # For simplicity, we'll delete all existing option presets and recreate them
         # In a production app, you might want to do a more sophisticated diff/merge
         preset.option_presets.destroy_all
         create_option_presets(preset, option_presets_data)
       end
-      
+
       def option_group_preset_json(preset)
         {
           id: preset.id,
@@ -160,7 +160,7 @@ module Wholesale
           updated_at: preset.updated_at
         }
       end
-      
+
       def option_preset_json(option)
         {
           id: option.id,
@@ -174,7 +174,7 @@ module Wholesale
           updated_at: option.updated_at
         }
       end
-      
+
       def option_group_json(option_group)
         {
           id: option_group.id,
@@ -196,7 +196,7 @@ module Wholesale
           updated_at: option_group.updated_at
         }
       end
-      
+
       def option_json(option)
         {
           id: option.id,

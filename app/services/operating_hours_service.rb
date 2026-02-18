@@ -8,21 +8,21 @@ class OperatingHoursService < TenantScopedService
   # Update an operating hour record
   def update_hour(id, operating_hour_params)
     operating_hour = scope_query(OperatingHour).find(id)
-    
+
     if operating_hour.update(operating_hour_params)
       { success: true, operating_hour: operating_hour }
     else
-      { 
-        success: false, 
-        errors: operating_hour.errors.full_messages, 
-        status: :unprocessable_entity 
+      {
+        success: false,
+        errors: operating_hour.errors.full_messages,
+        status: :unprocessable_entity
       }
     end
   rescue ActiveRecord::RecordNotFound
-    { 
-      success: false, 
-      errors: ["Operating hour not found"], 
-      status: :not_found 
+    {
+      success: false,
+      errors: [ "Operating hour not found" ],
+      status: :not_found
     }
   end
 end

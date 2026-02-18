@@ -6,9 +6,9 @@ Wholesale::Engine.routes.draw do
         patch :toggle_active
         post :duplicate
       end
-      
+
       # Nested fundraiser-scoped resources
-      resources :items, only: [:index, :show, :create, :update, :destroy] do
+      resources :items, only: [ :index, :show, :create, :update, :destroy ] do
         member do
           patch :toggle_active
           patch :set_primary_image
@@ -17,30 +17,30 @@ Wholesale::Engine.routes.draw do
         collection do
           post :bulk_update
         end
-        
+
         # Variant management (legacy) - DEPRECATED: Use option_groups instead
         # resources :variants, only: [:index, :show, :update, :destroy], controller: 'item_variants'
-        
+
         # NEW: Item Variant management (new system)
-        resources :variants, only: [:index, :show], controller: 'item_variants_new'
-        
+        resources :variants, only: [ :index, :show ], controller: "item_variants_new"
+
         # Option Group management (new system)
-        resources :option_groups, only: [:index, :show, :create, :update, :destroy] do
-          resources :options, only: [:index, :show, :create, :update, :destroy] do
+        resources :option_groups, only: [ :index, :show, :create, :update, :destroy ] do
+          resources :options, only: [ :index, :show, :create, :update, :destroy ] do
             collection do
               patch :batch_update_positions
             end
           end
         end
       end
-      
-      resources :participants, only: [:index, :show, :create, :update, :destroy] do
+
+      resources :participants, only: [ :index, :show, :create, :update, :destroy ] do
         member do
           patch :toggle_active
         end
       end
-      
-      resources :orders, only: [:index, :show, :update] do
+
+      resources :orders, only: [ :index, :show, :update ] do
         member do
           patch :update_status
           patch :update_tracking
@@ -52,11 +52,11 @@ Wholesale::Engine.routes.draw do
           get :wholesale_statuses
         end
       end
-      
+
       # Fundraiser-specific analytics
-      get 'analytics', to: 'analytics#fundraiser_analytics'
+      get "analytics", to: "analytics#fundraiser_analytics"
     end
-    
+
     # Flat routes (for backward compatibility)
     resources :items do
       member do
@@ -66,21 +66,21 @@ Wholesale::Engine.routes.draw do
       collection do
         post :bulk_update
       end
-      
+
       # Variant management - DEPRECATED: Use option_groups instead
       # resources :variants, only: [:index, :show, :update, :destroy], controller: 'item_variants'
-      
+
       # NEW: Item Variant management (new system)
-      resources :variants, only: [:index, :show], controller: 'item_variants_new'
+      resources :variants, only: [ :index, :show ], controller: "item_variants_new"
     end
-    
+
     resources :participants do
       member do
         patch :toggle_active
       end
     end
-    
-    resources :orders, only: [:index, :show, :update] do
+
+    resources :orders, only: [ :index, :show, :update ] do
       member do
         patch :update_status
         patch :update_tracking
@@ -92,69 +92,69 @@ Wholesale::Engine.routes.draw do
         get :wholesale_statuses
       end
     end
-    
+
     # Option Group Presets management
     resources :option_group_presets do
       member do
         post :duplicate
         post :apply_to_item
       end
-      
+
       # Nested option presets within group presets
-      resources :option_presets, only: [:index, :show, :create, :update, :destroy]
+      resources :option_presets, only: [ :index, :show, :create, :update, :destroy ]
     end
-    
+
     # Global admin analytics and reporting
-    get 'analytics', to: 'analytics#index'
-    get 'analytics/revenue', to: 'analytics#revenue'
-    get 'analytics/participants', to: 'analytics#participants'
-    get 'analytics/fundraisers', to: 'analytics#fundraisers'
-    
+    get "analytics", to: "analytics#index"
+    get "analytics/revenue", to: "analytics#revenue"
+    get "analytics/participants", to: "analytics#participants"
+    get "analytics/fundraisers", to: "analytics#fundraisers"
+
     # Inventory management
-    get 'inventory', to: 'inventory#index'
-    get 'inventory/audit_trail', to: 'inventory#audit_trail'
-    
+    get "inventory", to: "inventory#index"
+    get "inventory/audit_trail", to: "inventory#audit_trail"
+
     # Item-level inventory management - direct routes
-    get 'inventory/items/:id', to: 'inventory#show', as: :item_inventory_detail
-    post 'inventory/items/:id/update_stock', to: 'inventory#update_item_stock', as: :update_item_stock
-    post 'inventory/items/:id/mark_damaged', to: 'inventory#mark_damaged', as: :mark_item_damaged
-    post 'inventory/items/:id/restock', to: 'inventory#restock', as: :restock_item
-    post 'inventory/items/:id/enable_tracking', to: 'inventory#enable_tracking', as: :enable_item_tracking
-    post 'inventory/items/:id/disable_tracking', to: 'inventory#disable_tracking', as: :disable_item_tracking
-    
+    get "inventory/items/:id", to: "inventory#show", as: :item_inventory_detail
+    post "inventory/items/:id/update_stock", to: "inventory#update_item_stock", as: :update_item_stock
+    post "inventory/items/:id/mark_damaged", to: "inventory#mark_damaged", as: :mark_item_damaged
+    post "inventory/items/:id/restock", to: "inventory#restock", as: :restock_item
+    post "inventory/items/:id/enable_tracking", to: "inventory#enable_tracking", as: :enable_item_tracking
+    post "inventory/items/:id/disable_tracking", to: "inventory#disable_tracking", as: :disable_item_tracking
+
     # Option-level inventory management
-    post 'inventory/options/:id/update_stock', to: 'inventory#update_option_stock', as: :update_option_stock
-    post 'inventory/options/:id/mark_damaged', to: 'inventory#mark_option_damaged', as: :mark_option_damaged
-    post 'inventory/options/:id/restock', to: 'inventory#restock_option', as: :restock_option
-    
+    post "inventory/options/:id/update_stock", to: "inventory#update_option_stock", as: :update_option_stock
+    post "inventory/options/:id/mark_damaged", to: "inventory#mark_option_damaged", as: :mark_option_damaged
+    post "inventory/options/:id/restock", to: "inventory#restock_option", as: :restock_option
+
     # NEW: Variant-level inventory management
-    post 'inventory/variants/:id/update_stock', to: 'inventory#update_variant_stock', as: :update_variant_stock
-    post 'inventory/variants/:id/mark_damaged', to: 'inventory#mark_variant_damaged', as: :mark_variant_damaged
-    post 'inventory/variants/:id/restock', to: 'inventory#restock_variant', as: :restock_variant
-    post 'inventory/variants/:id/toggle_active', to: 'inventory#toggle_variant_active', as: :toggle_variant_active
+    post "inventory/variants/:id/update_stock", to: "inventory#update_variant_stock", as: :update_variant_stock
+    post "inventory/variants/:id/mark_damaged", to: "inventory#mark_variant_damaged", as: :mark_variant_damaged
+    post "inventory/variants/:id/restock", to: "inventory#restock_variant", as: :restock_variant
+    post "inventory/variants/:id/toggle_active", to: "inventory#toggle_variant_active", as: :toggle_variant_active
   end
-  
+
   # Health check
-  get '/health', to: 'application#health'
-  
+  get "/health", to: "application#health"
+
   # Fundraisers (public browsing)
-  resources :fundraisers, only: [:index, :show], param: :slug do
+  resources :fundraisers, only: [ :index, :show ], param: :slug do
     # Items within fundraisers
-    resources :items, only: [:index, :show] do
+    resources :items, only: [ :index, :show ] do
       member do
         post :check_availability
       end
     end
   end
-  
+
   # Items (alternative direct access)
-  resources :items, only: [:show] do
+  resources :items, only: [ :show ] do
     member do
       post :check_availability
     end
-    
+
     # NEW: Variant-specific endpoints for items
-    resources :variants, only: [:index, :show], controller: 'item_variants' do
+    resources :variants, only: [ :index, :show ], controller: "item_variants" do
       member do
         get :stock_status
         post :check_availability
@@ -165,17 +165,17 @@ Wholesale::Engine.routes.draw do
       end
     end
   end
-  
+
   # NEW: Direct variant access endpoints
-  resources :variants, only: [:show], controller: 'variants' do
+  resources :variants, only: [ :show ], controller: "variants" do
     member do
       get :stock_status
       post :check_availability
     end
   end
-  
+
   # Shopping cart (session-based)
-  resource :cart, only: [:show], controller: 'cart' do
+  resource :cart, only: [ :show ], controller: "cart" do
     member do
       post :add
       put :update
@@ -183,37 +183,37 @@ Wholesale::Engine.routes.draw do
       get :validate
       post :validate
     end
-    
+
     # Remove specific item from cart
-    delete :remove, to: 'cart#remove'
+    delete :remove, to: "cart#remove"
   end
-  
+
   # Orders and checkout
-  resources :orders, only: [:index, :show, :create, :update] do
+  resources :orders, only: [ :index, :show, :create, :update ] do
     member do
       delete :cancel
       get :status
     end
-    
+
     # Payments for orders
-    resources :payments, only: [:index, :create, :show] do
+    resources :payments, only: [ :index, :create, :show ] do
       member do
         post :confirm
         post :refund
       end
     end
   end
-  
+
   # Direct payment access
-  resources :payments, only: [:show] do
+  resources :payments, only: [ :show ] do
     member do
       post :refund
     end
   end
-  
+
   # Stripe webhooks
-  post '/payments/webhook', to: 'payments#webhook'
-  
+  post "/payments/webhook", to: "payments#webhook"
+
   # API info endpoint
-  get '/api/info', to: 'application#api_info'
+  get "/api/info", to: "application#api_info"
 end

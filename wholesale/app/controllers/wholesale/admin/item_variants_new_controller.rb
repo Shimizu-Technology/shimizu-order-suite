@@ -4,16 +4,16 @@ module Wholesale
       before_action :require_admin!
       before_action :set_restaurant_context
       before_action :set_item
-      before_action :set_variant, only: [:show]
-      
+      before_action :set_variant, only: [ :show ]
+
       # GET /wholesale/admin/items/:item_id/variants
       def index
         unless @item.track_variants?
           return render_error("Item does not use variant tracking")
         end
-        
+
         variants = @item.item_variants.includes(:wholesale_item)
-        
+
         render_success(
           variants: variants.map { |variant| variant_json(variant) },
           item: {
@@ -24,7 +24,7 @@ module Wholesale
           message: "Variants retrieved successfully"
         )
       end
-      
+
       # GET /wholesale/admin/items/:item_id/variants/:id
       def show
         render_success(
@@ -32,25 +32,25 @@ module Wholesale
           message: "Variant details retrieved successfully"
         )
       end
-      
+
       private
-      
+
       def set_item
         @item = Wholesale::Item.joins(:fundraiser)
           .where(wholesale_fundraisers: { restaurant_id: current_restaurant.id })
           .find_by(id: params[:item_id])
-        render_not_found('Item not found') unless @item
+        render_not_found("Item not found") unless @item
       end
-      
+
       def set_variant
         @variant = @item.item_variants.find(params[:id])
       rescue ActiveRecord::RecordNotFound
-        render_not_found('Variant not found')
+        render_not_found("Variant not found")
       end
-      
+
       def set_restaurant_context
         unless current_restaurant
-          render_unauthorized('Restaurant context not set.')
+          render_unauthorized("Restaurant context not set.")
         end
       end
 

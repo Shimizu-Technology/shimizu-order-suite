@@ -5,11 +5,11 @@ module ApplicationCable
     def connect
       Rails.logger.info("WebSocket connection attempt - Request details: " + {
         remote_addr: request.remote_addr,
-        user_agent: request.env['HTTP_USER_AGENT'],
+        user_agent: request.env["HTTP_USER_AGENT"],
         origin: request.origin,
         params: request.params.except(:token).to_json,
-        headers: request.headers.to_h.select { |k, _| k.start_with?('HTTP_') },
-        protocol: request.env['rack.url_scheme'],
+        headers: request.headers.to_h.select { |k, _| k.start_with?("HTTP_") },
+        protocol: request.env["rack.url_scheme"],
         env: Rails.env,
         time: Time.current.iso8601
       }.to_json)
@@ -58,13 +58,13 @@ module ApplicationCable
 
     def disconnect
       uptime = @connected_at ? (Time.current - @connected_at) : nil
-      
+
       Rails.logger.info("WebSocket connection disconnected - " + {
         user_id: current_user&.id,
         restaurant_id: restaurant_id,
         connection_id: connection_identifier,
         uptime: uptime,
-        reason: 'Client disconnected'
+        reason: "Client disconnected"
       }.to_json)
 
       if @monitoring_timer && defined?(ActionCable.server.pubsub.send(:broadcast_adapter).connection.server.reactor)
@@ -82,28 +82,28 @@ module ApplicationCable
         Rails.logger.error("WebSocket authentication failed - No token provided")
         return reject_unauthorized_connection
       end
-      
+
       # Log token information for debugging (without revealing the actual token)
       Rails.logger.debug("WebSocket authentication - Token received with length: #{token.length}, first 3 chars: #{token[0..2]}")
 
       Rails.logger.debug("WebSocket authentication - Starting token verification")
-      
+
       begin
-        decoded = JWT.decode(token, Rails.application.secret_key_base, true, algorithm: 'HS256')[0]
+        decoded = JWT.decode(token, Rails.application.secret_key_base, true, algorithm: "HS256")[0]
         user_id = decoded["user_id"]
-        
+
         Rails.logger.debug("WebSocket authentication - Token decoded successfully - " + {
           user_id: user_id,
           exp: decoded["exp"],
           iat: decoded["iat"]
         }.to_json)
-        
+
         user = User.find_by(id: user_id)
-        
+
         if decoded["exp"].present?
           expiration_time = Time.at(decoded["exp"])
           time_until_expiry = expiration_time - Time.current
-          
+
           if time_until_expiry < 0
             Rails.logger.error("WebSocket authentication failed - Token expired - " + {
               user_id: user_id,
@@ -112,13 +112,13 @@ module ApplicationCable
             }.to_json)
             return reject_unauthorized_connection
           end
-          
+
           Rails.logger.debug("WebSocket authentication - Token expiration valid - " + {
             expires_in: time_until_expiry,
             expires_at: expiration_time
           }.to_json)
         end
-        
+
         if user
           Rails.logger.info("WebSocket authentication successful - " + {
             user_id: user.id,

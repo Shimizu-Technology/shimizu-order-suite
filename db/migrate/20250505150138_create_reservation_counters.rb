@@ -8,7 +8,7 @@ class CreateReservationCounters < ActiveRecord::Migration[7.2]
 
       t.timestamps
     end
-    
+
     add_column :reservations, :reservation_number, :string
     add_index :reservations, :reservation_number, unique: true
   end

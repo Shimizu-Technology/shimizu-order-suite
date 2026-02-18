@@ -1,7 +1,7 @@
 class StripeController < ApplicationController
   include TenantIsolation
-  
-  before_action :ensure_tenant_context, except: [:webhook, :global_webhook]
+
+  before_action :ensure_tenant_context, except: [ :webhook, :global_webhook ]
 
   # Create a payment intent for Stripe
   def create_intent
@@ -11,29 +11,29 @@ class StripeController < ApplicationController
         render json: { error: "restaurant_id is required" }, status: :unprocessable_entity
         return
       end
-      
+
       # Find the restaurant
       restaurant = Restaurant.find_by(id: params[:restaurant_id])
       unless restaurant
         render json: { error: "Restaurant not found" }, status: :not_found
         return
       end
-      
+
       # Set the current restaurant context
       @current_restaurant = restaurant
       ActiveRecord::Base.current_restaurant = restaurant
-      
+
       # Log restaurant information for debugging
       Rails.logger.info("Creating payment intent for restaurant: #{restaurant.id} (#{restaurant.name})")
       Rails.logger.info("Amount: #{params[:amount]}, Currency: #{params[:currency] || 'USD'}")
-      
+
       # Log Stripe configuration (with sensitive parts redacted)
       payment_settings = restaurant.admin_settings&.dig("payment_gateway") || {}
       has_secret_key = payment_settings["secret_key"].present? ? "Yes" : "No"
       has_publishable_key = payment_settings["publishable_key"].present? ? "Yes" : "No"
       Rails.logger.info("Restaurant has secret_key: #{has_secret_key}, publishable_key: #{has_publishable_key}")
       Rails.logger.info("Test mode: #{payment_settings['test_mode'] ? 'Enabled' : 'Disabled'}")
-      
+
       # Create the payment intent
       result = tenant_stripe_service.create_payment_intent(
         params[:amount],
@@ -43,22 +43,22 @@ class StripeController < ApplicationController
       if result[:success]
         # Handle different types of successful responses
         response_data = { success: true }
-        
+
         # Include client_secret if present (normal paid orders)
         response_data[:client_secret] = result[:client_secret] if result[:client_secret].present?
-        
+
         # Include free_order flag if present
         response_data[:free_order] = result[:free_order] if result[:free_order]
-        
+
         # Include small_order flag if present
         response_data[:small_order] = result[:small_order] if result[:small_order]
-        
+
         # Include order_id if present
         response_data[:order_id] = result[:order_id] if result[:order_id].present?
-        
+
         render json: response_data
       else
-        render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
+        render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
       end
     rescue Stripe::StripeError => e
       render json: { error: e.message }, status: :unprocessable_entity
@@ -113,23 +113,23 @@ class StripeController < ApplicationController
     payload = request.body.read
     signature = request.env["HTTP_STRIPE_SIGNATURE"]
     restaurant_id = params[:restaurant_id]
-    
+
     # Find the restaurant for this webhook
     restaurant = Restaurant.find_by(id: restaurant_id)
-    
+
     unless restaurant
       # If no restaurant is found, use the global webhook handler
       return global_webhook
     end
-    
+
     # Set the current restaurant context for the tenant service
     @current_restaurant = restaurant
-    
+
     begin
       # Process the webhook using the tenant service
       result = tenant_stripe_service.process_webhook(payload, signature)
       event = result[:event]
-      
+
       if result[:success]
         # Handle the event based on its type
         case event["type"]
@@ -158,7 +158,7 @@ class StripeController < ApplicationController
           if order
             # Check if it's a full or partial refund
             refund_amount = charge.amount_refunded / 100.0 # Convert from cents
-            
+
             if charge.amount == charge.amount_refunded
               order.update(
                 payment_status: "refunded",
@@ -174,13 +174,13 @@ class StripeController < ApplicationController
                 payment_id: payment_intent_id # Ensure payment_id is set
               )
             end
-            
+
             # Create refund payment record if it doesn't exist
             existing_refund = order.order_payments.find_by(
-              payment_type: "refund", 
+              payment_type: "refund",
               transaction_id: charge.latest_refund
             )
-            
+
             unless existing_refund
               refund_payment = order.order_payments.create(
                 payment_type: "refund",
@@ -191,8 +191,8 @@ class StripeController < ApplicationController
                 payment_id: payment_intent_id,
                 description: "Stripe webhook refund"
               )
-              
-                          # Send refund notification email to customer
+
+            # Send refund notification email to customer
             begin
               if order.contact_email.present?
                 Rails.logger.info("Sending Stripe webhook refund notification email to #{order.contact_email} for order #{order.id}")
@@ -202,30 +202,30 @@ class StripeController < ApplicationController
             rescue => email_error
               Rails.logger.error("Failed to send Stripe webhook refund notification email for order #{order.id}: #{email_error.message}")
             end
-            
+
             # Send refund notification SMS to customer
             begin
               if order.contact_phone.present?
                 restaurant = order.restaurant
                 notification_channels = restaurant.admin_settings&.dig("notification_channels", "orders") || {}
-                
+
                 # Send SMS if enabled (default to true for backward compatibility)
                 if notification_channels["sms"] != false
                   sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant.name
-                  
+
                   # Determine refund type and create appropriate message
                   is_full_refund = charge.amount == charge.amount_refunded
                   refund_type = is_full_refund ? "full refund" : "partial refund"
                   refund_amount = charge.amount_refunded / 100.0
-                  
+
                   message_body = <<~MSG.squish
-                    Hi #{order.contact_name.presence || 'Customer'}, 
-                    we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)} 
-                    for your #{restaurant.name} order ##{order.order_number.presence || order.id}. 
-                    You should receive your refund within 1-3 business days. 
+                    Hi #{order.contact_name.presence || 'Customer'},#{' '}
+                    we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)}#{' '}
+                    for your #{restaurant.name} order ##{order.order_number.presence || order.id}.#{' '}
+                    You should receive your refund within 1-3 business days.#{' '}
                     #{is_full_refund ? 'Thank you for your understanding.' : 'This is a partial refund - some items from your order are not affected.'}
                   MSG
-                  
+
                   Rails.logger.info("Sending Stripe webhook refund notification SMS to #{order.contact_phone} for order #{order.id}")
                   SendSmsJob.perform_later(
                     to: order.contact_phone,
@@ -238,7 +238,7 @@ class StripeController < ApplicationController
             rescue => sms_error
               Rails.logger.error("Failed to send Stripe webhook refund notification SMS for order #{order.id}: #{sms_error.message}")
             end
-          end
+            end
           end
 
         when "charge.dispute.created"
@@ -333,23 +333,23 @@ class StripeController < ApplicationController
           payment_intent_id = session.payment_intent
           order_id = session.metadata&.order_id
           restaurant_id = session.metadata&.restaurant_id
-          
+
           # Find the order either by metadata or by payment_intent_id
           order = order_id.present? ? Order.find_by(id: order_id) :
                   (Order.find_by(payment_id: payment_intent_id) ||
                   Order.find_by(transaction_id: payment_intent_id))
-                  
+
           if order
             # Find the restaurant
             restaurant = restaurant_id.present? ? Restaurant.find_by(id: restaurant_id) : order.restaurant
-            
+
             # Update the order payment status
             order.update(
               payment_status: "paid",
               payment_method: "stripe",
               payment_id: payment_intent_id # Ensure payment_id is set
             )
-            
+
             # Find and update any pending payment_link payments
             pending_payment = order.order_payments.find_by(payment_method: "payment_link", status: "pending")
             if pending_payment
@@ -358,7 +358,7 @@ class StripeController < ApplicationController
                 transaction_id: payment_intent_id,
                 payment_id: payment_intent_id
               )
-              
+
               # Send confirmation notification if restaurant has this setting enabled
               if restaurant&.admin_settings&.dig("notifications", "payment_confirmation")
                 # Send email confirmation if we have customer email
@@ -370,7 +370,7 @@ class StripeController < ApplicationController
                     restaurant&.logo_url
                   ).deliver_later
                 end
-                
+
                 # Send SMS confirmation if we have customer phone
                 if pending_payment.payment_details&.dig("phone").present?
                   message = "Your payment for order ##{order.id} from #{restaurant&.name} has been received. Thank you!"
@@ -412,10 +412,10 @@ class StripeController < ApplicationController
           # Handle unknown event type
           Rails.logger.info "Unhandled event type: #{event['type']}"
         end
-        
+
         render json: { status: "success" }
       else
-        render json: { error: result[:errors].join(', ') }, status: result[:status] || :bad_request
+        render json: { error: result[:errors].join(", ") }, status: result[:status] || :bad_request
       end
     rescue JSON::ParserError => e
       render json: { error: "Invalid payload" }, status: :bad_request
@@ -511,7 +511,7 @@ class StripeController < ApplicationController
         if order
           # Check if it's a full or partial refund
           refund_amount = charge.amount_refunded / 100.0 # Convert from cents
-          
+
           if charge.amount == charge.amount_refunded
             order.update(
               payment_status: "refunded",
@@ -527,13 +527,13 @@ class StripeController < ApplicationController
               payment_id: payment_intent_id # Ensure payment_id is set
             )
           end
-          
+
           # Create refund payment record if it doesn't exist
           existing_refund = order.order_payments.find_by(
-            payment_type: "refund", 
+            payment_type: "refund",
             transaction_id: charge.latest_refund
           )
-          
+
           unless existing_refund
             refund_payment = order.order_payments.create(
               payment_type: "refund",
@@ -544,7 +544,7 @@ class StripeController < ApplicationController
               payment_id: payment_intent_id,
               description: "Stripe webhook refund"
             )
-            
+
             # Send refund notification email to customer
             begin
               if order.contact_email.present?
@@ -555,30 +555,30 @@ class StripeController < ApplicationController
             rescue => email_error
               Rails.logger.error("Failed to send Stripe webhook refund notification email for order #{order.id}: #{email_error.message}")
             end
-            
+
             # Send refund notification SMS to customer
             begin
               if order.contact_phone.present?
                 restaurant = order.restaurant
                 notification_channels = restaurant.admin_settings&.dig("notification_channels", "orders") || {}
-                
+
                 # Send SMS if enabled (default to true for backward compatibility)
                 if notification_channels["sms"] != false
                   sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant.name
-                  
+
                   # Determine refund type and create appropriate message
                   is_full_refund = charge.amount == charge.amount_refunded
                   refund_type = is_full_refund ? "full refund" : "partial refund"
                   refund_amount = charge.amount_refunded / 100.0
-                  
+
                   message_body = <<~MSG.squish
-                    Hi #{order.contact_name.presence || 'Customer'}, 
-                    we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)} 
-                    for your #{restaurant.name} order ##{order.order_number.presence || order.id}. 
-                    You should receive your refund within 1-3 business days. 
+                    Hi #{order.contact_name.presence || 'Customer'},#{' '}
+                    we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)}#{' '}
+                    for your #{restaurant.name} order ##{order.order_number.presence || order.id}.#{' '}
+                    You should receive your refund within 1-3 business days.#{' '}
                     #{is_full_refund ? 'Thank you for your understanding.' : 'This is a partial refund - some items from your order are not affected.'}
                   MSG
-                  
+
                   Rails.logger.info("Sending Stripe webhook refund notification SMS to #{order.contact_phone} for order #{order.id}")
                   SendSmsJob.perform_later(
                     to: order.contact_phone,
@@ -687,23 +687,23 @@ class StripeController < ApplicationController
         payment_intent_id = session.payment_intent
         order_id = session.metadata&.order_id
         restaurant_id = session.metadata&.restaurant_id
-        
+
         # Find the order either by metadata or by payment_intent_id
         order = order_id.present? ? Order.find_by(id: order_id) :
                 (Order.find_by(payment_id: payment_intent_id) ||
                 Order.find_by(transaction_id: payment_intent_id))
-                
+
         if order
           # Find the restaurant
           restaurant = restaurant_id.present? ? Restaurant.find_by(id: restaurant_id) : order.restaurant
-          
+
           # Update the order payment status
           order.update(
             payment_status: "paid",
             payment_method: "stripe",
             payment_id: payment_intent_id # Ensure payment_id is set
           )
-          
+
           # Find and update any pending payment_link payments
           pending_payment = order.order_payments.find_by(payment_method: "payment_link", status: "pending")
           if pending_payment
@@ -712,7 +712,7 @@ class StripeController < ApplicationController
               transaction_id: payment_intent_id,
               payment_id: payment_intent_id
             )
-            
+
             # Send confirmation notification if restaurant has this setting enabled
             if restaurant&.admin_settings&.dig("notifications", "payment_confirmation")
               # Send email confirmation if we have customer email
@@ -724,7 +724,7 @@ class StripeController < ApplicationController
                   restaurant&.logo_url
                 ).deliver_later
               end
-              
+
               # Send SMS confirmation if we have customer phone
               if pending_payment.payment_details&.dig("phone").present?
                 message = "Your payment for order ##{order.id} from #{restaurant&.name} has been received. Thank you!"
@@ -790,7 +790,7 @@ class StripeController < ApplicationController
   def render_not_found
     render json: { error: "Restaurant not found" }, status: :not_found
   end
-  
+
   def tenant_stripe_service
     @tenant_stripe_service ||= begin
       service = TenantStripeService.new(current_restaurant)
@@ -798,7 +798,7 @@ class StripeController < ApplicationController
       service
     end
   end
-  
+
   def ensure_tenant_context
     unless current_restaurant.present?
       # In development, be more permissive and use the first restaurant if none is specified
@@ -807,8 +807,8 @@ class StripeController < ApplicationController
         ActiveRecord::Base.current_restaurant = @current_restaurant
         return if @current_restaurant.present?
       end
-      
-      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+
+      render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
     else
       # Ensure ActiveRecord::Base.current_restaurant is set
       ActiveRecord::Base.current_restaurant = current_restaurant
