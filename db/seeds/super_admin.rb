@@ -4,11 +4,11 @@
 # Only create the super_admin in development environment
 if Rails.env.development?
   puts "== Creating development super_admin user =="
-  
+
   # Default super_admin credentials for development
   dev_email = ENV['SUPER_ADMIN_EMAIL'] || 'super_admin@example.com'
   dev_password = ENV['SUPER_ADMIN_PASSWORD'] || 'password123'
-  
+
   # Check if the super_admin already exists
   if User.exists?(email: dev_email, role: 'super_admin')
     puts "Super admin already exists with email: #{dev_email}"
@@ -23,7 +23,7 @@ if Rails.env.development?
       restaurant_id: nil,
       phone_verified: true
     )
-    
+
     puts "Created super_admin user:"
     puts "  Email: #{super_admin.email}"
     puts "  Password: #{dev_password} (only shown in development)"

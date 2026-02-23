@@ -9,12 +9,12 @@ class CreateWholesaleParticipants < ActiveRecord::Migration[8.0]
       t.integer :goal_amount_cents
       t.integer :current_amount_cents, default: 0
       t.boolean :active, default: true
-      
+
       t.timestamps
     end
-    
+
     # Indexes for uniqueness and performance
-    add_index :wholesale_participants, [:fundraiser_id, :slug], unique: true
-    add_index :wholesale_participants, [:fundraiser_id, :active]
+    add_index :wholesale_participants, [ :fundraiser_id, :slug ], unique: true
+    add_index :wholesale_participants, [ :fundraiser_id, :active ]
   end
 end

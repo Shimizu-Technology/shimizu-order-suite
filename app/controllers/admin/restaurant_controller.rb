@@ -3,11 +3,11 @@
 module Admin
   class RestaurantController < ApplicationController
     include TenantIsolation
-    
+
     before_action :authorize_request
     before_action :require_admin!
     # Skip ensure_tenant_context for index action since it's a global operation
-    before_action :ensure_tenant_context, except: [:index]
+    before_action :ensure_tenant_context, except: [ :index ]
 
     # GET /admin/restaurants
     def index
@@ -27,7 +27,7 @@ module Admin
     def update_allowed_origins
       # Use the RestaurantManagementService to update allowed origins with tenant isolation
       result = restaurant_management_service.update_allowed_origins(params[:allowed_origins])
-      
+
       if result[:success]
         render json: { allowed_origins: result[:allowed_origins] }
       else
@@ -42,7 +42,7 @@ module Admin
         render json: { error: "Forbidden" }, status: :forbidden
       end
     end
-    
+
     def restaurant_management_service
       # For global operations like index, don't pass a restaurant
       if action_name == "index" && current_user&.super_admin?
@@ -51,15 +51,15 @@ module Admin
         @restaurant_management_service ||= RestaurantManagementService.new(current_restaurant, current_user)
       end
     end
-    
+
     # Override global_access_permitted to allow super_admin to access global endpoints
     def global_access_permitted?
-      current_user&.super_admin? && action_name.in?(["index"])
+      current_user&.super_admin? && action_name.in?([ "index" ])
     end
-    
+
     def ensure_tenant_context
       unless current_restaurant.present?
-        render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+        render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
       end
     end
   end

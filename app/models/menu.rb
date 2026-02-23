@@ -2,7 +2,7 @@
 class Menu < ApplicationRecord
   include Broadcastable
   include TenantScoped
-  
+
   # Define which attributes should trigger broadcasts
   broadcasts_on :name, :active
   has_many :menu_items, dependent: :destroy

@@ -5,20 +5,20 @@ class CreateWholesaleOrderPayments < ActiveRecord::Migration[8.0]
       t.integer :amount_cents, null: false
       t.string :payment_method, default: 'stripe'
       t.string :status, default: 'pending'
-      
+
       # Stripe-specific fields
       t.string :stripe_payment_intent_id
       t.string :stripe_charge_id
       t.string :transaction_id
       t.jsonb :payment_data, default: {}
       t.timestamp :processed_at
-      
+
       t.timestamps
     end
-    
+
     # Indexes for performance and lookups
-    add_index :wholesale_order_payments, [:order_id]
-    add_index :wholesale_order_payments, [:status]
-    add_index :wholesale_order_payments, [:stripe_payment_intent_id]
+    add_index :wholesale_order_payments, [ :order_id ]
+    add_index :wholesale_order_payments, [ :status ]
+    add_index :wholesale_order_payments, [ :stripe_payment_intent_id ]
   end
 end

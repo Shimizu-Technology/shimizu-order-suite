@@ -1,23 +1,23 @@
 # app/controllers/users_controller.rb
 class UsersController < ApplicationController
   include TenantIsolation
-  
+
   before_action :authorize_request, only: [ :show_profile, :update_profile, :verify_phone, :resend_code, :index, :show ]
   before_action :require_admin_or_staff, only: [ :index, :show ]
-  before_action :ensure_tenant_context, except: [:create]
+  before_action :ensure_tenant_context, except: [ :create ]
 
   # POST /signup
   def create
     # Prepare user parameters
     create_params = user_params
-    
+
     # Default role to 'customer' if not provided
     create_params[:role] = "customer" if create_params[:role].blank?
-    
+
     # IMPORTANT: For multi-tenant user creation, we need to use the frontend context
     # This allows the same email to be used across different restaurants
-    frontend_restaurant_id = request.headers['X-Frontend-Restaurant-ID']
-    
+    frontend_restaurant_id = request.headers["X-Frontend-Restaurant-ID"]
+
     if frontend_restaurant_id.present?
       # Override the restaurant_id with the one from the frontend context
       create_params[:restaurant_id] = frontend_restaurant_id
@@ -26,45 +26,45 @@ class UsersController < ApplicationController
       default_rest = Restaurant.find_by(name: "Hafaloha")
       create_params[:restaurant_id] = default_rest.id if default_rest
     end
-    
+
     # We'll set phone_verified = false initially
     create_params[:phone_verified] = false
-    
+
     # If user provided a phone, generate a verification code
     if create_params[:phone].present?
       code = generate_code
       create_params[:verification_code] = code
       create_params[:verification_code_sent_at] = Time.current
     end
-    
+
     # Set the current_restaurant for the service
     requested_restaurant = Restaurant.find_by(id: create_params[:restaurant_id])
-    
+
     # Important: We need to ensure we're using the restaurant from params, not from tenant context
     # This allows users to be created for a specific restaurant, even if the request comes from another
     @current_restaurant = requested_restaurant
-    
+
     # Create the user using the service, but don't override the restaurant_id
     # This is crucial for multi-tenant user creation with the same email
     result = user_service.create_user(create_params, preserve_restaurant_id: true)
-    
+
     if result[:success]
       user = result[:user]
-      
+
       # If phone present => send the SMS code
       if user.phone.present?
         restaurant = Restaurant.find(user.restaurant_id)
         restaurant_name = restaurant.name
         # Use custom SMS sender ID if set, otherwise use restaurant name
         sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant_name
-        
+
         SendSmsJob.perform_later(
           to:   user.phone,
           body: "Your verification code is #{user.verification_code}",
           from: sms_sender
         )
       end
-      
+
       # Generate JWT token using TokenService
       token = TokenService.generate_token(user)
       render json: { jwt: token, user: user }, status: :created
@@ -161,33 +161,33 @@ class UsersController < ApplicationController
   def index
     # Prepare filters
     filters = {}
-    
+
     # Filter by role if specified
     filters[:role] = params[:role] if params[:role].present?
-    
+
     # Filter by multiple roles if specified
     if params[:roles].present?
       # Convert to array if it's a string
-      filters[:role] = params[:roles].is_a?(Array) ? params[:roles] : [params[:roles]]
+      filters[:role] = params[:roles].is_a?(Array) ? params[:roles] : [ params[:roles] ]
     end
-    
+
     # Add search filter if specified
     filters[:search] = params[:search] if params[:search].present?
-    
+
     # Add pagination parameters
     filters[:page] = params[:page] || 1
     filters[:per_page] = params[:per_page] || 20
-    
+
     # Special filtering for staff assignment
-    if params[:available_for_staff] == 'true'
+    if params[:available_for_staff] == "true"
       filters[:available_for_staff] = true
       filters[:exclude_role] = params[:exclude_role] if params[:exclude_role].present?
       filters[:include_user_id] = params[:include_user_id] if params[:include_user_id].present?
     end
-    
+
     # Get users from service
     result = user_service.list_users(filters)
-    
+
     if result[:success]
       # For the staff filter in OrderManager, we need to return just the array of users
       if params[:roles].present?
@@ -211,7 +211,7 @@ class UsersController < ApplicationController
   # Get a specific user
   def show
     result = user_service.find_user(params[:id])
-    
+
     if result[:success]
       render json: result[:user]
     else
@@ -253,7 +253,7 @@ class UsersController < ApplicationController
     # 6-digit random code
     rand(100000..999999).to_s
   end
-  
+
   # Get the user service instance
   def user_service
     @user_service ||= begin
@@ -262,11 +262,11 @@ class UsersController < ApplicationController
       service
     end
   end
-  
+
   # Ensure we have a tenant context
   def ensure_tenant_context
     unless current_restaurant.present? || @current_restaurant.present?
-      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+      render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
     end
   end
 end

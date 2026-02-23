@@ -2,15 +2,16 @@
 class OptionGroup < ApplicationRecord
   include IndirectTenantScoped
   include Broadcastable
-  
+
   # Define the path to restaurant for tenant isolation
-  tenant_path through: [:menu_item, :menu], foreign_key: 'restaurant_id'
+  tenant_path through: [ :menu_item, :menu ], foreign_key: "restaurant_id"
 
   # Configure which attributes should trigger broadcasts
   broadcasts_on :enable_inventory_tracking
 
   belongs_to :menu_item
   has_many :options, dependent: :destroy
+  accepts_nested_attributes_for :options, allow_destroy: true
 
   validates :name, presence: true
   validates :min_select, numericality: { greater_than_or_equal_to: 0 }
@@ -39,7 +40,7 @@ class OptionGroup < ApplicationRecord
     if enable_inventory_tracking && menu_item
       other_tracking_groups = menu_item.option_groups.where(enable_inventory_tracking: true)
       other_tracking_groups = other_tracking_groups.where.not(id: id) if persisted?
-      
+
       if other_tracking_groups.exists?
         errors.add(:enable_inventory_tracking, "only one option group per menu item can have inventory tracking enabled")
       end
@@ -50,10 +51,10 @@ class OptionGroup < ApplicationRecord
   def option_inventory_totals_match_menu_item
     return unless menu_item&.enable_stock_tracking
     return unless menu_item.stock_quantity.present?
-    
+
     total_option_stock = options.sum(:stock_quantity)
     menu_item_stock = menu_item.stock_quantity.to_i
-    
+
     if total_option_stock != menu_item_stock
       errors.add(:base, "Total option inventory (#{total_option_stock}) must equal menu item inventory (#{menu_item_stock})")
     end
@@ -64,12 +65,12 @@ class OptionGroup < ApplicationRecord
   # We remove the as_json override entirely.
   # The controller calls `include: { options: { methods: [:additional_price_float] }}`.
   # That automatically yields JSON for each Option, including that method.
-  
+
   # Check if the option group has any available options
   def has_available_options?
     options.where(is_available: true).exists?
   end
-  
+
   # Check if this is a required group (min_select > 0) with no available options
   def required_but_unavailable?
     min_select > 0 && !has_available_options?
@@ -84,12 +85,12 @@ class OptionGroup < ApplicationRecord
   def should_validate_option_inventory_sync?
     # Only validate if tracking is enabled
     return false unless inventory_tracking_enabled?
-    
+
     # Skip validation if we're enabling tracking for the first time (options haven't been initialized yet)
     if enable_inventory_tracking_changed? && enable_inventory_tracking && !enable_inventory_tracking_was
       return false # Allow the first-time enable to pass, stock will be initialized after save
     end
-    
+
     true
   end
 
@@ -102,7 +103,7 @@ class OptionGroup < ApplicationRecord
   # Get available stock across all options in this group (stock - damaged)
   def available_option_stock
     return 0 unless inventory_tracking_enabled?
-    options.sum('stock_quantity - damaged_quantity')
+    options.sum("stock_quantity - damaged_quantity")
   end
 
   # Check if option group has any options with stock
@@ -110,18 +111,18 @@ class OptionGroup < ApplicationRecord
     return false unless inventory_tracking_enabled?
     available_option_stock > 0
   end
-  
+
   # Include availability status in JSON representation
   def as_json(options = {})
     super(options).tap do |json|
-      json['has_available_options'] = has_available_options?
-      json['required_but_unavailable'] = required_but_unavailable?
-      json['inventory_tracking_enabled'] = inventory_tracking_enabled?
-      
+      json["has_available_options"] = has_available_options?
+      json["required_but_unavailable"] = required_but_unavailable?
+      json["inventory_tracking_enabled"] = inventory_tracking_enabled?
+
       if inventory_tracking_enabled?
-        json['total_option_stock'] = total_option_stock
-        json['available_option_stock'] = available_option_stock
-        json['has_option_stock'] = has_option_stock?
+        json["total_option_stock"] = total_option_stock
+        json["available_option_stock"] = available_option_stock
+        json["has_option_stock"] = has_option_stock?
       end
     end
   end
@@ -129,7 +130,7 @@ class OptionGroup < ApplicationRecord
   # Reset all option quantities in this group (used when menu item tracking is toggled)
   def reset_quantities(reason)
     Rails.logger.info("Resetting all option quantities for group #{id} (#{name}): #{reason}")
-    
+
     # Create audit records before resetting (to document the reset)
     options.each do |option|
       # Only create audit if there was actually some inventory to reset
@@ -143,10 +144,10 @@ class OptionGroup < ApplicationRecord
         )
       end
     end
-    
+
     # Reset all options in this group to 0 quantities
     options.update_all(stock_quantity: 0, damaged_quantity: 0)
-    
+
     Rails.logger.info("Reset #{options.count} options to 0 quantities in group #{id}")
   end
 end

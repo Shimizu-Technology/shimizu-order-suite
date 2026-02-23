@@ -32,9 +32,9 @@ class LocationService < TenantScopedService
   def create_location(attributes)
     # If this is the first location, make it the default
     attributes[:is_default] = true if find_records(Location).count == 0
-    
+
     location = create_record(Location, attributes)
-    
+
     # If this is marked as default, ensure no other locations are default
     if location.persisted? && location.is_default?
       Location.transaction do
@@ -44,7 +44,7 @@ class LocationService < TenantScopedService
           .update_all(is_default: false)
       end
     end
-    
+
     location
   end
 
@@ -55,16 +55,16 @@ class LocationService < TenantScopedService
   def update_location(id, attributes)
     location = find_location(id)
     return nil unless location
-    
+
     # Handle default location logic
     was_default = location.is_default?
     will_be_default = attributes.key?(:is_default) ? attributes[:is_default] : was_default
-    
+
     # If this location is being set as default, ensure no other locations are default
     if will_be_default && !was_default
       Location.transaction do
         update_record(location, attributes)
-        
+
         find_records(Location)
           .where.not(id: location.id)
           .where(is_default: true)
@@ -74,7 +74,7 @@ class LocationService < TenantScopedService
       # Normal update
       update_record(location, attributes)
     end
-    
+
     location
   end
 
@@ -84,7 +84,7 @@ class LocationService < TenantScopedService
   def set_default_location(id)
     location = find_location(id)
     return nil unless location
-    
+
     location.make_default!
     location
   end
@@ -95,20 +95,20 @@ class LocationService < TenantScopedService
   def delete_location(id)
     location = find_location(id)
     return false unless location
-    
+
     # Don't allow deletion of the default location if there are other locations
     if location.is_default? && find_records(Location).count > 1
       return false
     end
-    
+
     # Don't allow deletion if there are orders associated with this location
     if location.orders.exists?
       return false
     end
-    
+
     delete_record(location)
   end
-  
+
   # Check if the restaurant has multiple active locations
   # @return [Boolean] Whether the restaurant has multiple active locations
   def has_multiple_active_locations?

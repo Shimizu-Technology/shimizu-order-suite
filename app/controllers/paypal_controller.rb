@@ -2,9 +2,9 @@
 
 class PaypalController < ApplicationController
   include TenantIsolation
-  
-  before_action :ensure_tenant_context, except: [:webhook]
-  before_action :validate_amount, only: [:create_order]
+
+  before_action :ensure_tenant_context, except: [ :webhook ]
+  before_action :validate_amount, only: [ :create_order ]
 
   # POST /paypal/create_order
   def create_order
@@ -16,7 +16,7 @@ class PaypalController < ApplicationController
     if result[:success]
       render json: { orderId: result[:order_id] }, status: :ok
     else
-      render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
     end
   end
 
@@ -32,7 +32,7 @@ class PaypalController < ApplicationController
         currency: params[:currency] || "USD"
       }, status: :ok
     else
-      render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
     end
   end
 
@@ -40,31 +40,31 @@ class PaypalController < ApplicationController
   def webhook
     # Get the webhook notification body
     payload = request.body.read
-    
+
     # Get the restaurant ID from the URL parameter
     restaurant_id = params[:restaurant_id]
-    
+
     # Find the restaurant for this webhook
     restaurant = Restaurant.find_by(id: restaurant_id)
-    
+
     unless restaurant
       Rails.logger.error "PayPal webhook failed: Restaurant not found"
       render json: { error: "Restaurant not found" }, status: :not_found
       return
     end
-    
+
     # Set the current restaurant context for the tenant service
     @current_restaurant = restaurant
 
     begin
       # Process the webhook using the tenant service
       result = tenant_paypal_service.process_webhook(payload, request.headers)
-      
+
       if result[:success]
         # Parse the event data and type
         event_data = JSON.parse(payload)
-        event_type = event_data['event_type']
-        
+        event_type = event_data["event_type"]
+
         # Handle different event types
         case event_type
         when "CUSTOMER.DISPUTE.CREATED"
@@ -80,7 +80,7 @@ class PaypalController < ApplicationController
         render json: { status: "success" }, status: :ok
       else
         Rails.logger.error "PayPal webhook processing failed: #{result[:errors]}"
-        render json: { error: result[:errors].join(', ') }, status: result[:status] || :bad_request
+        render json: { error: result[:errors].join(", ") }, status: result[:status] || :bad_request
       end
     rescue JSON::ParserError => e
       Rails.logger.error "Invalid PayPal webhook payload: #{e.message}"
@@ -247,29 +247,29 @@ class PaypalController < ApplicationController
       rescue => email_error
         Rails.logger.error("Failed to send PayPal webhook refund notification email for order #{order.id}: #{email_error.message}")
       end
-      
+
       # Send refund notification SMS to customer
       begin
         if order.contact_phone.present?
           restaurant = order.restaurant
           notification_channels = restaurant.admin_settings&.dig("notification_channels", "orders") || {}
-          
+
           # Send SMS if enabled (default to true for backward compatibility)
           if notification_channels["sms"] != false
             sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant.name
-            
+
             # Determine refund type and create appropriate message
             is_full_refund = refund_amount >= order.payment_amount.to_f
             refund_type = is_full_refund ? "full refund" : "partial refund"
-            
+
             message_body = <<~MSG.squish
-              Hi #{order.contact_name.presence || 'Customer'}, 
-              we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)} 
-              for your #{restaurant.name} order ##{order.order_number.presence || order.id}. 
-              You should receive your refund within 1-3 business days. 
+              Hi #{order.contact_name.presence || 'Customer'},#{' '}
+              we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)}#{' '}
+              for your #{restaurant.name} order ##{order.order_number.presence || order.id}.#{' '}
+              You should receive your refund within 1-3 business days.#{' '}
               #{is_full_refund ? 'Thank you for your understanding.' : 'This is a partial refund - some items from your order are not affected.'}
             MSG
-            
+
             Rails.logger.info("Sending PayPal webhook refund notification SMS to #{order.contact_phone} for order #{order.id}")
             SendSmsJob.perform_later(
               to: order.contact_phone,
@@ -409,29 +409,29 @@ class PaypalController < ApplicationController
       rescue => email_error
         Rails.logger.error("Failed to send PayPal refund completed notification email for order #{order.id}: #{email_error.message}")
       end
-      
+
       # Send refund notification SMS to customer
       begin
         if order.contact_phone.present?
           restaurant = order.restaurant
           notification_channels = restaurant.admin_settings&.dig("notification_channels", "orders") || {}
-          
+
           # Send SMS if enabled (default to true for backward compatibility)
           if notification_channels["sms"] != false
             sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant.name
-            
+
             # Determine refund type and create appropriate message
             is_full_refund = refund_amount >= order.payment_amount.to_f
             refund_type = is_full_refund ? "full refund" : "partial refund"
-            
+
             message_body = <<~MSG.squish
-              Hi #{order.contact_name.presence || 'Customer'}, 
-              we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)} 
-              for your #{restaurant.name} order ##{order.order_number.presence || order.id}. 
-              You should receive your refund within 1-3 business days. 
+              Hi #{order.contact_name.presence || 'Customer'},#{' '}
+              we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)}#{' '}
+              for your #{restaurant.name} order ##{order.order_number.presence || order.id}.#{' '}
+              You should receive your refund within 1-3 business days.#{' '}
               #{is_full_refund ? 'Thank you for your understanding.' : 'This is a partial refund - some items from your order are not affected.'}
             MSG
-            
+
             Rails.logger.info("Sending PayPal refund completed notification SMS to #{order.contact_phone} for order #{order.id}")
             SendSmsJob.perform_later(
               to: order.contact_phone,
@@ -582,7 +582,7 @@ class PaypalController < ApplicationController
     # Return true to indicate the webhook is valid
     true
   end
-  
+
   def tenant_paypal_service
     @tenant_paypal_service ||= begin
       service = TenantPaypalService.new(current_restaurant)
@@ -590,10 +590,10 @@ class PaypalController < ApplicationController
       service
     end
   end
-  
+
   def ensure_tenant_context
     unless current_restaurant.present?
-      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+      render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
     end
   end
 end

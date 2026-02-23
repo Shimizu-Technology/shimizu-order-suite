@@ -15,9 +15,9 @@ module Admin
       # Filter by menu_id if provided
       categories = if params[:menu_id].present?
                     Menu.find(params[:menu_id]).categories.order(:position, :name)
-                  else
+      else
                     Category.order(:position, :name)
-                  end
+      end
       render json: categories
     end
 
@@ -53,14 +53,14 @@ module Admin
   def category_params
     # Include menu_id and restaurant_id from the URL parameters
     permitted_params = params.require(:category).permit(:name, :position, :description, :menu_id)
-    
+
     # For backward compatibility during transition
     if params[:restaurant_id].present? && !permitted_params[:menu_id].present?
       # If restaurant_id is provided but menu_id is not, use the restaurant's current menu
       restaurant = Restaurant.find(params[:restaurant_id])
       permitted_params[:menu_id] = restaurant.current_menu_id if restaurant.current_menu_id
     end
-    
+
     permitted_params
   end
 

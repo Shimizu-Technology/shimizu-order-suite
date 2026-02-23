@@ -8,7 +8,7 @@ class CreateRestaurantCounters < ActiveRecord::Migration[7.2]
 
       t.timestamps
     end
-    
+
     # Add a unique index to ensure only one counter per restaurant
     # Use unless_exists to prevent errors if the index already exists
     add_index :restaurant_counters, :restaurant_id, unique: true, if_not_exists: true

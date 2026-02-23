@@ -10,6 +10,6 @@ class CreateLocationCapacities < ActiveRecord::Migration[7.0]
       t.timestamps
     end
 
-    add_index :location_capacities, [:restaurant_id, :location_id], unique: true
+    add_index :location_capacities, [ :restaurant_id, :location_id ], unique: true
   end
 end

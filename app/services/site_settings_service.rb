@@ -4,13 +4,13 @@ class SiteSettingsService < TenantScopedService
   def get_settings
     # Get restaurant-specific site settings or create if not exists
     settings = scope_query(SiteSetting).first_or_initialize
-    
+
     # If this is a new record, ensure it's associated with the current restaurant
     if settings.new_record?
       settings.restaurant = restaurant
       settings.save!
     end
-    
+
     settings
   end
 

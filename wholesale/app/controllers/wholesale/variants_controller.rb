@@ -3,10 +3,10 @@
 module Wholesale
   class VariantsController < ApplicationController
     # Allow guest access for stock checking
-    skip_before_action :authorize_request, only: [:show, :stock_status, :check_availability]
-    before_action :optional_authorize, only: [:show, :stock_status, :check_availability]
-    before_action :find_variant, only: [:show, :stock_status, :check_availability]
-    
+    skip_before_action :authorize_request, only: [ :show, :stock_status, :check_availability ]
+    before_action :optional_authorize, only: [ :show, :stock_status, :check_availability ]
+    before_action :find_variant, only: [ :show, :stock_status, :check_availability ]
+
     # GET /wholesale/variants/:id
     # Get variant details
     def show
@@ -15,7 +15,7 @@ module Wholesale
         message: "Variant details retrieved successfully"
       )
     end
-    
+
     # GET /wholesale/variants/:id/stock_status
     # Get real-time stock status for a specific variant
     def stock_status
@@ -37,19 +37,19 @@ module Wholesale
         message: "Stock status retrieved successfully"
       )
     end
-    
+
     # POST /wholesale/variants/:id/check_availability
     # Check if variant is available for a specific quantity
     def check_availability
       quantity = params[:quantity].to_i
-      
+
       if quantity <= 0
         return render_error("Quantity must be greater than 0")
       end
-      
+
       available = @variant.available_stock
       can_purchase = available >= quantity
-      
+
       render_success(
         availability: {
           variant_id: @variant.id,
@@ -61,29 +61,29 @@ module Wholesale
           max_quantity: available,
           is_active: @variant.active?,
           stock_status: @variant.stock_status,
-          message: can_purchase ? 
-            "#{@variant.variant_name} is available" : 
+          message: can_purchase ?
+            "#{@variant.variant_name} is available" :
             "#{@variant.variant_name} has insufficient stock (#{available} available)"
         },
         message: can_purchase ? "Available" : "Insufficient stock"
       )
     end
-    
+
     private
-    
+
     def find_variant
       @variant = Wholesale::ItemVariant.find(params[:id])
-      
+
       # Ensure variant belongs to current restaurant
       unless @variant.item.restaurant_id == current_restaurant.id
         render_error("Variant not found", status: :not_found)
-        return
+        nil
       end
-      
+
     rescue ActiveRecord::RecordNotFound
       render_error("Variant not found", status: :not_found)
     end
-    
+
     def variant_detail(variant)
       {
         id: variant.id,

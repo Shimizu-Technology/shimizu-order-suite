@@ -6,9 +6,9 @@ class MenuItemService < TenantScopedService
   def list_items(params = {})
     # Log the request parameters for debugging
     Rails.logger.debug "[MenuItemService#list_items] Params: #{params.inspect}"
-    
+
     # Base query with tenant isolation
-    if is_admin? && (params[:admin].present? || params[:show_all].present? || params[:view_type] == 'admin')
+    if is_admin? && (params[:admin].present? || params[:show_all].present? || params[:view_type] == "admin")
       base_scope = scope_query(MenuItem).all
     else
       # For non-admin users, only show items that are currently available and not hidden
@@ -24,50 +24,50 @@ class MenuItemService < TenantScopedService
     end
 
     # Apply additional filters based on params
-    
+
     # Filter by featured status if requested
-    if params[:featured].present? && params[:featured].to_s.downcase == 'true'
+    if params[:featured].present? && params[:featured].to_s.downcase == "true"
       base_scope = base_scope.where(featured: true)
     end
-    
+
     # Filter by seasonal status if requested
-    if params[:seasonal].present? && params[:seasonal].to_s.downcase == 'true'
+    if params[:seasonal].present? && params[:seasonal].to_s.downcase == "true"
       base_scope = base_scope.where(seasonal: true)
     end
-    
+
     # Explicit hidden filter for admin users
     if is_admin? && params[:hidden].present?
-      hidden_value = params[:hidden].to_s.downcase == 'true'
+      hidden_value = params[:hidden].to_s.downcase == "true"
       base_scope = base_scope.where(hidden: hidden_value)
     end
-    
+
     # Category filter if present => now uses many-to-many
     if params[:category_id].present?
       base_scope = base_scope.joins(:categories).where(categories: { id: params[:category_id] })
     end
-    
+
     # Search filter if present
     if params[:search_query].present?
       search_term = "%#{params[:search_query].downcase}%"
-      
+
       # Check if search term matches any category name
       matching_category_ids = scope_query(Category).where("LOWER(name) LIKE ?", search_term).pluck(:id)
-      
+
       if matching_category_ids.present?
         Rails.logger.debug "[MenuItemService#list_items] Found matching categories: #{matching_category_ids}"
         # If we found matching categories, include items from those categories
         base_scope = base_scope.left_joins(:categories)
-                              .where("LOWER(menu_items.name) LIKE ? OR LOWER(menu_items.description) LIKE ? OR categories.id IN (?)", 
+                              .where("LOWER(menu_items.name) LIKE ? OR LOWER(menu_items.description) LIKE ? OR categories.id IN (?)",
                                      search_term, search_term, matching_category_ids)
                               .distinct
       else
         # Standard search in name and description
         base_scope = base_scope.where("LOWER(menu_items.name) LIKE ? OR LOWER(menu_items.description) LIKE ?", search_term, search_term)
       end
-      
+
       Rails.logger.debug "[MenuItemService#list_items] Applying search filter with term: #{params[:search_query]}"
     end
-    
+
     # Sort by name
     base_scope = base_scope.order(:name)
 
@@ -76,12 +76,12 @@ class MenuItemService < TenantScopedService
     # 'admin' = full data for admin views
     # 'detail' = full data including options
     includes_scope = case params[:view_type]
-                    when 'list'
+    when "list"
                       base_scope
-                    else
+    else
                       base_scope.includes(option_groups: :options)
-                    end
-    
+    end
+
     Rails.logger.debug "[MenuItemService#list_items] Returning #{includes_scope.count} items"
     includes_scope
   end
@@ -89,12 +89,12 @@ class MenuItemService < TenantScopedService
   # Find a specific menu item by ID
   def find_item(id)
     item = scope_query(MenuItem).includes(option_groups: :options).find(id)
-    
+
     # For non-admin users, check if the item is hidden
     if !is_admin? && item.hidden
       raise ActiveRecord::RecordNotFound, "Item not found"
     end
-    
+
     item
   rescue ActiveRecord::RecordNotFound
     raise ActiveRecord::RecordNotFound, "Item not found"
@@ -102,11 +102,11 @@ class MenuItemService < TenantScopedService
 
   # Create a new menu item
   def create_item(menu_item_params, category_ids = nil, available_days = nil)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless is_admin?
 
     # Ensure the menu belongs to the current restaurant
     menu = scope_query(Menu).find_by(id: menu_item_params[:menu_id])
-    return { success: false, errors: ["Menu not found"], status: :not_found } unless menu
+    return { success: false, errors: [ "Menu not found" ], status: :not_found } unless menu
 
     menu_item = MenuItem.new(menu_item_params.except(:image))
 
@@ -114,7 +114,7 @@ class MenuItemService < TenantScopedService
     if category_ids.present?
       menu_item.category_ids = Array(category_ids)
     end
-    
+
     # Handle available_days as an array
     if available_days.present?
       menu_item.available_days = Array(available_days).map(&:to_i)
@@ -145,15 +145,15 @@ class MenuItemService < TenantScopedService
 
   # Update an existing menu item
   def update_item(id, menu_item_params, category_ids = nil, available_days = nil)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless is_admin?
 
     menu_item = scope_query(MenuItem).find(id)
-    
+
     # Assign categories before updating if category_ids param is given
     if category_ids.present?
       menu_item.category_ids = Array(category_ids)
     end
-    
+
     # Handle available_days as an array
     if available_days.present?
       if available_days.blank? || available_days == []
@@ -162,14 +162,14 @@ class MenuItemService < TenantScopedService
       else
         menu_item.available_days = Array(available_days).map(&:to_i)
       end
-    elsif menu_item_params.keys.include?("name") && 
-          menu_item_params.keys.include?("description") && 
+    elsif menu_item_params.keys.include?("name") &&
+          menu_item_params.keys.include?("description") &&
           menu_item_params.keys.include?("price")
       # If we're in the menu edit form and available_days is not present,
       # it means all days were deselected
       menu_item.available_days = []
     end
-    
+
     if menu_item.update(menu_item_params.except(:image))
       # Handle image if present
       file = menu_item_params[:image]
@@ -192,29 +192,29 @@ class MenuItemService < TenantScopedService
       { success: false, errors: menu_item.errors.full_messages, status: :unprocessable_entity }
     end
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu item not found"], status: :not_found }
+    { success: false, errors: [ "Menu item not found" ], status: :not_found }
   end
 
   # Delete a menu item
   def delete_item(id)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless is_admin?
 
     menu_item = scope_query(MenuItem).find(id)
     menu_item.destroy
-    
+
     { success: true }
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu item not found"], status: :not_found }
+    { success: false, errors: [ "Menu item not found" ], status: :not_found }
   end
 
   # Upload an image for a menu item
   def upload_image(id, image_file)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless is_admin?
 
     menu_item = scope_query(MenuItem).find(id)
-    
+
     unless image_file
-      return { success: false, errors: ["No image file uploaded"], status: :unprocessable_entity }
+      return { success: false, errors: [ "No image file uploaded" ], status: :unprocessable_entity }
     end
 
     begin
@@ -227,20 +227,20 @@ class MenuItemService < TenantScopedService
     rescue => e
       Rails.logger.error "[MenuItemService] Standalone image upload failed for menu_item #{id}: #{e.message}"
       Rails.logger.error "[MenuItemService] Backtrace: #{e.backtrace.join("\n")}"
-      { success: false, errors: ["Image upload failed: #{e.message}"], status: :unprocessable_entity }
+      { success: false, errors: [ "Image upload failed: #{e.message}" ], status: :unprocessable_entity }
     end
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu item not found"], status: :not_found }
+    { success: false, errors: [ "Menu item not found" ], status: :not_found }
   end
 
   # Mark a menu item as damaged
   def mark_as_damaged(id, params)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless current_user&.staff_or_above?
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless current_user&.staff_or_above?
 
     menu_item = scope_query(MenuItem).find(id)
 
     unless menu_item.enable_stock_tracking
-      return { success: false, errors: ["Inventory tracking is not enabled for this item"], status: :unprocessable_entity }
+      return { success: false, errors: [ "Inventory tracking is not enabled for this item" ], status: :unprocessable_entity }
     end
 
     quantity = params[:quantity].to_i
@@ -248,7 +248,7 @@ class MenuItemService < TenantScopedService
     from_order = params[:order_id].present?
 
     if quantity <= 0
-      return { success: false, errors: ["Quantity must be greater than zero"], status: :unprocessable_entity }
+      return { success: false, errors: [ "Quantity must be greater than zero" ], status: :unprocessable_entity }
     end
 
     # If this is coming from an order edit (through InventoryReversionDialog),
@@ -258,28 +258,28 @@ class MenuItemService < TenantScopedService
       if menu_item.increment_damaged_only(quantity, reason, current_user)
         { success: true, menu_item: menu_item }
       else
-        { success: false, errors: ["Failed to mark items as damaged"], status: :unprocessable_entity }
+        { success: false, errors: [ "Failed to mark items as damaged" ], status: :unprocessable_entity }
       end
     else
       # Regular damaged marking (not from order edit)
       if menu_item.mark_as_damaged(quantity, reason, current_user)
         { success: true, menu_item: menu_item }
       else
-        { success: false, errors: ["Failed to mark items as damaged"], status: :unprocessable_entity }
+        { success: false, errors: [ "Failed to mark items as damaged" ], status: :unprocessable_entity }
       end
     end
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu item not found"], status: :not_found }
+    { success: false, errors: [ "Menu item not found" ], status: :not_found }
   end
 
   # Update stock quantity for a menu item
   def update_stock(id, params)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless current_user&.staff_or_above?
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless current_user&.staff_or_above?
 
     menu_item = scope_query(MenuItem).find(id)
 
     unless menu_item.enable_stock_tracking
-      return { success: false, errors: ["Inventory tracking is not enabled for this item"], status: :unprocessable_entity }
+      return { success: false, errors: [ "Inventory tracking is not enabled for this item" ], status: :unprocessable_entity }
     end
 
     new_quantity = params[:stock_quantity].to_i
@@ -287,63 +287,63 @@ class MenuItemService < TenantScopedService
     reason_details = params[:reason_details].presence
 
     if new_quantity < 0
-      return { success: false, errors: ["Stock quantity cannot be negative"], status: :unprocessable_entity }
+      return { success: false, errors: [ "Stock quantity cannot be negative" ], status: :unprocessable_entity }
     end
 
     if menu_item.update_stock_quantity(new_quantity, reason_type, reason_details, current_user)
       { success: true, menu_item: menu_item }
     else
-      { success: false, errors: ["Failed to update stock quantity"], status: :unprocessable_entity }
+      { success: false, errors: [ "Failed to update stock quantity" ], status: :unprocessable_entity }
     end
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu item not found"], status: :not_found }
+    { success: false, errors: [ "Menu item not found" ], status: :not_found }
   end
 
   # Get stock audits for a menu item
   def get_stock_audits(id)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless is_admin?
 
     menu_item = scope_query(MenuItem).find(id)
 
     unless menu_item.enable_stock_tracking
-      return { success: false, errors: ["Inventory tracking is not enabled for this item"], status: :unprocessable_entity }
+      return { success: false, errors: [ "Inventory tracking is not enabled for this item" ], status: :unprocessable_entity }
     end
 
     audits = menu_item.menu_item_stock_audits.order(created_at: :desc).limit(50)
-    
+
     { success: true, audits: audits }
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu item not found"], status: :not_found }
+    { success: false, errors: [ "Menu item not found" ], status: :not_found }
   end
 
   # Copy a menu item to another menu or within the same menu
   def copy_item(id, params)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
-    
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless is_admin?
+
     source_item = scope_query(MenuItem).find(id)
     target_menu_id = params[:target_menu_id]
     category_ids = params[:category_ids] || []
     new_name = params[:new_name]
-    operation_type = params[:operation_type] || 'clone' # 'clone' or 'move'
-    
+    operation_type = params[:operation_type] || "clone" # 'clone' or 'move'
+
     unless target_menu_id.present?
-      return { success: false, errors: ["Target menu ID is required"], status: :unprocessable_entity }
+      return { success: false, errors: [ "Target menu ID is required" ], status: :unprocessable_entity }
     end
-    
+
     # Ensure the target menu belongs to the current restaurant
     target_menu = scope_query(Menu).find_by(id: target_menu_id)
-    return { success: false, errors: ["Target menu not found"], status: :not_found } unless target_menu
-    
+    return { success: false, errors: [ "Target menu not found" ], status: :not_found } unless target_menu
+
     case operation_type
-    when 'move'
+    when "move"
       move_item_to_menu(source_item, target_menu_id, category_ids)
-    when 'clone'
+    when "clone"
       clone_item_to_menu(source_item, target_menu_id, category_ids, new_name)
     else
-      { success: false, errors: ["Invalid operation type"], status: :unprocessable_entity }
+      { success: false, errors: [ "Invalid operation type" ], status: :unprocessable_entity }
     end
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu item not found"], status: :not_found }
+    { success: false, errors: [ "Menu item not found" ], status: :not_found }
   end
 
   private
@@ -353,27 +353,27 @@ class MenuItemService < TenantScopedService
     # Create a new item with the same attributes but new menu_id
     new_item = source_item.dup
     new_item.menu_id = target_menu_id
-    
+
     # Set a custom name if provided, otherwise append "(Copy)" for same-menu cloning
     if new_name.present?
       new_item.name = new_name
     elsif target_menu_id.to_s == source_item.menu_id.to_s
       new_item.name = "#{source_item.name} (Copy)"
     end
-    
+
     # Assign categories
     new_item.category_ids = category_ids if category_ids.present?
-    
+
     # Reset all inventory-related fields for cloning (fresh start)
     new_item.enable_stock_tracking = false  # Disable tracking by default
     new_item.stock_quantity = nil
     new_item.damaged_quantity = 0
     new_item.low_stock_threshold = nil
-    new_item.stock_status = 'in_stock'  # Default status
-    
+    new_item.stock_status = "in_stock"  # Default status
+
     # Keep the same image URL
     new_item.image_url = source_item.image_url
-    
+
     # Save the new item
     if new_item.save
       # Copy all option groups and their options (without inventory data)
@@ -383,7 +383,7 @@ class MenuItemService < TenantScopedService
           new_group = source_group.dup
           new_group.menu_item_id = new_item.id
           new_group.enable_inventory_tracking = false  # Disable option inventory tracking
-          
+
           if new_group.save
             # Copy all options within the group (without inventory data)
             source_group.options.each do |source_option|
@@ -397,7 +397,7 @@ class MenuItemService < TenantScopedService
           end
         end
       end
-      
+
       { success: true, menu_item: new_item, status: :created }
     else
       { success: false, errors: new_item.errors.full_messages, status: :unprocessable_entity }
@@ -408,10 +408,10 @@ class MenuItemService < TenantScopedService
   def move_item_to_menu(source_item, target_menu_id, category_ids)
     # For moving, we update the existing item's menu_id and categories
     # This preserves all inventory data, audit history, and relationships
-    
+
     source_item.menu_id = target_menu_id
     source_item.category_ids = category_ids if category_ids.present?
-    
+
     if source_item.save
       { success: true, menu_item: source_item, status: :ok }
     else

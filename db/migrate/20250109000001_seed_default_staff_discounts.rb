@@ -44,4 +44,4 @@ class SeedDefaultStaffDiscounts < ActiveRecord::Migration[7.2]
     # Remove all staff discount configurations
     StaffDiscountConfiguration.delete_all
   end
-end 
+end

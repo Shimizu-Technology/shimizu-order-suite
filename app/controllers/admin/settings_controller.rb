@@ -2,7 +2,7 @@
 module Admin
   class SettingsController < ApplicationController
     include TenantIsolation
-    
+
     before_action :authorize_request
     before_action :require_admin
     before_action :ensure_tenant_context
@@ -18,7 +18,7 @@ module Admin
     def update
       # Use the SettingsService to update settings with tenant isolation
       result = settings_service.update_settings(settings_params)
-      
+
       if result[:success]
         render json: result
       else
@@ -33,14 +33,14 @@ module Admin
         render json: { error: "Forbidden: admin only" }, status: :forbidden
       end
     end
-    
+
     def settings_service
       @settings_service ||= SettingsService.new(current_restaurant)
     end
-    
+
     def ensure_tenant_context
       unless current_restaurant.present?
-        render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+        render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
       end
     end
 

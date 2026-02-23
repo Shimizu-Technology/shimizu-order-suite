@@ -3,7 +3,7 @@
 module Admin
   class OperatingHoursController < ApplicationController
     include TenantIsolation
-    
+
     before_action :authorize_request
     before_action :require_admin
     before_action :ensure_tenant_context
@@ -18,7 +18,7 @@ module Admin
     # PATCH/PUT /admin/operating_hours/:id => update a single day-of-week row with tenant isolation
     def update
       result = operating_hours_service.update_hour(params[:id], oh_params)
-      
+
       if result[:success]
         render json: result[:operating_hour]
       else
@@ -38,14 +38,14 @@ module Admin
       # Permit the fields we allow staff to change
       params.require(:operating_hour).permit(:day_of_week, :open_time, :close_time, :closed)
     end
-    
+
     def operating_hours_service
       @operating_hours_service ||= OperatingHoursService.new(current_restaurant)
     end
-    
+
     def ensure_tenant_context
       unless current_restaurant.present?
-        render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+        render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
       end
     end
   end

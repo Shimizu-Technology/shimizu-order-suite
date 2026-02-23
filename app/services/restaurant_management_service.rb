@@ -4,7 +4,7 @@ class RestaurantManagementService < TenantScopedService
   def self.global_service?
     true
   end
-  
+
   # Add attr_accessor for current_user to make it accessible
   attr_accessor :current_user
   # Override initialize to make restaurant parameter optional for global admin operations
@@ -19,7 +19,7 @@ class RestaurantManagementService < TenantScopedService
       # Call the parent class's initialize method with the restaurant
       super(restaurant)
     end
-    
+
     # Set the current user if provided
     @current_user = current_user
   end
@@ -32,7 +32,7 @@ class RestaurantManagementService < TenantScopedService
       Restaurant.all.order(:name)
     else
       # Regular admins should only see their own restaurant
-      [current_restaurant].compact
+      [ current_restaurant ].compact
     end
   end
 
@@ -51,16 +51,16 @@ class RestaurantManagementService < TenantScopedService
 
     # Update the allowed origins
     current_restaurant.allowed_origins = allowed_origins
-    
+
     if current_restaurant.save
       { success: true, allowed_origins: current_restaurant.allowed_origins }
     else
       { success: false, errors: current_restaurant.errors.full_messages, status: :unprocessable_entity }
     end
   end
-  
+
   private
-  
+
   # Get the current user from the service context
   # This is now redundant since we have attr_accessor :current_user
   # but keeping it for backward compatibility

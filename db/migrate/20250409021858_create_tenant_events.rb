@@ -7,15 +7,15 @@ class CreateTenantEvents < ActiveRecord::Migration[7.2]
 
       t.timestamps
     end
-    
+
     # Add indexes for common queries
-    add_index :tenant_events, [:restaurant_id, :event_type]
-    add_index :tenant_events, [:restaurant_id, :created_at]
+    add_index :tenant_events, [ :restaurant_id, :event_type ]
+    add_index :tenant_events, [ :restaurant_id, :created_at ]
     add_index :tenant_events, :event_type
-    
+
     # Add GIN index for JSON querying
     add_index :tenant_events, :data, using: :gin
-    
+
     # Add check constraint to ensure event_type is not empty
     execute <<-SQL
       ALTER TABLE tenant_events
@@ -23,7 +23,7 @@ class CreateTenantEvents < ActiveRecord::Migration[7.2]
       CHECK (event_type != '');
     SQL
   end
-  
+
   def down
     drop_table :tenant_events
   end

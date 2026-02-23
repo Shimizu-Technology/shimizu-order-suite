@@ -1,14 +1,14 @@
 # app/controllers/layouts_controller.rb
 class LayoutsController < ApplicationController
   include TenantIsolation
-  
+
   before_action :authorize_request
   before_action :ensure_tenant_context
 
   # GET /layouts
   def index
     result = layout_service.list_layouts(params[:location_id])
-    
+
     if result[:success]
       render json: result[:layouts]
     else
@@ -19,7 +19,7 @@ class LayoutsController < ApplicationController
   # GET /layouts/:id
   def show
     result = layout_service.find_layout(params[:id])
-    
+
     if result[:success]
       render json: result[:layout]
     else
@@ -30,7 +30,7 @@ class LayoutsController < ApplicationController
   # POST /layouts
   def create
     result = layout_service.create_layout(layout_params)
-    
+
     if result[:success]
       render json: result[:layout], status: :created
     else
@@ -41,7 +41,7 @@ class LayoutsController < ApplicationController
   # PATCH/PUT /layouts/:id
   def update
     result = layout_service.update_layout(params[:id], layout_params)
-    
+
     if result[:success]
       render json: result[:layout]
     else
@@ -52,7 +52,7 @@ class LayoutsController < ApplicationController
   # DELETE /layouts/:id
   def destroy
     result = layout_service.delete_layout(params[:id])
-    
+
     if result[:success]
       head :no_content
     else
@@ -63,7 +63,7 @@ class LayoutsController < ApplicationController
   # POST /layouts/:id/activate
   def activate
     result = layout_service.activate_layout(params[:id])
-    
+
     if result[:success]
       render json: { message: result[:message] }, status: :ok
     else
@@ -80,10 +80,10 @@ class LayoutsController < ApplicationController
       service
     end
   end
-  
+
   def ensure_tenant_context
     unless current_restaurant.present?
-      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+      render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
     end
   end
 
