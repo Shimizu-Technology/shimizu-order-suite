@@ -61,7 +61,7 @@ class RestaurantCounter < ApplicationRecord
         order_number = "#{restaurant_prefix}-O-#{counter_str}"
 
         # If a collision still somehow exists, keep incrementing within the lock
-        while Order.exists?(order_number: order_number)
+        while Order.exists?(order_number: order_number, restaurant_id: restaurant.id)
           locked_counter.daily_order_counter += 1
           locked_counter.total_order_counter += 1
           counter_str = locked_counter.daily_order_counter.to_s.rjust(locked_counter.daily_order_counter > 999 ? 4 : 3, '0')

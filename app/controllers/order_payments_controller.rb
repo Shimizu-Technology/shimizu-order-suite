@@ -558,9 +558,10 @@ def create_refund
       # We now use 'refunded' for both full and partial refunds
       @order.update(payment_status: Order::STATUS_REFUNDED)
       
-      # Only update the order status if ALL items are refunded
+      # Only update the order status to refunded if it's a full refund
+      # (either all items explicitly refunded, or full monetary refund with no item list)
       # This preserves the original order status (pending, completed, etc.) for partial refunds
-      if all_items_refunded
+      if is_full_refund
         @order.update(status: Order::STATUS_REFUNDED)
       end
 
