@@ -190,8 +190,8 @@ class OrdersController < ApplicationController
     sort_direction = params[:sort_direction] || 'desc'
     
     # Validate sort parameters to prevent SQL injection
-    valid_sort_columns = ['id', 'created_at', 'updated_at', 'status', 'total']
-    valid_sort_directions = ['asc', 'desc']
+    valid_sort_columns = [ 'id', 'created_at', 'updated_at', 'status', 'total' ]
+    valid_sort_directions = [ 'asc', 'desc' ]
     
     sort_by = 'created_at' unless valid_sort_columns.include?(sort_by)
     sort_direction = 'desc' unless valid_sort_directions.include?(sort_direction)
@@ -233,7 +233,7 @@ class OrdersController < ApplicationController
     last_id = params[:id].to_i
     # Apply policy scope to ensure proper filtering based on role
     new_orders = policy_scope(Order).where("id > ?", last_id)
-                      .where(staff_created: [false, nil]) # Exclude staff-created orders
+                      .where(staff_created: [ false, nil ]) # Exclude staff-created orders
                       .order(:id)
     render json: new_orders, status: :ok
   end
@@ -258,7 +258,7 @@ class OrdersController < ApplicationController
     # Get users with those IDs who are staff or admin by default
     # Only include users who belong to the current restaurant
     @users = User.where(id: user_ids)
-                .where(role: ['staff', 'admin'])
+                .where(role: [ 'staff', 'admin' ])
                 .where(restaurant_id: current_restaurant.id)
     
     # Format the response
@@ -298,13 +298,13 @@ class OrdersController < ApplicationController
       # Regular case: Return orders not acknowledged by this specific user
       unacknowledged_orders = Order.where("created_at > ?", time_threshold)
                                    .where.not(id: current_user.acknowledged_orders.pluck(:id))
-                                   .where(staff_created: [false, nil]) # Exclude staff-created orders
+                                   .where(staff_created: [ false, nil ]) # Exclude staff-created orders
                                    .order(created_at: :desc)
     else
       # First-time user case: Only return orders that haven't been acknowledged by anyone
       # OR orders that came in after the last global acknowledgment
       unacknowledged_orders = Order.where("created_at > ?", time_threshold)
-                                   .where(staff_created: [false, nil]) # Exclude staff-created orders
+                                   .where(staff_created: [ false, nil ]) # Exclude staff-created orders
                                    .where("global_last_acknowledged_at IS NULL OR created_at > global_last_acknowledged_at")
                                    .order(created_at: :desc)
     end
@@ -974,8 +974,8 @@ class OrdersController < ApplicationController
     # IMPORTANT: Don't allow frontend to set or override refund status
     # This prevents inconsistencies between payment_status and status
     if permitted_params[:status].present? && 
-       (['refunded'].include?(permitted_params[:status]) || 
-        ['refunded'].include?(order.status))
+       ([ 'refunded' ].include?(permitted_params[:status]) || 
+        [ 'refunded' ].include?(order.status))
       # Remove status from permitted params to preserve the server-calculated refund status
       # or prevent the frontend from setting a refund status
       Rails.logger.info("Preventing frontend refund status change: #{permitted_params[:status]} -> #{order.status}")
@@ -1237,8 +1237,8 @@ class OrdersController < ApplicationController
       :pre_discount_total, :vip_code, :vip_access_code_id, :staff_modal, :location_id,
       :staff_discount_configuration_id, # Add support for configurable staff discounts
       # Handle nested attributes properly
-      items: [:id, :name, :price, :quantity, :notes, :menu_id, :category_id, { customizations: {} }],
-      merchandise_items: [:id, :name, :price, :quantity, :merchandise_variant_id, :notes],
+      items: [ :id, :name, :price, :quantity, :notes, :menu_id, :category_id, { customizations: {} } ],
+      merchandise_items: [ :id, :name, :price, :quantity, :merchandise_variant_id, :notes ],
       # Allow all payment details attributes to be passed through
       payment_details: {})
     

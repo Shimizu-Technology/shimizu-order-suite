@@ -3,7 +3,7 @@ class OrderPaymentsController < ApplicationController
   
   before_action :authorize_request
   before_action :ensure_tenant_context
-  before_action :set_order, only: [:index, :create_refund, :process_cash_payment, :create_additional, :capture_additional, :add_store_credit, :adjust_total, :create_payment_link]
+  before_action :set_order, only: [ :index, :create_refund, :process_cash_payment, :create_additional, :capture_additional, :add_store_credit, :adjust_total, :create_payment_link ]
 
   # GET /orders/:order_id/payments
   def index
@@ -860,7 +860,7 @@ def create_refund
       Rails.logger.info("Attempting to create Stripe refund for payment_intent: #{payment_intent_id} (Stripe test mode: #{stripe_test_mode})")
 
       # Ensure reason is one of the valid values accepted by Stripe
-      valid_reasons = ["duplicate", "fraudulent", "requested_by_customer"]
+      valid_reasons = [ "duplicate", "fraudulent", "requested_by_customer" ]
       reason = params[:reason] || "requested_by_customer"
 
       # Default to 'requested_by_customer' if the provided reason is not valid
@@ -1039,7 +1039,7 @@ def create_refund
       
       # Create a Stripe Checkout Session with a payment link
       session = Stripe::Checkout::Session.create({
-        payment_method_types: ['card'],
+        payment_method_types: [ 'card' ],
         line_items: items.map { |item|
           {
             price_data: {
@@ -1047,7 +1047,7 @@ def create_refund
               product_data: {
                 name: item[:name],
                 description: item[:description],
-                images: item[:image].present? ? [item[:image]] : []
+                images: item[:image].present? ? [ item[:image] ] : []
               },
               unit_amount: (item[:price].to_f * 100).to_i, # Convert to cents
             },

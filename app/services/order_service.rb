@@ -249,11 +249,11 @@ class OrderService < TenantScopedService
     
     result = case operation
     when 'order'
-      OptionInventoryService.process_order_inventory([order_item], user, order)
+      OptionInventoryService.process_order_inventory([ order_item ], user, order)
     when 'revert'
-      OptionInventoryService.revert_order_inventory([order_item], user, order)
+      OptionInventoryService.revert_order_inventory([ order_item ], user, order)
     else
-      { success: false, errors: ["Unknown operation: #{operation}"], inventory_changes: [] }
+      { success: false, errors: [ "Unknown operation: #{operation}" ], inventory_changes: [] }
     end
     
     # Convert OptionInventoryService response format to consistent inventory_changes format
@@ -397,7 +397,7 @@ class OrderService < TenantScopedService
     elsif item.respond_to?(:quantity)
       quantity = item.quantity.to_i
     end
-    [quantity, 1].max # Ensure at least 1
+    [ quantity, 1 ].max # Ensure at least 1
   end
 
   # Extract customizations from order item hash or ActionController::Parameters
