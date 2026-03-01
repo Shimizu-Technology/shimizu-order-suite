@@ -18,10 +18,10 @@ class TenantStripeService < TenantScopedService
 
     # Check if Stripe is configured
     unless payment_settings["secret_key"].present?
-      return { 
-        success: false, 
-        errors: ["Stripe is not properly configured for this restaurant"], 
-        status: :service_unavailable 
+      return {
+        success: false,
+        errors: [ "Stripe is not properly configured for this restaurant" ],
+        status: :service_unavailable
       }
     end
 
@@ -29,13 +29,13 @@ class TenantStripeService < TenantScopedService
     # For USD, the minimum is 50 cents
     if amount.to_f <= 0
       # For free items, return a special flag instead of a client secret
-      return { 
-        success: true, 
+      return {
+        success: true,
         free_order: true,
         order_id: "free_#{SecureRandom.hex(8)}"
       }
     end
-    
+
     # Handle small amounts (less than minimum required by Stripe)
     # Stripe minimum amounts vary by currency:
     # - USD: 50 cents
@@ -48,19 +48,19 @@ class TenantStripeService < TenantScopedService
       "GBP" => 0.3,  # 30 pence
       "CAD" => 0.5,  # 50 cents
       "AUD" => 0.5,  # 50 cents
-      "JPY" => 50,   # 50 yen
+      "JPY" => 50   # 50 yen
     }
-    
+
     # Default to 50 cents USD equivalent if currency not in the list
     min_amount = min_amounts[currency.upcase] || 0.5
-    
+
     # Only treat as a small order if amount is LESS than the minimum (not equal)
     # This ensures we only bypass Stripe for amounts that Stripe can't handle
     if amount.to_f < min_amount
       Rails.logger.info("Small amount detected: $#{amount}. Using minimum amount for Stripe: $#{min_amount}")
       # For small amounts, treat as a special small order
-      return { 
-        success: true, 
+      return {
+        success: true,
         small_order: true,
         order_id: "small_#{SecureRandom.hex(8)}"
       }
@@ -73,7 +73,7 @@ class TenantStripeService < TenantScopedService
       # Set the API key for this specific restaurant
       # This is crucial for multi-tenant applications where each restaurant has its own Stripe account
       secret_key = payment_settings["secret_key"]
-      
+
       # Create a payment intent with Stripe using the restaurant's API key
       payment_intent = Stripe::PaymentIntent.create({
         amount: amount_in_cents,
@@ -97,14 +97,14 @@ class TenantStripeService < TenantScopedService
       Rails.logger.error("Stripe Error HTTP Status: #{e.http_status}")
       Rails.logger.error("Stripe Error Code: #{e.code}")
       Rails.logger.error("Stripe Error JSON Body: #{e.json_body}")
-      
-      { success: false, errors: [e.message], status: :unprocessable_entity }
+
+      { success: false, errors: [ e.message ], status: :unprocessable_entity }
     rescue => e
       # Log general error information
       Rails.logger.error("Unexpected error for restaurant #{@restaurant.id} (#{@restaurant.name}) when creating payment intent: #{e.message}")
       Rails.logger.error("Error Backtrace: #{e.backtrace.join("\n")}")
-      
-      { success: false, errors: ["An unexpected error occurred: #{e.message}"], status: :internal_server_error }
+
+      { success: false, errors: [ "An unexpected error occurred: #{e.message}" ], status: :internal_server_error }
     end
   end
 
@@ -112,59 +112,59 @@ class TenantStripeService < TenantScopedService
   def process_webhook(payload, signature)
     # Get payment settings from restaurant
     payment_settings = @restaurant.admin_settings&.dig("payment_gateway") || {}
-    
+
     # Get webhook secret from settings
     webhook_secret = payment_settings["webhook_secret"]
-    
+
     unless webhook_secret.present?
-      return { 
-        success: false, 
-        errors: ["Webhook secret is not configured for this restaurant"], 
-        status: :service_unavailable 
+      return {
+        success: false,
+        errors: [ "Webhook secret is not configured for this restaurant" ],
+        status: :service_unavailable
       }
     end
-    
+
     begin
       # Get the secret key for this restaurant
       secret_key = payment_settings["secret_key"]
-      
+
       # Verify the webhook signature using the restaurant's API key
       event = Stripe::Webhook.construct_event(
         payload, signature, webhook_secret,
         { api_key: secret_key } # Pass the restaurant-specific API key
       )
-      
+
       # Process the event based on its type
       case event.type
-      when 'payment_intent.succeeded'
+      when "payment_intent.succeeded"
         payment_intent = event.data.object
         process_successful_payment(payment_intent)
-      when 'payment_intent.payment_failed'
+      when "payment_intent.payment_failed"
         payment_intent = event.data.object
         process_failed_payment(payment_intent)
       else
         # Log other event types but don't take specific action
         Rails.logger.info("Unhandled Stripe event type: #{event.type}")
       end
-      
+
       { success: true }
     rescue JSON::ParserError => e
-      { success: false, errors: ["Invalid payload: #{e.message}"], status: :bad_request }
+      { success: false, errors: [ "Invalid payload: #{e.message}" ], status: :bad_request }
     rescue Stripe::SignatureVerificationError => e
-      { success: false, errors: ["Invalid signature: #{e.message}"], status: :bad_request }
+      { success: false, errors: [ "Invalid signature: #{e.message}" ], status: :bad_request }
     rescue => e
-      { success: false, errors: ["An unexpected error occurred: #{e.message}"], status: :internal_server_error }
+      { success: false, errors: [ "An unexpected error occurred: #{e.message}" ], status: :internal_server_error }
     end
   end
-  
+
   private
-  
+
   # Process a successful payment
   def process_successful_payment(payment_intent)
     # Find the order associated with this payment intent
     order = find_order_by_payment_intent(payment_intent.id)
     return unless order
-    
+
     # Update the order status
     order.update(
       status: "paid",
@@ -175,7 +175,7 @@ class TenantStripeService < TenantScopedService
         payment_status: "succeeded"
       })
     )
-    
+
     # Create a payment record
     OrderPayment.create(
       order: order,
@@ -189,13 +189,13 @@ class TenantStripeService < TenantScopedService
       }
     )
   end
-  
+
   # Process a failed payment
   def process_failed_payment(payment_intent)
     # Find the order associated with this payment intent
     order = find_order_by_payment_intent(payment_intent.id)
     return unless order
-    
+
     # Update the order status
     order.update(
       payment_status: "failed",
@@ -207,7 +207,7 @@ class TenantStripeService < TenantScopedService
       })
     )
   end
-  
+
   # Find an order by payment intent ID
   def find_order_by_payment_intent(payment_intent_id)
     scope_query(Order).find_by("payment_details->>'stripe_payment_intent_id' = ?", payment_intent_id)

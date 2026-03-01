@@ -1,7 +1,7 @@
 # app/controllers/waitlist_entries_controller.rb
 class WaitlistEntriesController < ApplicationController
   include TenantIsolation
-  
+
   before_action :authorize_request
   before_action :ensure_tenant_context
 
@@ -13,20 +13,20 @@ class WaitlistEntriesController < ApplicationController
 
     # Prepare filter parameters
     filter_params = {}
-    
+
     if params[:date].present?
       # Handle both simple string and nested parameter formats
       date_param = params[:date].is_a?(ActionController::Parameters) ? params[:date][:date] : params[:date]
       filter_params[:date] = date_param
     end
-    
+
     # Add other filters if present
-    [:status, :customer_name, :phone, :page, :per_page].each do |param|
+    [ :status, :customer_name, :phone, :page, :per_page ].each do |param|
       filter_params[param] = params[param] if params[param].present?
     end
-    
+
     result = waitlist_entry_service.list_entries(filter_params)
-    
+
     if result[:success]
       render json: result[:entries].as_json(
         only: [
@@ -43,7 +43,7 @@ class WaitlistEntriesController < ApplicationController
         methods: :seat_labels
       )
     else
-      render json: { error: result[:errors].join(', ') }, status: result[:status] || :internal_server_error
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :internal_server_error
     end
   end
 
@@ -53,7 +53,7 @@ class WaitlistEntriesController < ApplicationController
     end
 
     result = waitlist_entry_service.find_entry(params[:id])
-    
+
     if result[:success]
       render json: result[:entry].as_json(
         only: [
@@ -74,20 +74,20 @@ class WaitlistEntriesController < ApplicationController
         methods: :seat_labels
       )
     else
-      render json: { error: result[:errors].join(', ') }, status: result[:status] || :not_found
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :not_found
     end
   end
 
   def create
     # Prepare the entry parameters
     create_params = waitlist_entry_params.to_h
-    
+
     # Set the restaurant_id to the current restaurant
     create_params[:restaurant_id] = current_restaurant.id
-    
+
     # Create the entry using the service
     result = waitlist_entry_service.create_entry(create_params)
-    
+
     if result[:success]
       render json: result[:entry], status: :created
     else
@@ -101,7 +101,7 @@ class WaitlistEntriesController < ApplicationController
     end
 
     result = waitlist_entry_service.update_entry(params[:id], waitlist_entry_params.to_h)
-    
+
     if result[:success]
       render json: result[:entry]
     else
@@ -115,7 +115,7 @@ class WaitlistEntriesController < ApplicationController
     end
 
     result = waitlist_entry_service.delete_entry(params[:id])
-    
+
     if result[:success]
       head :no_content
     else
@@ -137,7 +137,7 @@ class WaitlistEntriesController < ApplicationController
       :estimated_wait_minutes
     )
   end
-  
+
   def waitlist_entry_service
     @waitlist_entry_service ||= begin
       service = WaitlistEntryService.new(current_restaurant)
@@ -145,10 +145,10 @@ class WaitlistEntriesController < ApplicationController
       service
     end
   end
-  
+
   def ensure_tenant_context
     unless current_restaurant.present?
-      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+      render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
     end
   end
 end

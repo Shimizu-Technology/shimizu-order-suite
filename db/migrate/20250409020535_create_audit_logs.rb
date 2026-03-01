@@ -11,17 +11,17 @@ class CreateAuditLogs < ActiveRecord::Migration[7.2]
 
       t.timestamps
     end
-    
+
     # Add indexes for efficient querying
     add_index :audit_logs, :restaurant_id
     add_index :audit_logs, :user_id
     add_index :audit_logs, :action
-    add_index :audit_logs, [:resource_type, :resource_id]
+    add_index :audit_logs, [ :resource_type, :resource_id ]
     add_index :audit_logs, :created_at
-    
+
     # Add index for JSONB querying
     add_index :audit_logs, :details, using: :gin
-    
+
     # Add foreign key constraint
     add_foreign_key :audit_logs, :restaurants, on_delete: :cascade
   end

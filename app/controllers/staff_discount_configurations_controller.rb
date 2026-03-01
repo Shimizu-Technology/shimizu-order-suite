@@ -1,8 +1,8 @@
 class StaffDiscountConfigurationsController < ApplicationController
-  before_action :optional_authorize, only: [:index]
-  before_action :authorize_request, except: [:index]
-  before_action :require_admin!, except: [:index]
-  before_action :set_staff_discount_configuration, only: [:show, :update, :destroy]
+  before_action :optional_authorize, only: [ :index ]
+  before_action :authorize_request, except: [ :index ]
+  before_action :require_admin!, except: [ :index ]
+  before_action :set_staff_discount_configuration, only: [ :show, :update, :destroy ]
 
   # GET /staff_discount_configurations
   # Public endpoint for fetching active discount configurations (used by frontend)
@@ -10,7 +10,7 @@ class StaffDiscountConfigurationsController < ApplicationController
     @configurations = current_restaurant.staff_discount_configurations
                                         .active
                                         .ordered
-    
+
     render json: {
       staff_discount_configurations: @configurations.map(&:to_api_hash)
     }
@@ -20,7 +20,7 @@ class StaffDiscountConfigurationsController < ApplicationController
   # Admin endpoint for fetching all configurations (active and inactive)
   def admin_index
     @configurations = current_restaurant.staff_discount_configurations.ordered
-    
+
     render json: {
       staff_discount_configurations: @configurations.map(&:to_api_hash)
     }
@@ -46,7 +46,7 @@ class StaffDiscountConfigurationsController < ApplicationController
       Rails.logger.error "Restaurant ID: #{current_restaurant.id}"
       Rails.logger.error "Existing codes for this restaurant: #{current_restaurant.staff_discount_configurations.pluck(:code).inspect}"
       Rails.logger.error "Detailed errors: #{@configuration.errors.details.inspect}"
-      
+
       render json: {
         errors: @configuration.errors.full_messages,
         details: @configuration.errors.details
@@ -74,19 +74,19 @@ class StaffDiscountConfigurationsController < ApplicationController
       head :no_content
     rescue ActiveRecord::InvalidForeignKey => e
       Rails.logger.error "Cannot delete staff discount configuration #{@configuration.id}: #{e.message}"
-      
+
       # Check if there are orders using this configuration
       orders_count = Order.where(staff_discount_configuration_id: @configuration.id).count
-      
+
       render json: {
-        errors: ["Cannot delete this discount configuration because it is being used by #{orders_count} existing order(s). You can deactivate it instead."],
+        errors: [ "Cannot delete this discount configuration because it is being used by #{orders_count} existing order(s). You can deactivate it instead." ],
         suggestion: "deactivate"
       }, status: :unprocessable_entity
     rescue StandardError => e
       Rails.logger.error "Error deleting staff discount configuration #{@configuration.id}: #{e.message}"
-      
+
       render json: {
-        errors: ["An error occurred while deleting the discount configuration."]
+        errors: [ "An error occurred while deleting the discount configuration." ]
       }, status: :internal_server_error
     end
   end
@@ -99,10 +99,8 @@ class StaffDiscountConfigurationsController < ApplicationController
 
   def configuration_params
     params.require(:staff_discount_configuration).permit(
-      :name, :code, :discount_percentage, :discount_type, :is_active, 
+      :name, :code, :discount_percentage, :discount_type, :is_active,
       :is_default, :display_order, :description, :ui_color
     )
   end
-
-
-end 
+end

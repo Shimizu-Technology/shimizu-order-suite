@@ -1,12 +1,12 @@
 class StaffDiscountConfiguration < ApplicationRecord
   belongs_to :restaurant
-  
+
   validates :name, presence: true, length: { maximum: 100 }
-  validates :code, presence: true, 
+  validates :code, presence: true,
                    length: { maximum: 50 },
                    format: { with: /\A[a-z0-9_]+\z/, message: "can only contain lowercase letters, numbers, and underscores" },
                    uniqueness: { scope: :restaurant_id }
-  validates :discount_percentage, presence: true, 
+  validates :discount_percentage, presence: true,
                                   numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }
   validates :discount_type, presence: true, inclusion: { in: %w[percentage fixed_amount] }
   validates :display_order, presence: true, numericality: { greater_than_or_equal_to: 0 }
@@ -22,12 +22,12 @@ class StaffDiscountConfiguration < ApplicationRecord
   # Calculate the actual discount amount for a given total
   def calculate_discount(total)
     return 0 if total.nil? || total.zero?
-    
+
     case discount_type
-    when 'percentage'
+    when "percentage"
       (total * (discount_percentage / 100.0)).round(2)
-    when 'fixed_amount'
-      [discount_percentage, total].min.round(2)  # Can't discount more than the total
+    when "fixed_amount"
+      [ discount_percentage, total ].min.round(2)  # Can't discount more than the total
     else
       0
     end
@@ -36,27 +36,27 @@ class StaffDiscountConfiguration < ApplicationRecord
   # Calculate the final amount after discount
   def calculate_final_amount(total)
     return 0 if total.nil? || total.zero?
-    
+
     discount_amount = calculate_discount(total)
     (total - discount_amount).round(2)
   end
 
   # Get the discount rate as a decimal (for percentage discounts)
   def discount_rate
-    return 0 unless discount_type == 'percentage'
+    return 0 unless discount_type == "percentage"
     discount_percentage / 100.0
   end
 
   # Display label for UI
   def display_label
     case discount_type
-    when 'percentage'
+    when "percentage"
       if discount_percentage.zero?
         name
       else
         "#{name} (#{discount_percentage.to_i}% off)"
       end
-    when 'fixed_amount'
+    when "fixed_amount"
       "#{name} ($#{discount_percentage} off)"
     else
       name
@@ -93,7 +93,7 @@ class StaffDiscountConfiguration < ApplicationRecord
 
   def sanitize_code
     if code.present?
-      self.code = code.strip.downcase.gsub(/[^a-z0-9_]/, '_').squeeze('_')
+      self.code = code.strip.downcase.gsub(/[^a-z0-9_]/, "_").squeeze("_")
     end
   end
-end 
+end

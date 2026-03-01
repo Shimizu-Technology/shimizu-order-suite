@@ -1,18 +1,18 @@
 # app/controllers/payments_controller.rb
 class PaymentsController < ApplicationController
   include TenantIsolation
-  
+
   before_action :authorize_request, except: [ :client_token, :process_payment, :create_order, :capture_order ]
   before_action :ensure_tenant_context
 
   # GET /payments/client_token
   def client_token
     result = tenant_payment_service.generate_client_token
-    
+
     if result[:success]
       render json: { token: result[:token] }
     else
-      render json: { error: result[:errors].join(', ') }, status: result[:status] || :service_unavailable
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :service_unavailable
     end
   end
 
@@ -28,7 +28,7 @@ class PaymentsController < ApplicationController
     else
       render json: {
         success: false,
-        error: result[:errors].join(', ')
+        error: result[:errors].join(", ")
       }, status: result[:status] || :unprocessable_entity
     end
   end
@@ -49,7 +49,7 @@ class PaymentsController < ApplicationController
     else
       render json: {
         success: false,
-        error: result[:errors].join(', ')
+        error: result[:errors].join(", ")
       }, status: result[:status] || :unprocessable_entity
     end
   end

@@ -1,7 +1,7 @@
 class Notification < ApplicationRecord
   include Broadcastable
   apply_default_scope
-  
+
   # Define which attributes should trigger broadcasts
   broadcasts_on :message, :notification_type, :acknowledged
 

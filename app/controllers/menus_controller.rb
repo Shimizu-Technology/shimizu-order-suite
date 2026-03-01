@@ -1,9 +1,9 @@
 # app/controllers/menus_controller.rb
 class MenusController < ApplicationController
   include TenantIsolation
-  
-  before_action :authorize_request, except: [:index, :show]
-  before_action :optional_authorize, only: [:index, :show]
+
+  before_action :authorize_request, except: [ :index, :show ]
+  before_action :optional_authorize, only: [ :index, :show ]
   before_action :ensure_tenant_context
 
   # GET /menus
@@ -21,7 +21,7 @@ class MenusController < ApplicationController
   # POST /menus
   def create
     result = menu_service.create_menu(menu_params)
-    
+
     if result[:success]
       render json: result[:menu], status: :created
     else
@@ -32,7 +32,7 @@ class MenusController < ApplicationController
   # PATCH/PUT /menus/1
   def update
     result = menu_service.update_menu(params[:id], menu_params)
-    
+
     if result[:success]
       render json: result[:menu]
     else
@@ -43,7 +43,7 @@ class MenusController < ApplicationController
   # DELETE /menus/1
   def destroy
     result = menu_service.delete_menu(params[:id])
-    
+
     if result[:success]
       head :no_content
     else
@@ -54,7 +54,7 @@ class MenusController < ApplicationController
   # POST /menus/:id/set_active
   def set_active
     result = menu_service.set_active_menu(params[:id])
-    
+
     if result[:success]
       render json: {
         message: result[:message],
@@ -68,7 +68,7 @@ class MenusController < ApplicationController
   # POST /menus/:id/clone
   def clone
     result = menu_service.clone_menu(params[:id])
-    
+
     if result[:success]
       render json: result[:menu], status: :created
     else
@@ -89,10 +89,10 @@ class MenusController < ApplicationController
       service
     end
   end
-  
+
   def ensure_tenant_context
     unless current_restaurant.present?
-      render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+      render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
     end
   end
 end

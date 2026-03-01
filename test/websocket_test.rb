@@ -1,14 +1,14 @@
 #!/usr/bin/env ruby
 # test/websocket_test.rb
-# 
+#
 # A simple test script to verify WebSocket functionality in the Shimizu Order Suite application
 # Run this script with: ruby test/websocket_test.rb
 
-require 'websocket-client-simple'
-require 'json'
-require 'jwt'
-require 'optparse'
-require 'logger'
+require "websocket-client-simple"
+require "json"
+require "jwt"
+require "optparse"
+require "logger"
 
 # Setup logger
 logger = Logger.new(STDOUT)
@@ -19,13 +19,13 @@ end
 
 # Parse command line options
 options = {
-  host: 'localhost',
+  host: "localhost",
   port: 3000,
-  channel: 'order',
+  channel: "order",
   restaurant_id: 1,
   user_id: 1,
   jwt_secret: nil,
-  jwt_algorithm: 'HS256',
+  jwt_algorithm: "HS256",
   jwt_expiration: 1.hour.to_i
 }
 
@@ -74,7 +74,7 @@ end.parse!
 if options[:jwt_secret].nil?
   # Try to read from Rails credentials
   begin
-    require File.expand_path('../../config/environment', __FILE__)
+    require File.expand_path("../../config/environment", __FILE__)
     options[:jwt_secret] = Rails.application.credentials.secret_key_base
     logger.info "Using JWT secret from Rails credentials"
   rescue => e
@@ -91,15 +91,15 @@ def generate_jwt(user_id, restaurant_id, secret, algorithm, expiration)
     restaurant_id: restaurant_id,
     exp: Time.now.to_i + expiration
   }
-  
+
   JWT.encode(payload, secret, algorithm)
 end
 
 token = generate_jwt(
-  options[:user_id], 
-  options[:restaurant_id], 
-  options[:jwt_secret], 
-  options[:jwt_algorithm], 
+  options[:user_id],
+  options[:restaurant_id],
+  options[:jwt_secret],
+  options[:jwt_algorithm],
   options[:jwt_expiration]
 )
 
@@ -114,7 +114,7 @@ logger.info "Using JWT token: #{token}"
 # Connect to WebSocket
 ws = WebSocket::Client::Simple.connect(ws_url, {
   headers: {
-    'Authorization' => "Bearer #{token}"
+    "Authorization" => "Bearer #{token}"
   }
 })
 
@@ -125,16 +125,16 @@ subscribed = false
 ws.on :open do
   logger.info "WebSocket connection established"
   connected = true
-  
+
   # Send subscription message
   subscription_message = {
-    command: 'subscribe',
+    command: "subscribe",
     identifier: JSON.generate({
       channel: "#{options[:channel].capitalize}Channel",
       restaurant_id: options[:restaurant_id]
     })
   }
-  
+
   logger.info "Sending subscription request: #{subscription_message.to_json}"
   ws.send(subscription_message.to_json)
 end
@@ -143,25 +143,25 @@ ws.on :message do |msg|
   begin
     data = JSON.parse(msg.data)
     logger.debug "Received message: #{data}"
-    
+
     # Handle welcome message
-    if data['type'] == 'welcome'
+    if data["type"] == "welcome"
       logger.info "Received welcome message from server"
     end
-    
+
     # Handle successful subscription
-    if data['type'] == 'confirm_subscription'
+    if data["type"] == "confirm_subscription"
       logger.info "Successfully subscribed to channel"
       subscribed = true
     end
-    
+
     # Handle ping message
-    if data['type'] == 'ping'
+    if data["type"] == "ping"
       logger.debug "Received ping from server"
     end
-    
+
     # Handle actual channel messages
-    if data['message'] && !data['message'].empty?
+    if data["message"] && !data["message"].empty?
       logger.info "Received channel message: #{data['message']}"
     end
   rescue JSON::ParserError => e
@@ -187,11 +187,11 @@ begin
     sleep 0.5
     logger.debug "Waiting for subscription confirmation..."
   end
-  
+
   if subscribed
     logger.info "Connection and subscription successful!"
     logger.info "Listening for messages. Press Ctrl+C to exit."
-    
+
     # Keep the connection alive
     loop do
       sleep 1

@@ -1,17 +1,17 @@
 class VipCodeGenerator
   def self.generate_codes(restaurant, count, options = {})
     codes = []
-    
+
     # Handle custom codes list
     if options[:custom_codes].present?
       custom_codes_list = parse_custom_codes(options[:custom_codes])
-      
+
       # Only create up to the requested count, using custom codes
-      codes_to_create = [count, custom_codes_list.length].min
-      
+      codes_to_create = [ count, custom_codes_list.length ].min
+
       custom_codes_list.first(codes_to_create).each do |custom_code|
         code = validate_and_get_unique_code(restaurant, custom_code.strip)
-        
+
         # Create the VIP code with or without max_uses
         attributes = {
           code: code,
@@ -48,7 +48,7 @@ class VipCodeGenerator
         codes << restaurant.vip_access_codes.create!(attributes)
       end
     end
-    
+
     codes
   end
 
@@ -59,7 +59,7 @@ class VipCodeGenerator
     else
       code = new_unique_code(restaurant, options[:prefix])
     end
-    
+
     restaurant.vip_access_codes.create!(
       code: code,
       name: options[:name] || "Group VIP Access",
@@ -85,21 +85,21 @@ class VipCodeGenerator
       return code unless VipAccessCode.where(restaurant_id: restaurant.id).exists?(code: code)
     end
   end
-  
+
   def self.validate_and_get_unique_code(restaurant, custom_code)
     # Basic validation
     raise ArgumentError, "Custom code cannot be blank" if custom_code.blank?
     raise ArgumentError, "Custom code is too long (maximum 50 characters)" if custom_code.length > 50
     raise ArgumentError, "Custom code contains invalid characters" unless custom_code.match?(/\A[A-Za-z0-9\-_]+\z/)
-    
+
     # Check uniqueness
     if VipAccessCode.where(restaurant_id: restaurant.id).exists?(code: custom_code)
       raise ArgumentError, "Custom code '#{custom_code}' already exists"
     end
-    
+
     custom_code
   end
-  
+
   def self.parse_custom_codes(custom_codes_input)
     # Handle both string input and array input
     if custom_codes_input.is_a?(String)

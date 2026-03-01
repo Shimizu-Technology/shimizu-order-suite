@@ -9,10 +9,10 @@ class CreateWholesaleOptionPresets < ActiveRecord::Migration[7.2]
 
       t.timestamps
     end
-    
-    add_index :wholesale_option_presets, :wholesale_option_group_preset_id, 
+
+    add_index :wholesale_option_presets, :wholesale_option_group_preset_id,
               name: 'index_wholesale_option_presets_on_group_preset_id'
-    add_index :wholesale_option_presets, [:wholesale_option_group_preset_id, :name], 
+    add_index :wholesale_option_presets, [ :wholesale_option_group_preset_id, :name ],
               unique: true, name: 'idx_wholesale_option_presets_group_name'
     add_index :wholesale_option_presets, :position
     add_index :wholesale_option_presets, :available

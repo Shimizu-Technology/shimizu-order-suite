@@ -5,10 +5,10 @@ class CreateStaffBeneficiaries < ActiveRecord::Migration[7.2]
       t.bigint :restaurant_id, null: false
       t.boolean :active, default: true
       t.timestamps
-      
-      t.index [:restaurant_id, :name], unique: true
+
+      t.index [ :restaurant_id, :name ], unique: true
     end
-    
+
     add_foreign_key :staff_beneficiaries, :restaurants
   end
 end

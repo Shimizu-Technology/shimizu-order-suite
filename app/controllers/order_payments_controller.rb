@@ -1,20 +1,20 @@
 class OrderPaymentsController < ApplicationController
   include TenantIsolation
-  
+
   before_action :authorize_request
   before_action :ensure_tenant_context
-  before_action :set_order, only: [:index, :create_refund]
+  before_action :set_order, only: [ :index, :create_refund ]
 
   # GET /orders/:order_id/payments
   def index
     # The set_order before_action will handle temporary order IDs and set @order
     # If we get here, we either have a valid @order or set_order has already rendered a response
     return unless @order
-    
+
     # Get payments for this order
     payments = order_payment_service.list_payments(@order.id)
     payment_summary = order_payment_service.get_payment_summary(@order.id)
-    
+
     render json: {
       payments: payments,
       total_paid: payment_summary&.dig(:total_paid) || 0,
@@ -26,11 +26,11 @@ class OrderPaymentsController < ApplicationController
   # POST /orders/:order_id/payments
   def create
     result = order_payment_service.create_payment(params[:order_id], payment_params)
-    
+
     if result[:success]
       render json: { payment: result[:payment] }, status: :created
     else
-      render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
     end
   end
 
@@ -42,12 +42,12 @@ class OrderPaymentsController < ApplicationController
       params[:payment_method] || "credit_card",
       params[:payment_details] || {}
     )
-    
+
     if result[:success]
       if result[:requires_payment_processing]
         # For standard payment processors, return the amount needed for client-side processing
         render json: { additional_amount: result[:additional_amount] }
-        
+
         # This code was previously at the class level, causing errors
         # For standard payment processors (Stripe/PayPal), create a payment intent
         restaurant = @order.restaurant
@@ -63,7 +63,7 @@ class OrderPaymentsController < ApplicationController
         render json: { payment: result[:payment] }
       end
     else
-      render json: { error: result[:errors].join(', ') }, status: result[:status] || :unprocessable_entity
+      render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
     end
   end
 
@@ -72,11 +72,11 @@ class OrderPaymentsController < ApplicationController
     # Get the order
     @order = Order.find_by(id: params[:order_id])
     return render json: { error: "Order not found" }, status: :not_found unless @order
-    
+
     # Calculate additional amount
     additional_amount = params[:amount].to_f
     payment_method = params[:payment_method] || "credit_card"
-    
+
     # For standard payment processors (Stripe/PayPal), create a payment intent
     restaurant = @order.restaurant
     result = nil
@@ -86,7 +86,7 @@ class OrderPaymentsController < ApplicationController
     else
       result = create_paypal_order(additional_amount)
     end
-    
+
     if result[:success]
       # Create a pending additional payment record
       @payment = @order.order_payments.create(
@@ -111,11 +111,11 @@ class OrderPaymentsController < ApplicationController
   # POST /orders/:order_id/payments/additional/capture
   def capture_additional
     result = order_payment_service.find_payment(params[:order_id], params[:payment_id])
-    
+
     unless result[:success]
-      return render json: { error: result[:errors].join(', ') }, status: result[:status] || :not_found
+      return render json: { error: result[:errors].join(", ") }, status: result[:status] || :not_found
     end
-    
+
     payment = result[:payment]
 
     # Process the payment capture
@@ -217,34 +217,34 @@ class OrderPaymentsController < ApplicationController
     # Get customer contact info
     email = params[:email]
     phone = params[:phone]
-    
+
     # Validate that at least one contact method is provided
     if email.blank? && phone.blank?
       return render json: { error: "Email or phone number is required" }, status: :unprocessable_entity
     end
-    
+
     # Get items and calculate amount
     items = params[:items] || []
     amount = items.sum { |item| item[:price].to_f * item[:quantity].to_i }
-    
+
     if amount <= 0
       return render json: { error: "Invalid payment amount" }, status: :unprocessable_entity
     end
-    
+
     # Get restaurant settings
     restaurant = @order.restaurant
     payment_gateway = restaurant.admin_settings&.dig("payment_gateway") || {}
-    
+
     # Check if test mode is enabled
     test_mode = payment_gateway["test_mode"] == true
-    
+
     # Generate payment link based on payment processor
     if payment_gateway["payment_processor"] == "stripe"
       result = create_stripe_payment_link(amount, items, email, phone, test_mode, restaurant)
     else
       result = create_paypal_payment_link(amount, items, email, phone, test_mode, restaurant)
     end
-    
+
     if result[:success]
       # Create a pending payment record
       @payment = @order.order_payments.create(
@@ -261,16 +261,16 @@ class OrderPaymentsController < ApplicationController
           test_mode: test_mode
         }
       )
-      
+
       # Send notification based on provided contact method
       if email.present?
         send_payment_link_email(result[:url], email, @order, restaurant)
       end
-      
+
       if phone.present?
         send_payment_link_sms(result[:url], phone, @order, restaurant)
       end
-      
+
       render json: {
         payment: @payment,
         payment_link_url: result[:url]
@@ -284,22 +284,22 @@ def process_cash_payment
   # Extract parameters
   cash_received = params[:cash_received].to_f
   order_total = params[:order_total].to_f
-  
+
   # Validate input
   if cash_received < order_total
-    return render json: { error: 'Cash received must be at least equal to the order total' }, status: :unprocessable_entity
+    return render json: { error: "Cash received must be at least equal to the order total" }, status: :unprocessable_entity
   end
-  
+
   # Calculate change
   change_due = cash_received - order_total
-  
+
   # Create payment record
   transaction_id = "cash_#{Time.now.to_i}"
-  
+
   @payment = @order.order_payments.create!(
     payment_type: "initial",  # Changed from "additional" to "initial" for consistency with other payment methods
     amount: order_total,
-    payment_method: 'cash',
+    payment_method: "cash",
     cash_received: cash_received,
     change_due: change_due,
     status: "paid",
@@ -307,19 +307,19 @@ def process_cash_payment
     description: "Initial cash payment with change: $#{change_due.round(2)}",
     # Add payment details to ensure they're displayed in the UI
     payment_details: {
-      payment_method: 'cash',
+      payment_method: "cash",
       transaction_id: transaction_id,
-      payment_date: Time.now.strftime('%Y-%m-%d'),
+      payment_date: Time.now.strftime("%Y-%m-%d"),
       notes: "Cash payment - Received: $#{cash_received.to_f.round(2)}, Change: $#{change_due.to_f.round(2)}",
       cash_received: cash_received,
       change_due: change_due,
-      status: 'succeeded'
+      status: "succeeded"
     }
   )
-  
+
   # Update order status if needed
-  @order.update!(payment_status: 'paid') if @order.payment_status != 'paid'
-  
+  @order.update!(payment_status: "paid") if @order.payment_status != "paid"
+
   # Return success response with change information
   render json: {
     success: true,
@@ -344,7 +344,7 @@ def create_refund
   total_paid = @order.total_paid.to_f
   total_refunded = @order.total_refunded.to_f
   max_refundable = total_paid - total_refunded
-  
+
   Rails.logger.info("Max refundable: #{max_refundable}, total_paid: #{total_paid}, total_refunded: #{total_refunded}")
 
   # Get restaurant settings
@@ -376,7 +376,7 @@ def create_refund
       payment_method = @order.payment_method.presence ||
                        restaurant.admin_settings&.dig("payment_gateway", "payment_processor") ||
                        "stripe"
-      
+
       Rails.logger.info("Creating initial payment record for order #{@order.id} with payment_method: #{payment_method}")
 
       # Prepare payment attributes
@@ -390,9 +390,9 @@ def create_refund
         payment_id: fake_payment_id, # Ensure payment_id is set to the same value
         description: "Test payment"
       }
-      
+
       # For cash payments, we need to set cash_received and change_due to satisfy validations
-      if payment_method == 'cash'
+      if payment_method == "cash"
         Rails.logger.info("Setting cash_received for cash payment")
         payment_attributes[:cash_received] = payment_amount # For initial payments, cash_received should equal the amount
         payment_attributes[:change_due] = 0 # No change for this test payment
@@ -453,12 +453,12 @@ def create_refund
 
       # Create a refund record - use the same payment method as the original payment
       Rails.logger.info("Creating refund with payment method: #{original_payment.payment_method} (from original payment)")
-      
+
       # Prepare refund attributes
       # Ensure refunded_items is properly serialized as JSON
       # This prevents [object Object] issues in the frontend
       serialized_refunded_items = refunded_items.is_a?(Array) ? refunded_items : []
-      
+
       refund_attributes = {
         payment_type: "refund",
         amount: refund_amount,
@@ -471,24 +471,24 @@ def create_refund
         description: params[:description] || params[:reason] || "Refund",
         refunded_items: serialized_refunded_items # Store refunded items directly on the record
       }
-      
+
       # For cash payments, we need to set cash_received and change_due to satisfy validations
-      if original_payment.payment_method == 'cash'
+      if original_payment.payment_method == "cash"
         Rails.logger.info("Setting cash_received for cash refund")
         refund_attributes[:cash_received] = refund_amount # For refunds, cash_received should equal the amount
         refund_attributes[:change_due] = 0 # No change for refunds
       end
-      
+
       @refund = @order.order_payments.create(refund_attributes)
 
       # Check if all items in the order have been refunded
       all_items_refunded = false
-      
+
       # If refunded_items is provided, check if all items in the order are refunded
       if refunded_items.present?
         # Get all items from the order
         order_items = @order.items || []
-        
+
         # Create a hash to track quantities by item ID
         order_item_quantities = {}
         order_items.each do |item|
@@ -496,7 +496,7 @@ def create_refund
           order_item_quantities[item_id] ||= 0
           order_item_quantities[item_id] += item["quantity"].to_i
         end
-        
+
         # Create a hash to track refunded quantities by item ID (including previous refunds)
         refunded_item_quantities = {}
         @order.refunds.each do |refund|
@@ -507,14 +507,14 @@ def create_refund
             refunded_item_quantities[item_id] += item["quantity"].to_i
           end
         end
-        
+
         # Add current refund items to the refunded quantities
         refunded_items.each do |item|
           item_id = item["id"].to_s
           refunded_item_quantities[item_id] ||= 0
           refunded_item_quantities[item_id] += item["quantity"].to_i
         end
-        
+
         # Check if all items have been refunded by comparing quantities for each item
         all_items_refunded = true
         order_item_quantities.each do |item_id, quantity|
@@ -524,30 +524,30 @@ def create_refund
             break
           end
         end
-        
+
         Rails.logger.info("Order items: #{order_item_quantities.inspect}")
         Rails.logger.info("Refunded items: #{refunded_item_quantities.inspect}")
         Rails.logger.info("All items refunded: #{all_items_refunded}")
       end
-      
+
       # Determine if this is a full refund based on BOTH payment amount AND item quantities
       is_full_refund = false
-      
+
       # Check if all money has been refunded (within a small margin of error)
       payment_fully_refunded = (@order.total_paid - @order.total_refunded - refund_amount).abs < 0.01
-      
+
       # Only consider it a full refund if BOTH conditions are met:
       # 1. All money has been refunded
       # 2. All items have been refunded
       is_full_refund = payment_fully_refunded && all_items_refunded
-      
+
       Rails.logger.info("Payment fully refunded: #{payment_fully_refunded}, All items refunded: #{all_items_refunded}")
       Rails.logger.info("Is full refund: #{is_full_refund}")
-      
+
       # Always update payment_status to reflect the refund state
       # We now use 'refunded' for both full and partial refunds
       @order.update(payment_status: Order::STATUS_REFUNDED)
-      
+
       # Only update the order status if ALL items are refunded
       # This preserves the original order status (pending, completed, etc.) for partial refunds
       if all_items_refunded
@@ -557,10 +557,10 @@ def create_refund
       # Restore inventory for refunded items using OrderService
       if refunded_items.present?
         Rails.logger.info("Restoring inventory for refunded items: #{refunded_items.inspect}")
-        
+
         order_service = OrderService.new(@order.restaurant)
         inventory_result = order_service.revert_order_inventory(refunded_items, @order, current_user)
-        
+
         if inventory_result[:success]
           Rails.logger.info("Successfully restored inventory for refund: #{inventory_result[:inventory_changes].length} changes")
         else
@@ -575,8 +575,8 @@ def create_refund
         if @order.contact_email.present?
           Rails.logger.info("Sending refund notification email to #{@order.contact_email} for order #{@order.id}")
           # Convert ActionController::Parameters to regular hashes for ActiveJob serialization
-          email_safe_refunded_items = serialized_refunded_items.is_a?(Array) ? 
-            serialized_refunded_items.map { |item| 
+          email_safe_refunded_items = serialized_refunded_items.is_a?(Array) ?
+            serialized_refunded_items.map { |item|
               if item.is_a?(ActionController::Parameters)
                 # Use to_unsafe_h to convert unpermitted parameters to hash
                 item.to_unsafe_h
@@ -585,7 +585,7 @@ def create_refund
               else
                 item
               end
-            } : 
+            } :
             serialized_refunded_items
           OrderMailer.refund_notification(@order, @refund, email_safe_refunded_items).deliver_later
           Rails.logger.info("Refund notification email queued successfully")
@@ -603,23 +603,23 @@ def create_refund
         if @order.contact_phone.present?
           restaurant = @order.restaurant
           notification_channels = restaurant.admin_settings&.dig("notification_channels", "orders") || {}
-          
+
           # Send SMS if enabled (default to true for backward compatibility)
           if notification_channels["sms"] != false
             sms_sender = restaurant.admin_settings&.dig("sms_sender_id").presence || restaurant.name
-            
+
             # Determine refund type and create appropriate message
             is_partial_refund = serialized_refunded_items.present? && serialized_refunded_items.any?
             refund_type = is_partial_refund ? "partial refund" : "full refund"
-            
+
             message_body = <<~MSG.squish
-              Hi #{@order.contact_name.presence || 'Customer'}, 
-              we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)} 
-              for your #{restaurant.name} order ##{@order.order_number.presence || @order.id}. 
-              You should receive your refund within 1-3 business days. 
+              Hi #{@order.contact_name.presence || 'Customer'},#{' '}
+              we've processed a #{refund_type} of $#{sprintf("%.2f", refund_amount)}#{' '}
+              for your #{restaurant.name} order ##{@order.order_number.presence || @order.id}.#{' '}
+              You should receive your refund within 1-3 business days.#{' '}
               #{is_partial_refund ? 'This is a partial refund - some items from your order are not affected.' : 'Thank you for your understanding.'}
             MSG
-            
+
             Rails.logger.info("Sending refund notification SMS to #{@order.contact_phone} for order #{@order.id}")
             SendSmsJob.perform_later(
               to: @order.contact_phone,
@@ -674,7 +674,7 @@ def create_refund
       unless current_user&.role.in?(%w[admin super_admin staff]) ||
              (current_user && @order.user_id == current_user.id)
         render json: { error: "Forbidden" }, status: :forbidden
-        return
+        nil
       end
     rescue ActiveRecord::RecordNotFound
       Rails.logger.error("Order not found: #{params[:order_id]} for restaurant_id: #{current_restaurant&.id}")
@@ -684,7 +684,7 @@ def create_refund
 
   def payment_params
     params.permit(
-      :payment_type, :amount, :payment_method, :transaction_id, 
+      :payment_type, :amount, :payment_method, :transaction_id,
       :payment_id, :status, :description, :cash_received, :change_due,
       payment_details: {}
     )
@@ -841,7 +841,7 @@ def create_refund
       Rails.logger.info("Attempting to create Stripe refund for payment_intent: #{payment_intent_id} (Stripe test mode: #{stripe_test_mode})")
 
       # Ensure reason is one of the valid values accepted by Stripe
-      valid_reasons = ["duplicate", "fraudulent", "requested_by_customer"]
+      valid_reasons = [ "duplicate", "fraudulent", "requested_by_customer" ]
       reason = params[:reason] || "requested_by_customer"
 
       # Default to 'requested_by_customer' if the provided reason is not valid
@@ -989,7 +989,7 @@ def create_refund
       }
     end
   end
-  
+
   # Create a Stripe payment link
   def create_stripe_payment_link(amount, items, email, phone, test_mode, restaurant)
     begin
@@ -997,7 +997,7 @@ def create_refund
       secret_key = test_mode ?
                   restaurant.admin_settings&.dig("payment_gateway", "test_secret_key") :
                   restaurant.admin_settings&.dig("payment_gateway", "secret_key")
-      
+
       # If no key is available but we're in test mode, create a mock payment link
       if secret_key.blank? && test_mode
         mock_url = "https://example.com/test-payment/#{SecureRandom.hex(8)}"
@@ -1007,35 +1007,35 @@ def create_refund
           test_mode: true
         }
       end
-      
+
       # Set Stripe API key
       Stripe.api_key = secret_key
-      
+
       # Get restaurant-specific success and cancel URLs
       frontend_url = view_context.get_frontend_url_for(restaurant)
       success_url = restaurant.admin_settings&.dig("payment_gateway", "success_url") ||
                     "#{frontend_url}/payment-success?session_id={CHECKOUT_SESSION_ID}"
       cancel_url = restaurant.admin_settings&.dig("payment_gateway", "cancel_url") ||
                   "#{frontend_url}/payment-cancel"
-      
+
       # Create a Stripe Checkout Session with a payment link
       session = Stripe::Checkout::Session.create({
-        payment_method_types: ['card'],
+        payment_method_types: [ "card" ],
         line_items: items.map { |item|
           {
             price_data: {
-              currency: restaurant.admin_settings&.dig("payment_gateway", "currency") || 'usd',
+              currency: restaurant.admin_settings&.dig("payment_gateway", "currency") || "usd",
               product_data: {
                 name: item[:name],
                 description: item[:description],
-                images: item[:image].present? ? [item[:image]] : []
+                images: item[:image].present? ? [ item[:image] ] : []
               },
-              unit_amount: (item[:price].to_f * 100).to_i, # Convert to cents
+              unit_amount: (item[:price].to_f * 100).to_i # Convert to cents
             },
-            quantity: item[:quantity].to_i,
+            quantity: item[:quantity].to_i
           }
         },
-        mode: 'payment',
+        mode: "payment",
         success_url: success_url,
         cancel_url: cancel_url,
         customer_email: email.presence,
@@ -1046,7 +1046,7 @@ def create_refund
           test_mode: test_mode
         }
       })
-      
+
       {
         success: true,
         url: session.url,
@@ -1054,7 +1054,7 @@ def create_refund
       }
     rescue => e
       Rails.logger.error("Stripe payment link error: #{e.message}")
-      
+
       # If in test mode and there's an error, create a mock payment link
       if test_mode
         mock_url = "https://example.com/test-payment/#{SecureRandom.hex(8)}"
@@ -1064,14 +1064,14 @@ def create_refund
           test_mode: true
         }
       end
-      
+
       {
         success: false,
         error: e.message
       }
     end
   end
-  
+
   # Create a PayPal payment link
   def create_paypal_payment_link(amount, items, email, phone, test_mode, restaurant)
     begin
@@ -1082,7 +1082,7 @@ def create_refund
       client_secret = test_mode ?
                      restaurant.admin_settings&.dig("payment_gateway", "test_client_secret") :
                      restaurant.admin_settings&.dig("payment_gateway", "client_secret")
-      
+
       # If no credentials are available but we're in test mode, create a mock payment link
       if (client_id.blank? || client_secret.blank?) && test_mode
         mock_url = "https://example.com/test-paypal-payment/#{SecureRandom.hex(8)}"
@@ -1092,7 +1092,7 @@ def create_refund
           test_mode: true
         }
       end
-      
+
       # For now, return a mock URL in test mode
       # In a real implementation, you would use PayPal's Create Order API
       if test_mode
@@ -1103,7 +1103,7 @@ def create_refund
           test_mode: true
         }
       end
-      
+
       # This would be replaced with actual PayPal API integration
       # For now, return an error for production mode
       {
@@ -1112,7 +1112,7 @@ def create_refund
       }
     rescue => e
       Rails.logger.error("PayPal payment link error: #{e.message}")
-      
+
       # If in test mode and there's an error, create a mock payment link
       if test_mode
         mock_url = "https://example.com/test-paypal-payment/#{SecureRandom.hex(8)}"
@@ -1122,23 +1122,23 @@ def create_refund
           test_mode: true
         }
       end
-      
+
       {
         success: false,
         error: e.message
       }
     end
   end
-  
+
   # Send payment link via email
   def send_payment_link_email(url, email, order, restaurant)
     # Use restaurant-specific email template if available
     template = restaurant.admin_settings&.dig("email_templates", "payment_link") || "default_payment_link"
-    
+
     # Use restaurant branding
     restaurant_name = restaurant.name
     restaurant_logo = restaurant.logo_url
-    
+
     # Send email with payment link
     OrderMailer.payment_link(
       email,
@@ -1151,20 +1151,20 @@ def create_refund
   rescue => e
     Rails.logger.error("Failed to send payment link email: #{e.message}")
   end
-  
+
   # Send payment link via SMS
   def send_payment_link_sms(url, phone, order, restaurant)
     # Use restaurant-specific SMS template if available
     sms_template = restaurant.admin_settings&.dig("sms_templates", "payment_link") ||
                   "Your payment link for order #%{order_id} from %{restaurant}: %{url}"
-    
+
     # Format the message with order and restaurant details
     message = sms_template % {
       order_id: order.id,
       restaurant: restaurant.name,
       url: url
     }
-    
+
     # Send SMS with payment link
     SendSmsJob.perform_later(phone, message, restaurant.id)
   rescue => e

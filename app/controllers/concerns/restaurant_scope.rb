@@ -17,9 +17,9 @@ module RestaurantScope
     end
 
     # Special handling for reservation-related controllers
-    if ["reservations", "waitlist_entries", "layouts"].include?(controller_name) || 
+    if [ "reservations", "waitlist_entries", "layouts" ].include?(controller_name) ||
        (controller_name == "operating_hours" || controller_name.start_with?("admin/"))
-      
+
       # Use restaurant_id from params if provided
       if params[:restaurant_id].present?
         @current_restaurant = Restaurant.find_by(id: params[:restaurant_id])
@@ -31,7 +31,7 @@ module RestaurantScope
         # Default to first restaurant for reservation system if no context
         @current_restaurant = Restaurant.first
       end
-      
+
       # Make current_restaurant available to models for default scoping
       ActiveRecord::Base.current_restaurant = @current_restaurant if ActiveRecord::Base.respond_to?(:current_restaurant=)
       return

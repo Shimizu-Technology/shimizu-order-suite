@@ -9,7 +9,7 @@ class PasswordMailer < ApplicationMailer
 
     # URL-encode the email so that '+' stays '%2B', etc.
     safe_email = CGI.escape(@user.email)
-    
+
     # Get the frontend URL for this restaurant using our helper method
     frontend_url = get_frontend_url_for(@restaurant)
 

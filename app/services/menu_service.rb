@@ -7,14 +7,14 @@ class MenuService < TenantScopedService
   # @option params [Boolean] :active If true, only returns active menus; if false, only returns inactive menus
   def list_menus(params = {})
     menus = scope_query(Menu).order(created_at: :asc)
-    
+
     # Filter by active status if specified
     if params[:active].present?
       active_status = ActiveModel::Type::Boolean.new.cast(params[:active])
       menus = menus.where(active: active_status)
       Rails.logger.debug { "[MenuService] Filtering menus by active=#{active_status}" }
     end
-    
+
     Rails.logger.debug { "[MenuService] Returning #{menus.count} menus" }
     menus
   end
@@ -29,7 +29,7 @@ class MenuService < TenantScopedService
     # Ensure the restaurant_id is set to the current restaurant
     menu_params = menu_params.merge(restaurant_id: @restaurant.id)
     menu = Menu.new(menu_params)
-    
+
     if menu.save
       { success: true, menu: menu, status: :created }
     else
@@ -40,96 +40,96 @@ class MenuService < TenantScopedService
   # Update an existing menu
   def update_menu(id, menu_params)
     menu = scope_query(Menu).find(id)
-    
+
     if menu.update(menu_params)
       { success: true, menu: menu }
     else
       { success: false, errors: menu.errors, status: :unprocessable_entity }
     end
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu not found"], status: :not_found }
+    { success: false, errors: [ "Menu not found" ], status: :not_found }
   end
 
   # Delete a menu
   def delete_menu(id)
     menu = scope_query(Menu).find(id)
-    
+
     # Check if this is the active menu
     if menu.restaurant&.current_menu_id == menu.id
-      return { 
-        success: false, 
-        errors: ["Cannot delete the active menu. Please set another menu as active first."], 
-        status: :unprocessable_entity 
+      return {
+        success: false,
+        errors: [ "Cannot delete the active menu. Please set another menu as active first." ],
+        status: :unprocessable_entity
       }
     end
-    
+
     menu.destroy
     { success: true }
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu not found"], status: :not_found }
+    { success: false, errors: [ "Menu not found" ], status: :not_found }
   end
 
   # Set a menu as active
   def set_active_menu(id)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless admin_user?
-    
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless admin_user?
+
     begin
       menu = scope_query(Menu).find(id)
-      
+
       # First update the menus in a transaction
       ActiveRecord::Base.transaction do
         # Set all menus for this restaurant to inactive
         scope_query(Menu).update_all(active: false)
-        
+
         # Set the selected menu to active
         menu.update!(active: true)
       end
-      
+
       # Now update the restaurant outside the transaction
       # This prevents the transaction from rolling back if there's an issue with the restaurant update
       begin
         # Use @restaurant from TenantScopedService instead of current_restaurant
         restaurant = Restaurant.find(@restaurant.id)
         restaurant.update_columns(current_menu_id: menu.id, updated_at: Time.current)
-        
+
         # Log the successful menu activation
         Rails.logger.info("Menu #{menu.id} set as active for restaurant #{restaurant.id}")
-        
+
         # Return success response
-        return { 
-          success: true, 
+        {
+          success: true,
           message: "Menu set as active successfully",
           current_menu_id: menu.id
         }
       rescue => e
         Rails.logger.error("Failed to update restaurant with menu: #{e.message}")
-        return { success: false, errors: ["Menu activated but failed to update restaurant: #{e.message}"], status: :unprocessable_entity }
+        { success: false, errors: [ "Menu activated but failed to update restaurant: #{e.message}" ], status: :unprocessable_entity }
       end
     end
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu not found"], status: :not_found }
+    { success: false, errors: [ "Menu not found" ], status: :not_found }
   rescue => e
-    { success: false, errors: [e.message], status: :unprocessable_entity }
+    { success: false, errors: [ e.message ], status: :unprocessable_entity }
   end
 
   # Clone a menu
   def clone_menu(id)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless admin_user?
-    
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless admin_user?
+
     original_menu = scope_query(Menu).find(id)
-    
+
     new_menu = Menu.new(
       name: "#{original_menu.name} (Copy)",
       active: false,
       restaurant_id: @restaurant.id
     )
-    
+
     if new_menu.save
       # Use a transaction to ensure all operations succeed or fail together
       ActiveRecord::Base.transaction do
         # Clone categories first
         category_mapping = {} # To map original category IDs to new category IDs
-        
+
         original_menu.categories.each do |original_category|
           new_category = Category.create!(
             menu_id: new_menu.id,
@@ -137,7 +137,7 @@ class MenuService < TenantScopedService
             position: original_category.position,
             description: original_category.description
           )
-          
+
           # Store the mapping from original to new category
           category_mapping[original_category.id] = new_category.id
         end
@@ -155,7 +155,7 @@ class MenuService < TenantScopedService
           original_item.menu_item_categories.each do |mic|
             # Use the new category ID from our mapping
             new_category_id = category_mapping[mic.category_id]
-            
+
             MenuItemCategory.create!(
               menu_item_id: new_item.id,
               category_id: new_category_id
@@ -181,15 +181,15 @@ class MenuService < TenantScopedService
           end
         end
       end
-      
+
       { success: true, menu: new_menu, status: :created }
     else
       { success: false, errors: new_menu.errors.full_messages, status: :unprocessable_entity }
     end
   rescue ActiveRecord::RecordNotFound
-    { success: false, errors: ["Menu not found"], status: :not_found }
+    { success: false, errors: [ "Menu not found" ], status: :not_found }
   rescue => e
-    { success: false, errors: [e.message], status: :unprocessable_entity }
+    { success: false, errors: [ e.message ], status: :unprocessable_entity }
   end
 
   private

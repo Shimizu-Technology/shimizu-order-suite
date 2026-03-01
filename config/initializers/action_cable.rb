@@ -4,15 +4,15 @@
 
 Rails.application.config.action_cable.allowed_request_origins = [
   # Local development
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://localhost:5175',
-  
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
+
   # Production domains
-  'https://hafaloha-orders.com',
-  'https://hafaloha.netlify.app',
-  'https://hafaloha-lvmt0.kinsta.page',
-  'https://shimizu-order-suite.netlify.app'
+  "https://hafaloha-orders.com",
+  "https://hafaloha.netlify.app",
+  "https://hafaloha-lvmt0.kinsta.page",
+  "https://shimizu-order-suite.netlify.app"
 ]
 
 # Log allowed origins on startup

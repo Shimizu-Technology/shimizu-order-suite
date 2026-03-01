@@ -2,11 +2,11 @@
 module Admin
   class SiteSettingsController < ApplicationController
     include TenantIsolation
-    
+
     before_action :authorize_request, except: [ :show ]
     before_action :require_admin!, except: [ :show ]
     before_action :ensure_tenant_context
-    
+
     # Override global_access_permitted to allow public access to show
     def global_access_permitted?
       action_name == "show"
@@ -24,7 +24,7 @@ module Admin
     def update
       # Use the SiteSettingsService to update settings with tenant isolation
       result = site_settings_service.update_settings(params)
-      
+
       if result[:success]
         render json: result[:settings]
       else
@@ -39,14 +39,14 @@ module Admin
         render json: { error: "Forbidden" }, status: :forbidden
       end
     end
-    
+
     def site_settings_service
       @site_settings_service ||= SiteSettingsService.new(current_restaurant)
     end
-    
+
     def ensure_tenant_context
       unless current_restaurant.present?
-        render json: { error: 'Restaurant context is required' }, status: :unprocessable_entity
+        render json: { error: "Restaurant context is required" }, status: :unprocessable_entity
       end
     end
   end

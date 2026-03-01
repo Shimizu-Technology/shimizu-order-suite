@@ -12,11 +12,11 @@ class NotificationsController < ApplicationController
   #   - hours: Only get notifications from the last X hours (default: 24)
   def unacknowledged
     result = notification_service.unacknowledged_notifications(params, current_user)
-    
+
     if result[:success]
       # Ensure we're returning an array
       notifications_array = result[:notifications].to_a
-      
+
       # Add debug logging
       Rails.logger.debug("Notifications response - " + {
         count: notifications_array.length,
@@ -24,9 +24,9 @@ class NotificationsController < ApplicationController
         hours: params[:hours].present? ? params[:hours].to_i : 24,
         is_array: notifications_array.is_a?(Array),
         first_notification: notifications_array.first&.as_json,
-        response_type: 'array'
+        response_type: "array"
       }.to_json)
-      
+
       # Explicitly render as array
       render json: { notifications: notifications_array }
     else
@@ -38,7 +38,7 @@ class NotificationsController < ApplicationController
   # Acknowledges a single notification
   def acknowledge
     result = notification_service.acknowledge_notification(params[:id], current_user)
-    
+
     if result[:success]
       head :no_content
     else
@@ -53,7 +53,7 @@ class NotificationsController < ApplicationController
   #   - quantity: For restock actions, the quantity to add
   def take_action
     result = notification_service.take_action_on_notification(params[:id], params, current_user)
-    
+
     if result[:success]
       render json: {
         success: true,
@@ -72,7 +72,7 @@ class NotificationsController < ApplicationController
   #   - type: Only acknowledge notifications of this type (optional)
   def acknowledge_all
     result = notification_service.acknowledge_all_notifications(params, current_user)
-    
+
     if result[:success]
       render json: { acknowledged_count: result[:acknowledged_count] }
     else

@@ -5,24 +5,24 @@
 #
 class FeatureFlag < ApplicationRecord
   include TenantScoped
-  
+
   # Validations
   validates :name, presence: true, uniqueness: { scope: :restaurant_id }
-  validates :enabled, inclusion: { in: [true, false] }
-  validates :global, inclusion: { in: [true, false] }
-  
+  validates :enabled, inclusion: { in: [ true, false ] }
+  validates :global, inclusion: { in: [ true, false ] }
+
   # Scopes
   scope :enabled, -> { where(enabled: true) }
   scope :global, -> { where(global: true) }
   scope :tenant_specific, -> { where(global: false) }
-  
+
   # Default values
   attribute :enabled, :boolean, default: false
   attribute :global, :boolean, default: false
   attribute :configuration, :jsonb, default: {}
-  
+
   # Class methods for feature flag management
-  
+
   # Check if a feature is enabled for a specific tenant
   # @param feature_name [String] The name of the feature to check
   # @param restaurant [Restaurant] The tenant to check the feature for
@@ -33,12 +33,12 @@ class FeatureFlag < ApplicationRecord
       tenant_flag = find_by(name: feature_name, restaurant_id: restaurant.id)
       return tenant_flag.enabled if tenant_flag.present?
     end
-    
+
     # Fall back to global flag
     global_flag = find_by(name: feature_name, global: true)
     global_flag&.enabled || false
   end
-  
+
   # Get the configuration for a feature
   # @param feature_name [String] The name of the feature
   # @param restaurant [Restaurant] The tenant to get the configuration for
@@ -50,12 +50,12 @@ class FeatureFlag < ApplicationRecord
       tenant_flag = find_by(name: feature_name, restaurant_id: restaurant.id)
       return tenant_flag.configuration if tenant_flag.present? && tenant_flag.configuration.present?
     end
-    
+
     # Fall back to global configuration
     global_flag = find_by(name: feature_name, global: true)
     global_flag&.configuration.presence || default
   end
-  
+
   # Enable a feature for a specific tenant
   # @param feature_name [String] The name of the feature to enable
   # @param restaurant [Restaurant] The tenant to enable the feature for
@@ -69,7 +69,7 @@ class FeatureFlag < ApplicationRecord
     flag.save
     flag
   end
-  
+
   # Enable a feature globally
   # @param feature_name [String] The name of the feature to enable
   # @param configuration [Hash] Optional configuration for the feature
@@ -82,7 +82,7 @@ class FeatureFlag < ApplicationRecord
     flag.save
     flag
   end
-  
+
   # Disable a feature for a specific tenant
   # @param feature_name [String] The name of the feature to disable
   # @param restaurant [Restaurant] The tenant to disable the feature for
@@ -94,7 +94,7 @@ class FeatureFlag < ApplicationRecord
     flag.save
     flag
   end
-  
+
   # Disable a feature globally
   # @param feature_name [String] The name of the feature to disable
   # @return [FeatureFlag] The updated or created feature flag

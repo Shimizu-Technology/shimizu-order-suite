@@ -21,7 +21,7 @@ test_order = {
       quantity: 2,
       customizations: {
         'Size' => 'Large',
-        'Extras' => ['Cheese', 'Bacon']
+        'Extras' => [ 'Cheese', 'Bacon' ]
       }
     }
   ],
