@@ -86,7 +86,7 @@ Rails.application.configure do
 
   # Allow Action Cable access from any origin in development
   config.action_cable.disable_request_forgery_protection = true
-  
+
   # Configure Action Cable URL
   config.action_cable.url = "ws://localhost:3000/cable"
   config.action_cable.allowed_request_origins = [

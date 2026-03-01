@@ -69,13 +69,13 @@ module MailerHelper
       nil
     end
   end
-  
+
   # Get the from address for a given restaurant
   # This is the method called by all mailers
   def restaurant_from_address(restaurant)
     from_address_for(restaurant)
   end
-  
+
   # Determine the sender email for a restaurant.
   # For deliverability providers like Resend, keep sender domain fixed
   # to a verified domain instead of dynamically deriving from contact_email.
@@ -83,11 +83,11 @@ module MailerHelper
     return default_fallback_email unless restaurant
     mailer_from_email
   end
-  
+
   def default_fallback_email
     mailer_from_email
   end
-  
+
   # Get the frontend URL for a restaurant
   # Uses the restaurant's primary_frontend_url, then allowed_origins, then falls back to the environment variable
   def get_frontend_url_for(restaurant)
@@ -97,16 +97,16 @@ module MailerHelper
     elsif restaurant&.allowed_origins.present?
       # Fall back to allowed_origins if primary_frontend_url is not set
       # Use the first allowed origin that's not localhost
-      production_origins = restaurant.allowed_origins.reject { |origin| origin.include?('localhost') }
+      production_origins = restaurant.allowed_origins.reject { |origin| origin.include?("localhost") }
       frontend_url = production_origins.first || restaurant.allowed_origins.first
     else
       # Last resort: use the environment variable
-      frontend_url = ENV['FRONTEND_URL']
+      frontend_url = ENV["FRONTEND_URL"]
     end
-    
+
     # Log the frontend URL being used for debugging
     Rails.logger.info("Using frontend URL: #{frontend_url} (Restaurant: #{restaurant&.name || 'Unknown'})")
-    
+
     frontend_url
   end
 end
