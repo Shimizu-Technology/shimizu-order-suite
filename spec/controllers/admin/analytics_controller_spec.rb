@@ -313,11 +313,15 @@ RSpec.describe Admin::AnalyticsController, type: :controller do
       allow(controller).to receive(:current_user).and_return(admin_user)
       allow(controller).to receive(:authorize_request)
 
-      # Create some test data across different days
-      create(:user, restaurant: restaurant, created_at: 10.days.ago)
-      create(:user, restaurant: restaurant, created_at: 10.days.ago) # Same day
-      create(:user, restaurant: restaurant, created_at: 5.days.ago)
-      create(:user, restaurant: restaurant, created_at: Date.today)
+      # Use UTC noon to avoid timezone date-boundary issues with DATE(created_at)
+      @ten_days_ago_date = 10.days.ago.utc.to_date
+      @five_days_ago_date = 5.days.ago.utc.to_date
+      @today_date = Time.now.utc.to_date
+
+      create(:user, restaurant: restaurant, created_at: @ten_days_ago_date.noon)
+      create(:user, restaurant: restaurant, created_at: @ten_days_ago_date.noon + 1.hour) # Same day
+      create(:user, restaurant: restaurant, created_at: @five_days_ago_date.noon)
+      create(:user, restaurant: restaurant, created_at: @today_date.noon)
     end
 
     it 'returns daily user signup counts' do
@@ -334,12 +338,12 @@ RSpec.describe Admin::AnalyticsController, type: :controller do
       expect(body['signups'].size).to be >= 3
 
       # Check the signups for 10 days ago
-      ten_days_ago = body['signups'].find { |d| Date.parse(d['date']) == 10.days.ago.to_date }
+      ten_days_ago = body['signups'].find { |d| Date.parse(d['date']) == @ten_days_ago_date }
       expect(ten_days_ago).to be_present
       expect(ten_days_ago['count']).to eq(2)
 
       # Check the signups for today
-      today = body['signups'].find { |d| Date.parse(d['date']) == Date.today }
+      today = body['signups'].find { |d| Date.parse(d['date']) == @today_date }
       expect(today).to be_present
       expect(today['count']).to be >= 1
     end
@@ -351,9 +355,9 @@ RSpec.describe Admin::AnalyticsController, type: :controller do
 
       body = JSON.parse(response.body)
       # The number of days with data in the range depends on the test setup
-      expect(body['signups'].size).to be >= 2 # At least 5 days ago and today
+      expect(body['signups'].size).to be >= 2
 
-      five_days_ago = body['signups'].find { |d| Date.parse(d['date']) == 5.days.ago.to_date }
+      five_days_ago = body['signups'].find { |d| Date.parse(d['date']) == @five_days_ago_date }
       expect(five_days_ago).to be_present
       expect(five_days_ago['count']).to eq(1)
     end

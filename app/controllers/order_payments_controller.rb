@@ -3,7 +3,7 @@ class OrderPaymentsController < ApplicationController
   
   before_action :authorize_request
   before_action :ensure_tenant_context
-  before_action :set_order, only: [:index, :create_refund]
+  before_action :set_order, only: [ :index, :create_refund, :process_cash_payment, :create_additional, :capture_additional, :add_store_credit, :adjust_total, :create_payment_link ]
 
   # GET /orders/:order_id/payments
   def index
@@ -351,11 +351,11 @@ def create_refund
   restaurant = @order.restaurant
   test_mode = restaurant.admin_settings&.dig("payment_gateway", "test_mode")
 
-    # Only validate refund amount in strict cases:
+    # Validate refund amount:
     # 1. If refund amount is <= 0 (always invalid)
-    # 2. If there's an actual payment recorded AND we're not in test mode AND refund amount > max_refundable
+    # 2. If there's an actual payment recorded AND refund amount > max_refundable
     if refund_amount <= 0 ||
-       (@order.total_paid > 0 && !test_mode && refund_amount > max_refundable)
+       (@order.total_paid > 0 && refund_amount > max_refundable)
       return render json: {
         error: "Invalid refund amount. Maximum refundable: #{max_refundable}"
       }, status: :unprocessable_entity
@@ -481,6 +481,9 @@ def create_refund
       
       @refund = @order.order_payments.create(refund_attributes)
 
+      # Reload order to ensure computed methods (total_paid, total_refunded) reflect the new payment
+      @order.reload
+
       # Check if all items in the order have been refunded
       all_items_refunded = false
       
@@ -530,16 +533,23 @@ def create_refund
         Rails.logger.info("All items refunded: #{all_items_refunded}")
       end
       
-      # Determine if this is a full refund based on BOTH payment amount AND item quantities
+      # Determine if this is a full refund based on payment amount AND item quantities
       is_full_refund = false
       
       # Check if all money has been refunded (within a small margin of error)
-      payment_fully_refunded = (@order.total_paid - @order.total_refunded - refund_amount).abs < 0.01
+      # Note: @refund was already created above, so total_refunded already includes this refund.
+      # We compare total_paid vs total_refunded directly (no need to subtract refund_amount again).
+      payment_fully_refunded = (@order.total_paid - @order.total_refunded).abs < 0.01
       
-      # Only consider it a full refund if BOTH conditions are met:
-      # 1. All money has been refunded
-      # 2. All items have been refunded
-      is_full_refund = payment_fully_refunded && all_items_refunded
+      # Full refund if:
+      # 1. refunded_items provided AND all money refunded AND all items refunded, OR
+      # 2. refunded_items NOT provided AND all money refunded (BUG-10 / HL1-18:
+      #    when no explicit items list is given, a full monetary refund implies full item refund)
+      is_full_refund = if refunded_items.present?
+        payment_fully_refunded && all_items_refunded
+      else
+        payment_fully_refunded
+      end
       
       Rails.logger.info("Payment fully refunded: #{payment_fully_refunded}, All items refunded: #{all_items_refunded}")
       Rails.logger.info("Is full refund: #{is_full_refund}")
@@ -548,18 +558,27 @@ def create_refund
       # We now use 'refunded' for both full and partial refunds
       @order.update(payment_status: Order::STATUS_REFUNDED)
       
-      # Only update the order status if ALL items are refunded
+      # Only update the order status to refunded if it's a full refund
+      # (either all items explicitly refunded, or full monetary refund with no item list)
       # This preserves the original order status (pending, completed, etc.) for partial refunds
-      if all_items_refunded
+      if is_full_refund
         @order.update(status: Order::STATUS_REFUNDED)
       end
 
       # Restore inventory for refunded items using OrderService
-      if refunded_items.present?
-        Rails.logger.info("Restoring inventory for refunded items: #{refunded_items.inspect}")
+      # If refunded_items not provided but order has items, use order items for full refund (BUG-10 / HL1-18)
+      items_to_restore = if refunded_items.present?
+        refunded_items
+      elsif @order.items.present? && is_full_refund
+        Rails.logger.info("No refunded_items provided for full refund, using order items for inventory restoration")
+        @order.items
+      end
+
+      if items_to_restore.present?
+        Rails.logger.info("Restoring inventory for refunded items: #{items_to_restore.inspect}")
         
         order_service = OrderService.new(@order.restaurant)
-        inventory_result = order_service.revert_order_inventory(refunded_items, @order, current_user)
+        inventory_result = order_service.revert_order_inventory(items_to_restore, @order, current_user)
         
         if inventory_result[:success]
           Rails.logger.info("Successfully restored inventory for refund: #{inventory_result[:inventory_changes].length} changes")
@@ -841,7 +860,7 @@ def create_refund
       Rails.logger.info("Attempting to create Stripe refund for payment_intent: #{payment_intent_id} (Stripe test mode: #{stripe_test_mode})")
 
       # Ensure reason is one of the valid values accepted by Stripe
-      valid_reasons = ["duplicate", "fraudulent", "requested_by_customer"]
+      valid_reasons = [ "duplicate", "fraudulent", "requested_by_customer" ]
       reason = params[:reason] || "requested_by_customer"
 
       # Default to 'requested_by_customer' if the provided reason is not valid
@@ -1020,7 +1039,7 @@ def create_refund
       
       # Create a Stripe Checkout Session with a payment link
       session = Stripe::Checkout::Session.create({
-        payment_method_types: ['card'],
+        payment_method_types: [ 'card' ],
         line_items: items.map { |item|
           {
             price_data: {
@@ -1028,7 +1047,7 @@ def create_refund
               product_data: {
                 name: item[:name],
                 description: item[:description],
-                images: item[:image].present? ? [item[:image]] : []
+                images: item[:image].present? ? [ item[:image] ] : []
               },
               unit_amount: (item[:price].to_f * 100).to_i, # Convert to cents
             },

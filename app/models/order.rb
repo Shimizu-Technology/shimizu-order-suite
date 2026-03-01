@@ -577,14 +577,14 @@ class Order < ApplicationRecord
 
     # Food items
     food_item_lines = items.map do |item|
-      "- #{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
+      "- #{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price'].to_f}"
     end.join("\n")
 
     # Merchandise items
     merch_item_lines = ""
     if merchandise_items.present? && merchandise_items.any?
       merch_item_lines = "\n\nMerchandise Items:\n" + merchandise_items.map do |item|
-        "- #{item['name']} #{item['size']} #{item['color']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
+        "- #{item['name']} #{item['size']} #{item['color']} (x#{item['quantity']}): $#{'%.2f' % item['price'].to_f}"
       end.join("\n")
     end
 
@@ -620,14 +620,13 @@ class Order < ApplicationRecord
     return if staff_created # Skip notifications for staff-created orders
     
     # Format the order items for the notification
-    # Format the order items for the notification
     food_item_lines = items.map do |item|
-      "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
+      "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price'].to_f}"
     end.join(", ")
     
     if merchandise_items.present? && merchandise_items.any?
       merch_list = merchandise_items.map do |item|
-        "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
+        "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price'].to_f}"
       end.join(", ")
       food_item_lines += ", " + merch_list unless merch_list.blank?
     end
@@ -667,7 +666,7 @@ class Order < ApplicationRecord
     
     # Format the order items for the notification
     food_item_lines = items.map do |item|
-      "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price']}"
+      "#{item['name']} (x#{item['quantity']}): $#{'%.2f' % item['price'].to_f}"
     end.join(", ")
     
     # Create notification body with location info if available

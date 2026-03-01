@@ -66,7 +66,7 @@ class OptionGroupsController < ApplicationController
   # POST /option_groups/:id/enable_inventory_tracking
   def enable_inventory_tracking
     option_group = find_option_group_with_tenant_scope(params[:id])
-    return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
+    return render json: { errors: [ "Option group not found" ] }, status: :not_found unless option_group
 
     result = OptionInventoryService.enable_option_tracking(option_group, current_user)
     
@@ -76,7 +76,7 @@ class OptionGroupsController < ApplicationController
         option_group: result[:option_group].as_json(
           include: {
             options: {
-              methods: [:additional_price_float, :available_stock, :in_stock?, :out_of_stock?]
+              methods: [ :additional_price_float, :available_stock, :in_stock?, :out_of_stock? ]
             }
           }
         )
@@ -89,7 +89,7 @@ class OptionGroupsController < ApplicationController
   # DELETE /option_groups/:id/disable_inventory_tracking
   def disable_inventory_tracking
     option_group = find_option_group_with_tenant_scope(params[:id])
-    return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
+    return render json: { errors: [ "Option group not found" ] }, status: :not_found unless option_group
 
     result = OptionInventoryService.disable_option_tracking(option_group, current_user)
     
@@ -99,7 +99,7 @@ class OptionGroupsController < ApplicationController
         option_group: result[:option_group].as_json(
           include: {
             options: {
-              methods: [:additional_price_float]
+              methods: [ :additional_price_float ]
             }
           }
         )
@@ -112,7 +112,7 @@ class OptionGroupsController < ApplicationController
   # PATCH /option_groups/:id/update_option_quantities
   def update_option_quantities
     option_group = find_option_group_with_tenant_scope(params[:id])
-    return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
+    return render json: { errors: [ "Option group not found" ] }, status: :not_found unless option_group
 
     quantities = params.require(:quantities).permit!.to_h
     reason = params[:reason] # Optional reason for the adjustment
@@ -124,12 +124,12 @@ class OptionGroupsController < ApplicationController
         option_group: option_group.reload.as_json(
           include: {
             options: {
-              methods: [:additional_price_float, :available_stock, :in_stock?, :out_of_stock?]
+              methods: [ :additional_price_float, :available_stock, :in_stock?, :out_of_stock? ]
             }
           }
         ),
         updated_options: result[:updated_options].map { |option|
-          option.as_json(methods: [:additional_price_float, :available_stock, :in_stock?, :out_of_stock?])
+          option.as_json(methods: [ :additional_price_float, :available_stock, :in_stock?, :out_of_stock? ])
         }
       }
     else
@@ -140,7 +140,7 @@ class OptionGroupsController < ApplicationController
   # PATCH /option_groups/:id/update_single_option_quantity
   def update_single_option_quantity
     option_group = find_option_group_with_tenant_scope(params[:id])
-    return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
+    return render json: { errors: [ "Option group not found" ] }, status: :not_found unless option_group
 
     option_id = params.require(:option_id)
     quantity = params.require(:quantity)
@@ -154,12 +154,12 @@ class OptionGroupsController < ApplicationController
         option_group: option_group.reload.as_json(
           include: {
             options: {
-              methods: [:additional_price_float, :available_stock, :in_stock?, :out_of_stock?]
+              methods: [ :additional_price_float, :available_stock, :in_stock?, :out_of_stock? ]
             }
           }
         ),
         menu_item: option_group.menu_item.reload.as_json(
-          only: [:id, :name, :stock_quantity]
+          only: [ :id, :name, :stock_quantity ]
         )
       }
     else
@@ -170,7 +170,7 @@ class OptionGroupsController < ApplicationController
   # POST /option_groups/:id/mark_options_damaged
   def mark_options_damaged
     option_group = find_option_group_with_tenant_scope(params[:id])
-    return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
+    return render json: { errors: [ "Option group not found" ] }, status: :not_found unless option_group
 
     damage_quantities = params.require(:damage_quantities).permit!.to_h
     reason = params.require(:reason)
@@ -181,7 +181,7 @@ class OptionGroupsController < ApplicationController
       render json: { 
         message: "Options marked as damaged successfully",
         damaged_options: result[:damaged_options].map { |option|
-          option.as_json(methods: [:additional_price_float, :available_stock, :in_stock?, :out_of_stock?])
+          option.as_json(methods: [ :additional_price_float, :available_stock, :in_stock?, :out_of_stock? ])
         }
       }
     else
@@ -192,7 +192,7 @@ class OptionGroupsController < ApplicationController
   # GET /option_groups/:id/inventory_status
   def inventory_status
     option_group = find_option_group_with_tenant_scope(params[:id])
-    return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
+    return render json: { errors: [ "Option group not found" ] }, status: :not_found unless option_group
 
     render json: {
       inventory_tracking_enabled: option_group.inventory_tracking_enabled?,
@@ -201,8 +201,8 @@ class OptionGroupsController < ApplicationController
       has_option_stock: option_group.has_option_stock?,
       options: option_group.options.map { |option|
         option.as_json(
-          methods: [:additional_price_float, :available_stock, :in_stock?, :out_of_stock?, :low_stock?],
-          only: [:id, :name, :stock_quantity, :damaged_quantity]
+          methods: [ :additional_price_float, :available_stock, :in_stock?, :out_of_stock?, :low_stock? ],
+          only: [ :id, :name, :stock_quantity, :damaged_quantity ]
         )
       }
     }
@@ -211,7 +211,7 @@ class OptionGroupsController < ApplicationController
   # GET /option_groups/:id/audit_history
   def audit_history
     option_group = find_option_group_with_tenant_scope(params[:id])
-    return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
+    return render json: { errors: [ "Option group not found" ] }, status: :not_found unless option_group
 
     # Get audit records for all options in this group
     audits = OptionStockAudit.joins(:option)
@@ -222,18 +222,18 @@ class OptionGroupsController < ApplicationController
 
     render json: audits.as_json(
       include: {
-        option: { only: [:id, :name] },
-        user: { only: [:id, :first_name, :last_name] },
-        order: { only: [:id, :order_number] }
+        option: { only: [ :id, :name ] },
+        user: { only: [ :id, :first_name, :last_name ] },
+        order: { only: [ :id, :order_number ] }
       },
-      methods: [:quantity_change]
+      methods: [ :quantity_change ]
     )
   end
 
   # POST /option_groups/:id/force_synchronize_inventory
   def force_synchronize_inventory
     option_group = find_option_group_with_tenant_scope(params[:id])
-    return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
+    return render json: { errors: [ "Option group not found" ] }, status: :not_found unless option_group
 
     unless option_group.inventory_tracking_enabled?
       return render json: { error: "Inventory tracking is not enabled for this option group" }, status: :unprocessable_entity
@@ -260,7 +260,7 @@ class OptionGroupsController < ApplicationController
   # GET /option_groups/:id/validate_synchronization
   def validate_synchronization
     option_group = find_option_group_with_tenant_scope(params[:id])
-    return render json: { errors: ["Option group not found"] }, status: :not_found unless option_group
+    return render json: { errors: [ "Option group not found" ] }, status: :not_found unless option_group
 
     unless option_group.inventory_tracking_enabled?
       return render json: { 
@@ -289,8 +289,11 @@ class OptionGroupsController < ApplicationController
   private
 
   def option_group_params
-    # Include enable_inventory_tracking in permitted params
-    params.require(:option_group).permit(:name, :min_select, :max_select, :free_option_count, :enable_inventory_tracking)
+    # Include enable_inventory_tracking and nested options_attributes in permitted params (HL1-17)
+    params.require(:option_group).permit(
+      :name, :min_select, :max_select, :free_option_count, :enable_inventory_tracking,
+      options_attributes: [ :id, :name, :additional_price, :is_available, :stock_quantity, :damaged_quantity, :_destroy ]
+    )
   end
 
   def option_group_service

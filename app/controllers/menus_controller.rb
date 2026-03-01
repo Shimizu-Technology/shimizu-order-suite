@@ -56,10 +56,12 @@ class MenusController < ApplicationController
     result = menu_service.set_active_menu(params[:id])
     
     if result[:success]
-      render json: {
+      # Reload the menu to ensure the active field reflects the updated value (BUG-11 / HL1-19)
+      menu = Menu.find(result[:current_menu_id])
+      render json: menu.as_json.merge(
         message: result[:message],
         current_menu_id: result[:current_menu_id]
-      }
+      )
     else
       render json: { errors: result[:errors] }, status: result[:status] || :unprocessable_entity
     end
