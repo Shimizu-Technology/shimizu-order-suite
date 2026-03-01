@@ -14,14 +14,14 @@ class OrderMailer < ApplicationMailer
   end
 
   def restaurant_from_address(restaurant)
-    # Format the email with restaurant name as display name and noreply@shimizu-order-suite.com as email
+    # Keep restaurant display name, but use a single verified sender email.
     restaurant_name = restaurant&.name || 'Restaurant'
     
     # Ensure the name is properly formatted for email headers (escape quotes)
     formatted_name = restaurant_name.to_s.gsub('"', '\"')
     
     # Return the properly formatted email address
-    "#{formatted_name} <noreply@shimizu-order-suite.com>"
+    "#{formatted_name} <#{mailer_from_email}>"
   end
 
   def order_confirmation(order)

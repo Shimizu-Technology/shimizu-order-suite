@@ -71,11 +71,11 @@ class ReservationMailer < ApplicationMailer
   
   # Helper method to determine the appropriate 'from' email address
   def from_address_for(restaurant)
-    # Use a verified sender identity to comply with SendGrid requirements
+    # Keep restaurant display name, but use a single verified sender email.
     if restaurant&.name.present?
-      "#{restaurant.name} <noreply@shimizu-order-suite.com>"
+      "#{restaurant.name} <#{mailer_from_email}>"
     else
-      "ShimizuTechnology <noreply@shimizu-order-suite.com>"
+      "ShimizuTechnology <#{mailer_from_email}>"
     end
   end
   

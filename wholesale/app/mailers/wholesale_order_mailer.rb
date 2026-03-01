@@ -122,6 +122,6 @@ class WholesaleOrderMailer < ApplicationMailer
   def restaurant_from_address(restaurant)
     restaurant_name = restaurant&.name || 'Restaurant'
     formatted_name = restaurant_name.to_s.gsub('"', '\"')
-    "#{formatted_name} <noreply@shimizu-order-suite.com>"
+    "#{formatted_name} <#{mailer_from_email}>"
   end
 end

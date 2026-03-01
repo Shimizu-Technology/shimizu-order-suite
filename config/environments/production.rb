@@ -28,17 +28,18 @@ Rails.application.configure do
   config.public_file_server.headers = { "Cache-Control" => "public, max-age=31536000" }
 
   # --------------------------------
-  # Action Mailer → SendGrid
+  # Action Mailer -> Resend SMTP
   # --------------------------------
-  mail_domain = ENV.fetch("EMAIL_DOMAIN", "shimizu-order-suite.com")
+  mail_from = ENV.fetch("RESEND_FROM_EMAIL", "noreply@shimizu-technology.com")
+  mail_domain = mail_from.split("@").last
 
   config.action_mailer.raise_delivery_errors = true
   config.action_mailer.delivery_method = :smtp
   config.action_mailer.smtp_settings = {
-    user_name:            "apikey",
-    password:             ENV["SENDGRID_API_KEY"],
-    domain:               mail_domain,                   # <— key change
-    address:              "smtp.sendgrid.net",
+    user_name:            "resend",
+    password:             ENV.fetch("RESEND_API_KEY"),
+    domain:               mail_domain,
+    address:              "smtp.resend.com",
     port:                 587,
     authentication:       :plain,
     enable_starttls_auto: true
