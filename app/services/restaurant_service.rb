@@ -321,6 +321,7 @@ class RestaurantService
       allowed_origins:            restaurant.allowed_origins,
       primary_frontend_url:       restaurant.primary_frontend_url,
       custom_pickup_location:     restaurant.custom_pickup_location,
+      hours:                      restaurant.hours,
       # Social media fields
       facebook_url:               restaurant.facebook_url,
       instagram_url:              restaurant.instagram_url,
