@@ -1,6 +1,7 @@
 FactoryBot.define do
   factory :order do
     association :restaurant
+    association :location
     user { nil } # Make user association nil by default
     items { [] }
     status { 'pending' }
@@ -14,6 +15,13 @@ FactoryBot.define do
     transaction_id { nil }
     payment_status { "pending" }
     payment_amount { nil }
+
+    # Ensure location belongs to the same restaurant
+    after(:build) do |order|
+      if order.location && order.restaurant && order.location.restaurant_id != order.restaurant_id
+        order.location = create(:location, restaurant: order.restaurant)
+      end
+    end
 
     # Add a trait for orders with users
     trait :with_user do

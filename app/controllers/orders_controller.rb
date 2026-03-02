@@ -190,8 +190,8 @@ class OrdersController < ApplicationController
     sort_direction = params[:sort_direction] || 'desc'
     
     # Validate sort parameters to prevent SQL injection
-    valid_sort_columns = ['id', 'created_at', 'updated_at', 'status', 'total']
-    valid_sort_directions = ['asc', 'desc']
+    valid_sort_columns = [ 'id', 'created_at', 'updated_at', 'status', 'total' ]
+    valid_sort_directions = [ 'asc', 'desc' ]
     
     sort_by = 'created_at' unless valid_sort_columns.include?(sort_by)
     sort_direction = 'desc' unless valid_sort_directions.include?(sort_direction)
@@ -233,7 +233,7 @@ class OrdersController < ApplicationController
     last_id = params[:id].to_i
     # Apply policy scope to ensure proper filtering based on role
     new_orders = policy_scope(Order).where("id > ?", last_id)
-                      .where(staff_created: [false, nil]) # Exclude staff-created orders
+                      .where(staff_created: [ false, nil ]) # Exclude staff-created orders
                       .order(:id)
     render json: new_orders, status: :ok
   end
@@ -258,7 +258,7 @@ class OrdersController < ApplicationController
     # Get users with those IDs who are staff or admin by default
     # Only include users who belong to the current restaurant
     @users = User.where(id: user_ids)
-                .where(role: ['staff', 'admin'])
+                .where(role: [ 'staff', 'admin' ])
                 .where(restaurant_id: current_restaurant.id)
     
     # Format the response
@@ -298,13 +298,13 @@ class OrdersController < ApplicationController
       # Regular case: Return orders not acknowledged by this specific user
       unacknowledged_orders = Order.where("created_at > ?", time_threshold)
                                    .where.not(id: current_user.acknowledged_orders.pluck(:id))
-                                   .where(staff_created: [false, nil]) # Exclude staff-created orders
+                                   .where(staff_created: [ false, nil ]) # Exclude staff-created orders
                                    .order(created_at: :desc)
     else
       # First-time user case: Only return orders that haven't been acknowledged by anyone
       # OR orders that came in after the last global acknowledgment
       unacknowledged_orders = Order.where("created_at > ?", time_threshold)
-                                   .where(staff_created: [false, nil]) # Exclude staff-created orders
+                                   .where(staff_created: [ false, nil ]) # Exclude staff-created orders
                                    .where("global_last_acknowledged_at IS NULL OR created_at > global_last_acknowledged_at")
                                    .order(created_at: :desc)
     end
@@ -513,6 +513,37 @@ class OrdersController < ApplicationController
       end
     end
 
+    # ── PRE-SAVE VALIDATIONS (BUG-7 / HL1-15 and BUG-3 / HL1-11) ──
+    # Must run BEFORE create_order because OrderService.create_record persists immediately.
+    order_items = params[:order][:items]
+    if order_items.present?
+      item_ids = order_items.map { |i| (i[:id] || i["id"]).to_i }.select { |id| id > 0 }.uniq
+
+      menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
+
+      # Validate all item IDs exist (BUG-7 / HL1-15)
+      missing_ids = item_ids - menu_items_by_id.keys
+      if missing_ids.any?
+        return render json: { error: "Menu items not found: #{missing_ids.join(', ')}" }, status: :unprocessable_entity
+      end
+
+      # Validate stock availability (BUG-3 / HL1-11)
+      stock_errors = []
+      order_items.each do |item|
+        item_id = (item[:id] || item["id"]).to_i
+        menu_item = menu_items_by_id[item_id]
+        next unless menu_item&.enable_stock_tracking
+        quantity = (item[:quantity] || item["quantity"] || 1).to_i
+        available = menu_item.available_quantity || 0
+        if available < quantity
+          stock_errors << "#{menu_item.name}: only #{available} available (requested #{quantity})"
+        end
+      end
+      if stock_errors.any?
+        return render json: { error: "Insufficient stock", details: stock_errors }, status: :unprocessable_entity
+      end
+    end
+
     # Create the order using OrderService for proper tenant isolation
     @order = order_service.create_order(new_params)
     @order.status = "pending"
@@ -521,15 +552,17 @@ class OrdersController < ApplicationController
 
     # Single-query for MenuItems => avoids N+1
     if @order.items.present?
-      # Gather unique item IDs in the request
-      item_ids = @order.items.map { |i| i[:id] }.compact.uniq
+      # Gather unique item IDs (JSONB stores keys as strings)
+      item_ids = @order.items.map { |i| (i["id"] || i[:id]).to_i }.select { |id| id > 0 }.uniq
 
       # Load them all in one query
       menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
+
       max_required = 0
 
       @order.items.each do |item|
-        if (menu_item = menu_items_by_id[item[:id]])
+        item_id = (item["id"] || item[:id]).to_i
+        if (menu_item = menu_items_by_id[item_id])
           max_required = [ max_required, menu_item.advance_notice_hours ].max
         end
       end
@@ -551,7 +584,7 @@ class OrdersController < ApplicationController
 
       @order.items.each do |item|
         # Check if the menu item has required groups with all options unavailable
-        menu_item = menu_items_by_id[item[:id]]
+        menu_item = menu_items_by_id[(item["id"] || item[:id]).to_i]
         if menu_item && menu_item.has_required_groups_with_unavailable_options?
           # Get the names of the problematic option groups
           unavailable_groups = menu_item.required_groups_with_unavailable_options.map(&:name)
@@ -565,10 +598,11 @@ class OrdersController < ApplicationController
         end
         
         # Skip items without selected options
-        next unless item[:selected_options].is_a?(Array) && item[:selected_options].any?
+        selected_opts = item["selected_options"] || item[:selected_options]
+        next unless selected_opts.is_a?(Array) && selected_opts.any?
 
         # Get all option IDs from the item
-        option_ids = item[:selected_options].map { |opt| opt[:id] }.compact
+        option_ids = selected_opts.map { |opt| opt["id"] || opt[:id] }.compact
         
         # Skip if no valid option IDs
         next if option_ids.empty?
@@ -577,7 +611,7 @@ class OrdersController < ApplicationController
         unavailable = Option.where(id: option_ids, is_available: false)
         
         if unavailable.any?
-          menu_item = menu_items_by_id[item[:id]]
+          menu_item = menu_items_by_id[(item["id"] || item[:id]).to_i]
           item_name = menu_item ? menu_item.name : "Unknown item"
           
           unavailable.each do |option|
@@ -612,7 +646,7 @@ class OrdersController < ApplicationController
       insufficient_options = []
       
       @order.items.each do |item|
-        menu_item = menu_items_by_id[item[:id]]
+        menu_item = menu_items_by_id[(item["id"] || item[:id]).to_i]
         next unless menu_item&.uses_option_level_inventory?
         
         # Get the option inventory tracking group
@@ -620,8 +654,8 @@ class OrdersController < ApplicationController
         next unless tracking_group
         
         # Extract customizations to find selected options for inventory tracking
-        customizations = item[:customizations] || {}
-        quantity_ordered = (item[:quantity] || 1).to_i
+        customizations = item["customizations"] || item[:customizations] || {}
+        quantity_ordered = (item["quantity"] || item[:quantity] || 1).to_i
         
         # Check inventory for each customization that maps to tracked options
         customizations.each do |key, value|
@@ -647,9 +681,10 @@ class OrdersController < ApplicationController
         end
         
         # Also check selected_options array format (alternative format)
-        if item[:selected_options].is_a?(Array)
-          item[:selected_options].each do |selected_option_data|
-            option_id = selected_option_data[:id] || selected_option_data["id"]
+        item_selected_options = item["selected_options"] || item[:selected_options]
+        if item_selected_options.is_a?(Array)
+          item_selected_options.each do |selected_option_data|
+            option_id = selected_option_data["id"] || selected_option_data[:id]
             next unless option_id
             
             # Check if this option belongs to the tracking group
@@ -939,8 +974,8 @@ class OrdersController < ApplicationController
     # IMPORTANT: Don't allow frontend to set or override refund status
     # This prevents inconsistencies between payment_status and status
     if permitted_params[:status].present? && 
-       (['refunded'].include?(permitted_params[:status]) || 
-        ['refunded'].include?(order.status))
+       ([ 'refunded' ].include?(permitted_params[:status]) || 
+        [ 'refunded' ].include?(order.status))
       # Remove status from permitted params to preserve the server-calculated refund status
       # or prevent the frontend from setting a refund status
       Rails.logger.info("Preventing frontend refund status change: #{permitted_params[:status]} -> #{order.status}")
@@ -1148,7 +1183,7 @@ class OrdersController < ApplicationController
         
         if order.items.present?
           order_service = OrderService.new(order.restaurant)
-          inventory_result = order_service.revert_order_inventory(order.items, order, current_user, 'cancel')
+          inventory_result = order_service.revert_order_inventory(order.items, order, current_user)
           
           if inventory_result[:success]
             Rails.logger.info("Successfully restored inventory for cancelled order #{order.id}: #{inventory_result[:inventory_changes].length} changes")
@@ -1202,8 +1237,8 @@ class OrdersController < ApplicationController
       :pre_discount_total, :vip_code, :vip_access_code_id, :staff_modal, :location_id,
       :staff_discount_configuration_id, # Add support for configurable staff discounts
       # Handle nested attributes properly
-      items: [:id, :name, :price, :quantity, :notes, :menu_id, :category_id, { customizations: {} }],
-      merchandise_items: [:id, :name, :price, :quantity, :merchandise_variant_id, :notes],
+      items: [ :id, :name, :price, :quantity, :notes, :menu_id, :category_id, { customizations: {} } ],
+      merchandise_items: [ :id, :name, :price, :quantity, :merchandise_variant_id, :notes ],
       # Allow all payment details attributes to be passed through
       payment_details: {})
     

@@ -249,11 +249,11 @@ class OrderService < TenantScopedService
     
     result = case operation
     when 'order'
-      OptionInventoryService.process_order_inventory([order_item], user, order)
+      OptionInventoryService.process_order_inventory([ order_item ], user, order)
     when 'revert'
-      OptionInventoryService.revert_order_inventory([order_item], user, order)
+      OptionInventoryService.revert_order_inventory([ order_item ], user, order)
     else
-      { success: false, errors: ["Unknown operation: #{operation}"], inventory_changes: [] }
+      { success: false, errors: [ "Unknown operation: #{operation}" ], inventory_changes: [] }
     end
     
     # Convert OptionInventoryService response format to consistent inventory_changes format
@@ -305,54 +305,70 @@ class OrderService < TenantScopedService
     begin
       case operation
       when 'order'
-        # Reduce stock for new order
-        current_stock = menu_item.stock_quantity.to_i
-        new_stock = [current_stock - quantity, 0].max
-        
-        menu_item.update_stock_quantity(
-          new_stock,
-          "order",
-          "Order ##{order.order_number.presence || order.id} - #{quantity} items",
-          user,
-          order
-        )
-        
-        result[:inventory_changes] << {
-          type: 'item_level',
-          menu_item_id: menu_item.id,
-          menu_item_name: menu_item.name,
-          previous_stock: current_stock,
-          new_stock: new_stock,
-          quantity_change: -quantity
-        }
+        # Use pessimistic locking to prevent race conditions
+        MenuItem.transaction do
+          locked_item = MenuItem.lock("FOR UPDATE").find(menu_item.id)
+          current_stock = locked_item.stock_quantity.to_i
+
+          # Reject if insufficient stock (BUG-3: prevent overselling)
+          if current_stock < quantity
+            result[:success] = false
+            result[:errors] << "Insufficient stock for #{locked_item.name}: #{current_stock} available, #{quantity} requested"
+            raise ActiveRecord::Rollback
+          end
+
+          new_stock = current_stock - quantity
+
+          locked_item.update_stock_quantity(
+            new_stock,
+            "order",
+            "Order ##{order.order_number.presence || order.id} - #{quantity} items",
+            user,
+            order
+          )
+
+          result[:inventory_changes] << {
+            type: 'item_level',
+            menu_item_id: locked_item.id,
+            menu_item_name: locked_item.name,
+            previous_stock: current_stock,
+            new_stock: new_stock,
+            quantity_change: -quantity
+          }
+        end
         
       when 'revert'
-        # Restore stock for cancelled/refunded order
-        current_stock = menu_item.stock_quantity.to_i
-        new_stock = current_stock + quantity
-        
-        menu_item.update_stock_quantity(
-          new_stock,
-          "adjustment",
-          "Inventory Adjustment: Order ##{order.order_number.presence || order.id} - Reverted #{quantity} items (restored to inventory)",
-          user,
-          order
-        )
-        
-        result[:inventory_changes] << {
-          type: 'item_level',
-          menu_item_id: menu_item.id,
-          menu_item_name: menu_item.name,
-          previous_stock: current_stock,
-          new_stock: new_stock,
-          quantity_change: quantity
-        }
+        # Use pessimistic locking for reverts too
+        MenuItem.transaction do
+          locked_item = MenuItem.lock("FOR UPDATE").find(menu_item.id)
+          current_stock = locked_item.stock_quantity.to_i
+          new_stock = current_stock + quantity
+
+          locked_item.update_stock_quantity(
+            new_stock,
+            "adjustment",
+            "Inventory Adjustment: Order ##{order.order_number.presence || order.id} - Reverted #{quantity} items (restored to inventory)",
+            user,
+            order
+          )
+
+          result[:inventory_changes] << {
+            type: 'item_level',
+            menu_item_id: locked_item.id,
+            menu_item_name: locked_item.name,
+            previous_stock: current_stock,
+            new_stock: new_stock,
+            quantity_change: quantity
+          }
+        end
       end
       
     rescue StandardError => e
-      Rails.logger.error("OrderService: Error processing item-level inventory for #{menu_item.name}: #{e.message}")
-      result[:success] = false
-      result[:errors] << "Failed to process inventory for #{menu_item.name}: #{e.message}"
+      unless e.is_a?(ActiveRecord::Rollback)
+        Rails.logger.error("OrderService: Error processing item-level inventory for #{menu_item.name}: #{e.message}")
+        result[:success] = false
+        result[:errors] << "Failed to process inventory for #{menu_item.name}: #{e.message}"
+      end
     end
     
     result
@@ -381,7 +397,7 @@ class OrderService < TenantScopedService
     elsif item.respond_to?(:quantity)
       quantity = item.quantity.to_i
     end
-    [quantity, 1].max # Ensure at least 1
+    [ quantity, 1 ].max # Ensure at least 1
   end
 
   # Extract customizations from order item hash or ActionController::Parameters

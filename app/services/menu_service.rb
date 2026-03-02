@@ -26,6 +26,8 @@ class MenuService < TenantScopedService
 
   # Create a new menu
   def create_menu(menu_params)
+    return { success: false, errors: ["Forbidden"], status: :forbidden } unless admin_user?
+
     # Ensure the restaurant_id is set to the current restaurant
     menu_params = menu_params.merge(restaurant_id: @restaurant.id)
     menu = Menu.new(menu_params)
@@ -39,6 +41,8 @@ class MenuService < TenantScopedService
 
   # Update an existing menu
   def update_menu(id, menu_params)
+    return { success: false, errors: ["Forbidden"], status: :forbidden } unless admin_user?
+
     menu = scope_query(Menu).find(id)
     
     if menu.update(menu_params)
@@ -52,6 +56,8 @@ class MenuService < TenantScopedService
 
   # Delete a menu
   def delete_menu(id)
+    return { success: false, errors: ["Forbidden"], status: :forbidden } unless admin_user?
+
     menu = scope_query(Menu).find(id)
     
     # Check if this is the active menu

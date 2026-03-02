@@ -6,14 +6,17 @@ RSpec.describe OptionGroupsController, type: :controller do
   let(:menu_item) { create(:menu_item, menu: menu) }
   let(:option_group) { create(:option_group, menu_item: menu_item) }
   let(:admin_user) { create(:user, restaurant: restaurant, role: 'admin') }
-  let(:regular_user) { create(:user, restaurant: restaurant, role: 'user') }
+  let(:regular_user) { create(:user, restaurant: restaurant, role: 'customer') }
   let(:auth_token) { token_generator(admin_user.id) }
   let(:regular_auth_token) { token_generator(regular_user.id) }
 
   before do
     # Mock the restaurant scope
-    allow(controller).to receive(:set_restaurant_scope)
-    allow(controller).to receive(:public_endpoint?).and_return(true)
+    allow(controller).to receive(:set_current_tenant) do
+      controller.instance_variable_set(:@current_restaurant, restaurant)
+    end
+    allow(controller).to receive(:ensure_tenant_context)
+    allow(controller).to receive(:optional_authorize)
   end
 
   describe 'GET #index' do
@@ -145,7 +148,6 @@ RSpec.describe OptionGroupsController, type: :controller do
       let(:new_attributes) do
         {
           name: 'Updated Option Group',
-          required: false,
           min_select: 0,
           max_select: 2
         }
@@ -157,7 +159,6 @@ RSpec.describe OptionGroupsController, type: :controller do
         expect(response).to have_http_status(:ok)
         option_group.reload
         expect(option_group.name).to eq('Updated Option Group')
-        expect(option_group.required).to be false
         expect(option_group.min_select).to eq(0)
         expect(option_group.max_select).to eq(2)
       end

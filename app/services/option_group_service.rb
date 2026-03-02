@@ -12,14 +12,15 @@ class OptionGroupService < TenantScopedService
 
   # Create a new option group for a menu item
   def create_option_group(menu_item_id, option_group_params)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless is_admin?
     
     menu_item = scope_query(MenuItem).find_by(id: menu_item_id)
-    return { success: false, errors: ["Menu item not found"], status: :not_found } unless menu_item
+    return { success: false, errors: [ "Menu item not found" ], status: :not_found } unless menu_item
     
     option_group = menu_item.option_groups.build(option_group_params)
     
     if option_group.save
+      option_group.reload  # Reload to include nested options created via options_attributes
       { success: true, option_group: option_group, status: :created }
     else
       { success: false, errors: option_group.errors.full_messages, status: :unprocessable_entity }
@@ -28,10 +29,10 @@ class OptionGroupService < TenantScopedService
 
   # Update an existing option group
   def update_option_group(id, option_group_params)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless is_admin?
     
     option_group = find_option_group_with_tenant_scope(id)
-    return { success: false, errors: ["Option group not found"], status: :not_found } unless option_group
+    return { success: false, errors: [ "Option group not found" ], status: :not_found } unless option_group
     
     if option_group.update(option_group_params)
       { success: true, option_group: option_group }
@@ -42,10 +43,10 @@ class OptionGroupService < TenantScopedService
 
   # Delete an option group
   def delete_option_group(id)
-    return { success: false, errors: ["Forbidden"], status: :forbidden } unless is_admin?
+    return { success: false, errors: [ "Forbidden" ], status: :forbidden } unless is_admin?
     
     option_group = find_option_group_with_tenant_scope(id)
-    return { success: false, errors: ["Option group not found"], status: :not_found } unless option_group
+    return { success: false, errors: [ "Option group not found" ], status: :not_found } unless option_group
     
     option_group.destroy
     { success: true }

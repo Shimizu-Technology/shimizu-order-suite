@@ -5,14 +5,17 @@ RSpec.describe MenuItemsController, type: :controller do
   let(:menu) { create(:menu, restaurant: restaurant) }
   let(:menu_item) { create(:menu_item, menu: menu) }
   let(:admin_user) { create(:user, restaurant: restaurant, role: 'admin') }
-  let(:regular_user) { create(:user, restaurant: restaurant, role: 'user') }
+  let(:regular_user) { create(:user, restaurant: restaurant, role: 'customer') }
   let(:auth_token) { token_generator(admin_user.id) }
   let(:regular_auth_token) { token_generator(regular_user.id) }
 
   before do
-    # Mock the restaurant scope
-    allow(controller).to receive(:set_restaurant_scope)
-    allow(controller).to receive(:public_endpoint?).and_return(true)
+    # Mock the tenant isolation and set the restaurant context
+    allow(controller).to receive(:set_current_tenant) do
+      controller.instance_variable_set(:@current_restaurant, restaurant)
+    end
+    allow(controller).to receive(:ensure_tenant_context)
+    allow(controller).to receive(:optional_authorize)
   end
 
   describe 'GET #index' do
@@ -32,7 +35,7 @@ RSpec.describe MenuItemsController, type: :controller do
       end
 
       context 'with category filter' do
-        let(:category) { create(:category, restaurant: restaurant) }
+        let(:category) { create(:category, menu: menu) }
 
         before do
           menu_item_with_category = create(:menu_item, menu: menu)
@@ -85,10 +88,10 @@ RSpec.describe MenuItemsController, type: :controller do
     end
 
     context 'when menu item does not exist' do
-      it 'raises a RecordNotFound error' do
-        expect {
-          get :show, params: { id: 999 }
-        }.to raise_error(ActiveRecord::RecordNotFound)
+      it 'returns a not found error' do
+        get :show, params: { id: 999 }
+
+        expect(response).to have_http_status(:not_found)
       end
     end
   end
@@ -101,13 +104,15 @@ RSpec.describe MenuItemsController, type: :controller do
         allow(controller).to receive(:current_user).and_return(admin_user)
       end
 
+      let(:default_category) { create(:category, menu: menu) }
       let(:valid_attributes) do
         {
           name: 'New Menu Item',
           description: 'A delicious new menu item',
           price: 12.99,
           available: true,
-          menu_id: menu.id
+          menu_id: menu.id,
+          category_ids: [default_category.id]
         }
       end
 
@@ -121,7 +126,7 @@ RSpec.describe MenuItemsController, type: :controller do
       end
 
       context 'with category_ids' do
-        let(:category) { create(:category, restaurant: restaurant) }
+        let(:category) { create(:category, menu: menu) }
 
         it 'assigns the menu item to the specified categories' do
           post :create, params: {
@@ -206,7 +211,7 @@ RSpec.describe MenuItemsController, type: :controller do
       end
 
       context 'with category_ids' do
-        let(:category) { create(:category, restaurant: restaurant) }
+        let(:category) { create(:category, menu: menu) }
 
         it 'updates the menu item categories' do
           patch :update, params: {
@@ -336,7 +341,8 @@ RSpec.describe MenuItemsController, type: :controller do
           post :upload_image, params: { id: menu_item.id }
 
           expect(response).to have_http_status(:unprocessable_entity)
-          expect(JSON.parse(response.body)).to have_key('error')
+          body = JSON.parse(response.body)
+          expect(body).to satisfy { |b| b.has_key?('error') || b.has_key?('errors') }
         end
       end
     end

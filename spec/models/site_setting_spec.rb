@@ -21,8 +21,9 @@ RSpec.describe SiteSetting, type: :model do
 
   describe 'singleton behavior' do
     it 'creates a new record if none exists' do
+      restaurant = create(:restaurant)
       expect {
-        SiteSetting.first_or_create!
+        SiteSetting.unscoped.where(restaurant_id: restaurant.id).first_or_create!(restaurant: restaurant)
       }.to change(SiteSetting, :count).by(1)
     end
 

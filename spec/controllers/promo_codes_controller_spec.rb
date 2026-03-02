@@ -2,22 +2,25 @@ require 'rails_helper'
 
 RSpec.describe PromoCodesController, type: :controller do
   let(:restaurant) { create(:restaurant) }
-  let(:promo_code) { create(:promo_code) }
+  let(:promo_code) { create(:promo_code, restaurant: restaurant) }
   let(:admin_user) { create(:user, restaurant: restaurant, role: 'admin') }
-  let(:regular_user) { create(:user, restaurant: restaurant, role: 'user') }
+  let(:regular_user) { create(:user, restaurant: restaurant, role: 'customer') }
   let(:auth_token) { token_generator(admin_user.id) }
   let(:regular_auth_token) { token_generator(regular_user.id) }
 
   before do
     # Mock the restaurant scope
-    allow(controller).to receive(:set_restaurant_scope)
-    allow(controller).to receive(:public_endpoint?).and_return(true)
+    allow(controller).to receive(:set_current_tenant) do
+      controller.instance_variable_set(:@current_restaurant, restaurant)
+    end
+    allow(controller).to receive(:ensure_tenant_context)
+    allow(controller).to receive(:optional_authorize)
   end
 
   describe 'GET #index' do
-    let!(:valid_promo) { create(:promo_code, valid_until: 1.month.from_now) }
-    let!(:expired_promo) { create(:promo_code, valid_until: 1.day.ago) }
-    let!(:unlimited_promo) { create(:promo_code, valid_until: nil) }
+    let!(:valid_promo) { create(:promo_code, restaurant: restaurant, valid_until: 1.month.from_now) }
+    let!(:expired_promo) { create(:promo_code, restaurant: restaurant, valid_until: 1.day.ago) }
+    let!(:unlimited_promo) { create(:promo_code, restaurant: restaurant, valid_until: nil) }
 
     context 'when accessed by public (no authentication)' do
       it 'returns only valid promo codes' do

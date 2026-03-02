@@ -142,7 +142,7 @@ class AdminAnalyticsService < TenantScopedService
     when "week"
       grouped_data = order_data.group_by do |data|
         date = data[:order].created_at
-        [date.year, date.cweek]
+        [date.year, date.to_date.cweek]
       end
       
       results = grouped_data.map do |(year, week), data_array|

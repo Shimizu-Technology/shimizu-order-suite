@@ -11,6 +11,7 @@ class OptionGroup < ApplicationRecord
 
   belongs_to :menu_item
   has_many :options, dependent: :destroy
+  accepts_nested_attributes_for :options, allow_destroy: true
 
   validates :name, presence: true
   validates :min_select, numericality: { greater_than_or_equal_to: 0 }
