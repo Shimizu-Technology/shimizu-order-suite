@@ -274,6 +274,7 @@ class RestaurantService
     layout = nil
     seat_count = 0
     locations = []
+    operating_hours = []
     
     # Use unscoped queries to get related data for the specific restaurant
     # This bypasses the default tenant scoping and ensures we get the correct data
@@ -299,12 +300,25 @@ class RestaurantService
         
         # Get locations for this restaurant
         locations = Location.unscoped.where(restaurant_id: restaurant.id).order(is_default: :desc, name: :asc)
+
+        # Get operating hours for this restaurant in a structured form
+        operating_hours = OperatingHour.unscoped.where(restaurant_id: restaurant.id).order(:day_of_week).to_a
       ensure
         # Restore the original tenant context
         ActiveRecord::Base.current_restaurant = original_restaurant
         Rails.logger.debug { "Restored tenant context to restaurant_id: #{original_restaurant&.id || 'nil'}" }
       end
     end
+
+    formatted_hours = operating_hours.map do |oh|
+      if oh.closed?
+        "#{Date::DAYNAMES[oh.day_of_week].first(3)}: Closed"
+      else
+        open_time = oh.open_time&.strftime("%l:%M %p")&.strip
+        close_time = oh.close_time&.strftime("%l:%M %p")&.strip
+        "#{Date::DAYNAMES[oh.day_of_week].first(3)}: #{open_time} - #{close_time}"
+      end
+    end.join(", ")
     
     {
       id:                         restaurant.id,
@@ -321,6 +335,16 @@ class RestaurantService
       allowed_origins:            restaurant.allowed_origins,
       primary_frontend_url:       restaurant.primary_frontend_url,
       custom_pickup_location:     restaurant.custom_pickup_location,
+      hours:                      formatted_hours.presence || "",
+      operating_hours:            operating_hours.map do |oh|
+        {
+          day_of_week: oh.day_of_week,
+          day_name: Date::DAYNAMES[oh.day_of_week],
+          open_time: oh.open_time&.strftime("%H:%M"),
+          close_time: oh.close_time&.strftime("%H:%M"),
+          closed: oh.closed?
+        }
+      end,
       # Social media fields
       facebook_url:               restaurant.facebook_url,
       instagram_url:              restaurant.instagram_url,
