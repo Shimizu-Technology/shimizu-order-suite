@@ -33,22 +33,29 @@ Rails.application.configure do
   config.active_storage.service = :amazon
 
   # --------------------------------
-  # Action Mailer (SendGrid in dev)
+  # Action Mailer (Resend SMTP in dev)
   # --------------------------------
-  mail_domain = ENV.fetch("EMAIL_DOMAIN", "shimizu-order-suite.com")
+  mail_from = ENV.fetch("RESEND_FROM_EMAIL", "noreply@shimizu-technology.com")
+  mail_domain = mail_from.split("@").last
+  resend_api_key = ENV["RESEND_API_KEY"]
 
   config.action_mailer.delivery_method = :smtp
   config.action_mailer.smtp_settings = {
-    user_name:            "apikey",
-    password:             ENV["SENDGRID_API_KEY"],
-    domain:               mail_domain,           # <— was "gmail.com"
-    address:              "smtp.sendgrid.net",
+    user_name:            "resend",
+    password:             resend_api_key,
+    domain:               mail_domain,
+    address:              "smtp.resend.com",
     port:                 587,
     authentication:       :plain,
     enable_starttls_auto: true
   }
 
   config.action_mailer.perform_caching     = false
+  if resend_api_key.blank?
+    config.action_mailer.perform_deliveries = false
+    config.action_mailer.raise_delivery_errors = false
+    Rails.logger.warn("RESEND_API_KEY is not set; email delivery is disabled in development.")
+  end
 
   # Default URL for mailer links (e.g. password reset). Adjust host & port to match your local setup.
   config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
@@ -79,7 +86,7 @@ Rails.application.configure do
 
   # Allow Action Cable access from any origin in development
   config.action_cable.disable_request_forgery_protection = true
-  
+
   # Configure Action Cable URL
   config.action_cable.url = "ws://localhost:3000/cable"
   config.action_cable.allowed_request_origins = [

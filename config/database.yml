@@ -1,31 +1,19 @@
 default: &default
   adapter: postgresql
   encoding: unicode
-  # For a local DB, often you don't need a password if you use trust auth or Peer auth
-  # If you do need one, add it here.
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
 
 development:
-  adapter: postgresql
-  encoding: unicode
+  <<: *default
   database: myapp_development
-  username: myapp_user
-  password:
-  host: localhost
-  port: 5432
 
 
 test:
   <<: *default
   database: myapp_test
-  username: myapp_user
-  password:
-  host: localhost
-  port: 5432
 
 production:
-  adapter: postgresql
-  encoding: unicode
+  <<: *default
   url: <%= ENV["DATABASE_URL"] %>
   # Increased pool size to handle 4000-5000 concurrent users
   # Can be configured via DB_POOL environment variable

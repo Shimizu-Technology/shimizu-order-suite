@@ -553,9 +553,9 @@ end
   - `CLICKSEND_USERNAME`
   - `CLICKSEND_API_KEY`
   - `CLICKSEND_APPROVED_SENDER_ID`
-- **SendGrid** (Emails):
-  - `SENDGRID_USERNAME`
-  - `SENDGRID_API_KEY`
+- **Resend** (Emails via SMTP):
+  - `RESEND_API_KEY`
+  - `RESEND_FROM_EMAIL` (must use a verified Resend domain, e.g. `noreply@shimizu-technology.com`)
 - **Wassenger** (WhatsApp):
   - `WASSENGER_API_KEY`
   - `WASSENGER_GROUP_ID` 

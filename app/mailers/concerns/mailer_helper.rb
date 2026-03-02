@@ -1,5 +1,9 @@
 # app/mailers/concerns/mailer_helper.rb
 module MailerHelper
+  def mailer_from_email
+    ENV.fetch("RESEND_FROM_EMAIL", "noreply@shimizu-technology.com")
+  end
+
   # Get the email header color for a given restaurant
   # Falls back to a default gold color if not set
   def email_header_color_for(restaurant)
@@ -29,8 +33,7 @@ module MailerHelper
   end
 
   def default_from_email
-    domain = ENV.fetch("DEFAULT_EMAIL_DOMAIN", "shimizu-order-suite.com")
-    "noreply@#{domain}"
+    mailer_from_email
   end
 
   # Get the default from address (name + email)
@@ -47,8 +50,7 @@ module MailerHelper
     if first_restaurant
       "#{default_name} <#{email_for_restaurant(first_restaurant)}>"
     else
-      domain = ENV["DEFAULT_EMAIL_DOMAIN"] || "hafaloha-orders.com"
-      "#{default_name} <noreply@#{domain}>"
+      "#{default_name} <#{mailer_from_email}>"
     end
   end
 
@@ -67,42 +69,25 @@ module MailerHelper
       nil
     end
   end
-  
+
   # Get the from address for a given restaurant
   # This is the method called by all mailers
   def restaurant_from_address(restaurant)
     from_address_for(restaurant)
   end
-  
-  # Determine the appropriate email address for a restaurant
-  # First tries to use the restaurant's contact_email field
-  # Falls back to environment variables or defaults if not available
+
+  # Determine the sender email for a restaurant.
+  # For deliverability providers like Resend, keep sender domain fixed
+  # to a verified domain instead of dynamically deriving from contact_email.
   def email_for_restaurant(restaurant)
     return default_fallback_email unless restaurant
-    
-    # First, check if the restaurant has a contact_email
-    if restaurant.contact_email.present?
-      # Extract the domain from the contact email
-      domain = restaurant.contact_email.split('@').last
-      
-      # Use the same domain but with noreply@ prefix for sending
-      return "noreply@#{domain}"
-    end
-    
-    # If admin_settings has an explicit email_domain, use that
-    if restaurant.admin_settings&.dig("email_domain").present?
-      domain = restaurant.admin_settings["email_domain"]
-      return "noreply@#{domain}"
-    end
-    
-    # Finally, fall back to the default email
-    default_fallback_email
+    mailer_from_email
   end
-  
+
   def default_fallback_email
-    "noreply@#{ENV.fetch("DEFAULT_EMAIL_DOMAIN", "shimizu-order-suite.com")}"
+    mailer_from_email
   end
-  
+
   # Get the frontend URL for a restaurant
   # Uses the restaurant's primary_frontend_url, then allowed_origins, then falls back to the environment variable
   def get_frontend_url_for(restaurant)
@@ -112,16 +97,16 @@ module MailerHelper
     elsif restaurant&.allowed_origins.present?
       # Fall back to allowed_origins if primary_frontend_url is not set
       # Use the first allowed origin that's not localhost
-      production_origins = restaurant.allowed_origins.reject { |origin| origin.include?('localhost') }
+      production_origins = restaurant.allowed_origins.reject { |origin| origin.include?("localhost") }
       frontend_url = production_origins.first || restaurant.allowed_origins.first
     else
       # Last resort: use the environment variable
-      frontend_url = ENV['FRONTEND_URL']
+      frontend_url = ENV["FRONTEND_URL"]
     end
-    
+
     # Log the frontend URL being used for debugging
     Rails.logger.info("Using frontend URL: #{frontend_url} (Restaurant: #{restaurant&.name || 'Unknown'})")
-    
+
     frontend_url
   end
 end
