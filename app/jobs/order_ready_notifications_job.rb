@@ -7,6 +7,7 @@ class OrderReadyNotificationsJob < ApplicationJob
   def perform(order_id)
     order = Order.includes(:restaurant).find_by(id: order_id)
     return unless order
+    return unless order.status == "ready"
 
     notification_channels = order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
     restaurant_name = order.restaurant.name

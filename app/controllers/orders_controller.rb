@@ -353,7 +353,7 @@ class OrdersController < ApplicationController
       case notification_type
       when 'order_ready'
         if order.status == 'ready'
-          if enqueue_order_ready_notifications(order, source: "manual_notify", raise_on_failure: true)
+          if enqueue_order_ready_notifications(order, source: "manual_notify", raise_on_failure: false)
             render json: {
               success: true,
               message: 'Order ready notification queued successfully'
