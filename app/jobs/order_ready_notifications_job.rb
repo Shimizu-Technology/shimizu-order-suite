@@ -4,7 +4,7 @@ class OrderReadyNotificationsJob < ApplicationJob
   # Retry orchestration; per-channel jobs are idempotent and prevent duplicates.
   sidekiq_options retry: 8, expires_in: 24.hours
 
-  def perform(order_id)
+  def perform(order_id, transition_token = nil)
     order = Order.includes(:restaurant).find_by(id: order_id)
     return unless order
     return unless order.status == "ready"
@@ -22,9 +22,11 @@ class OrderReadyNotificationsJob < ApplicationJob
       sms_sender = sms_sender.gsub(/\D/, "").gsub(/^1/, "")
     end
 
+    transition_token ||= order.updated_at&.utc&.iso8601(6) || Time.current.utc.iso8601(6)
+
     if notification_channels["email"] != false && order.contact_email.present?
       begin
-        SendOrderReadyEmailJob.perform_later(order.id)
+        SendOrderReadyEmailJob.perform_later(order.id, transition_token)
       rescue StandardError => e
         Rails.logger.error("Failed to enqueue ready email for order #{order.id}: #{e.class} - #{e.message}")
       end
@@ -32,7 +34,7 @@ class OrderReadyNotificationsJob < ApplicationJob
 
     if notification_channels["sms"] == true && order.contact_phone.present?
       begin
-        SendOrderReadySmsJob.perform_later(order.id, sms_sender)
+        SendOrderReadySmsJob.perform_later(order.id, sms_sender, transition_token)
       rescue StandardError => e
         Rails.logger.error("Failed to enqueue ready SMS for order #{order.id}: #{e.class} - #{e.message}")
       end
@@ -40,7 +42,7 @@ class OrderReadyNotificationsJob < ApplicationJob
 
     if order.restaurant.pushover_enabled?
       begin
-        SendOrderReadyPushoverJob.perform_later(order.id)
+        SendOrderReadyPushoverJob.perform_later(order.id, transition_token)
       rescue StandardError => e
         Rails.logger.error("Failed to enqueue ready Pushover for order #{order.id}: #{e.class} - #{e.message}")
       end

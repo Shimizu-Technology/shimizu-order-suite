@@ -1323,8 +1323,9 @@ class OrdersController < ApplicationController
   # Queue order ready notifications via background jobs.
   # Fail-open by default so status transitions never 500 due to Redis/Sidekiq outages.
   def enqueue_order_ready_notifications(order, source:, raise_on_failure: false)
-    OrderReadyNotificationsJob.perform_later(order.id)
-    Rails.logger.info("Queued order ready notifications for order #{order.id} (source=#{source})")
+    transition_token = order.updated_at&.utc&.iso8601(6) || Time.current.utc.iso8601(6)
+    OrderReadyNotificationsJob.perform_later(order.id, transition_token)
+    Rails.logger.info("Queued order ready notifications for order #{order.id} (source=#{source}, transition_token=#{transition_token})")
     true
   rescue StandardError => e
     Rails.logger.error("Failed to queue order ready notifications for order #{order.id} (source=#{source}): #{e.class} - #{e.message}")
