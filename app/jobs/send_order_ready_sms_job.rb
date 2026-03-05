@@ -44,9 +44,4 @@ class SendOrderReadySmsJob < ApplicationJob
     sender
   end
 
-  def mark_notified(key)
-    Rails.cache.write(key, true, expires_in: 7.days)
-  rescue StandardError => e
-    Rails.logger.warn("SMS idempotency write failed for #{key}: #{e.class} - #{e.message}")
-  end
 end
