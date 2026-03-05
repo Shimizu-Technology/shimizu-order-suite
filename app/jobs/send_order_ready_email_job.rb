@@ -8,6 +8,10 @@ class SendOrderReadyEmailJob < ApplicationJob
     return unless order
     return unless order.status == "ready"
 
+    notification_channels = order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
+    return if notification_channels["email"] == false
+    return unless order.contact_email.present?
+
     idempotency_key = "order_ready_notified:email:#{order.id}:#{transition_token}"
     return if already_notified?(idempotency_key)
 
