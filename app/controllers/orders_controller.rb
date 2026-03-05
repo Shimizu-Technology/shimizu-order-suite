@@ -354,26 +354,33 @@ class OrdersController < ApplicationController
       when 'order_ready'
         if order.status == 'ready'
           cooldown_key = "manual_notify_cooldown:order:#{order.id}"
-          cooldown_set = begin
-            Rails.cache.write(cooldown_key, true, expires_in: 60.seconds, unless_exist: true)
+          cooldown_active = begin
+            Rails.cache.read(cooldown_key).present?
           rescue StandardError => e
-            Rails.logger.warn("Manual notify cooldown cache write failed for order #{order.id}: #{e.class} - #{e.message}")
-            true
+            Rails.logger.warn("Manual notify cooldown cache read failed for order #{order.id}: #{e.class} - #{e.message}")
+            false
           end
 
-          unless cooldown_set
+          if cooldown_active
+            response.set_header('Retry-After', '60')
             return render json: {
               success: false,
               message: 'Please wait before resending this notification'
             }, status: :too_many_requests
           end
 
+          transition_token = "manual-#{Time.current.utc.iso8601(6)}"
           if enqueue_order_ready_notifications(
                order,
                source: "manual_notify",
                raise_on_failure: false,
-               transition_token: "manual-#{Time.current.utc.iso8601(6)}"
+               transition_token: transition_token
              )
+            begin
+              Rails.cache.write(cooldown_key, transition_token, expires_in: 60.seconds)
+            rescue StandardError => e
+              Rails.logger.warn("Manual notify cooldown cache update failed for order #{order.id}: #{e.class} - #{e.message}")
+            end
             render json: {
               success: true,
               message: 'Order ready notification queued successfully'
