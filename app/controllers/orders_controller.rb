@@ -353,11 +353,44 @@ class OrdersController < ApplicationController
       case notification_type
       when 'order_ready'
         if order.status == 'ready'
-          send_order_ready_notifications(order)
-          render json: { 
-            success: true, 
-            message: 'Order ready notification sent successfully' 
-          }, status: :ok
+          cooldown_key = "manual_notify_cooldown:order:#{order.id}"
+          cooldown_active = begin
+            Rails.cache.read(cooldown_key).present?
+          rescue StandardError => e
+            Rails.logger.warn("Manual notify cooldown cache read failed for order #{order.id}: #{e.class} - #{e.message}")
+            false
+          end
+
+          if cooldown_active
+            response.set_header('Retry-After', '60')
+            return render json: {
+              success: false,
+              message: 'Please wait before resending this notification'
+            }, status: :too_many_requests
+          end
+
+          transition_token = "manual-#{Time.current.utc.iso8601(6)}"
+          if enqueue_order_ready_notifications(
+               order,
+               source: "manual_notify",
+               raise_on_failure: false,
+               transition_token: transition_token
+             )
+            begin
+              Rails.cache.write(cooldown_key, transition_token, expires_in: 60.seconds)
+            rescue StandardError => e
+              Rails.logger.warn("Manual notify cooldown cache update failed for order #{order.id}: #{e.class} - #{e.message}")
+            end
+            render json: {
+              success: true,
+              message: 'Order ready notification queued successfully'
+            }, status: :accepted
+          else
+            render json: {
+              success: false,
+              message: 'Failed to queue order ready notification'
+            }, status: :service_unavailable
+          end
         else
           render json: { 
             success: false, 
@@ -1197,7 +1230,7 @@ class OrdersController < ApplicationController
 
       # If status changed to 'ready'
       if old_status != "ready" && order.status == "ready"
-        send_order_ready_notifications(order)
+        enqueue_order_ready_notifications(order, source: "status_update")
       end
 
       render json: order
@@ -1314,46 +1347,18 @@ class OrdersController < ApplicationController
 
   # Helper methods for inventory processing (moved to OrderService)
 
-  # Send order ready notifications via email, SMS, and Pushover
-  def send_order_ready_notifications(order)
-    notification_channels = order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
-    restaurant_name = order.restaurant.name
-    # Priority: 1) Restaurant phone, 2) Admin SMS sender ID, 3) Restaurant name
-    sms_sender = order.restaurant.phone_number.presence ||
-                 order.restaurant.admin_settings&.dig("sms_sender_id").presence ||
-                 restaurant_name
-    
-    # Format phone numbers for ClickSend (remove dashes, keep only digits)
-    if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, '').length >= 10
-      sms_sender = sms_sender.gsub(/\D/, '').gsub(/^1/, '')
-    end
+  # Queue order ready notifications via background jobs.
+  # Fail-open by default so status transitions never 500 due to Redis/Sidekiq outages.
+  def enqueue_order_ready_notifications(order, source:, raise_on_failure: false, transition_token: nil)
+    transition_token ||= order.updated_at&.utc&.iso8601(6) || Time.current.utc.iso8601(6)
+    OrderReadyNotificationsJob.perform_later(order.id, transition_token)
+    Rails.logger.info("Queued order ready notifications for order #{order.id} (source=#{source}, transition_token=#{transition_token})")
+    true
+  rescue StandardError => e
+    Rails.logger.error("Failed to queue order ready notifications for order #{order.id} (source=#{source}): #{e.class} - #{e.message}")
+    Rails.logger.error(e.backtrace.first(10).join("\n")) if e.backtrace.present?
 
-    # Send email notification
-    if notification_channels["email"] != false && order.contact_email.present?
-      OrderMailer.order_ready(order).deliver_later
-    end
-
-    # Send SMS notification
-    if notification_channels["sms"] == true && order.contact_phone.present?
-      msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.order_number.presence || order.id} "\
-            "is now ready for pickup! Thank you for choosing #{restaurant_name}."
-      SendSmsJob.perform_later(to: order.contact_phone, body: msg, from: sms_sender)
-    end
-    
-    # Send Pushover notification
-    if order.restaurant.pushover_enabled?
-      message = "Order ##{order.order_number.presence || order.id} is now ready for pickup!\n\n"
-      message += "Customer: #{order.contact_name}\n" if order.contact_name.present?
-      message += "Phone: #{order.contact_phone}" if order.contact_phone.present?
-      
-      order.restaurant.send_pushover_notification(
-        message,
-        "Order Ready for Pickup",
-        { 
-          priority: 1,  # High priority to bypass quiet hours
-          sound: "siren"  # Attention-grabbing sound for ready orders
-        }
-      )
-    end
+    raise if raise_on_failure
+    false
   end
 end

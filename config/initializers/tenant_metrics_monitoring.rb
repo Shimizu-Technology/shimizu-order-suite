@@ -88,9 +88,28 @@ tenant_job_duration = prometheus.histogram(
 
 # Update resource usage metrics periodically
 Thread.new do
-  # Only run in production or when explicitly enabled
-  next unless Rails.env.production? || ENV['ENABLE_METRICS'] == 'true'
-  
+  # Explicitly gate tenant metrics updates and run only in web process (not Sidekiq workers).
+  legacy_enabled = ActiveModel::Type::Boolean.new.cast(ENV["ENABLE_METRICS"])
+  tenant_enabled = ActiveModel::Type::Boolean.new.cast(ENV["ENABLE_TENANT_METRICS"])
+
+  enabled = if ENV.key?("ENABLE_TENANT_METRICS")
+              tenant_enabled
+            else
+              if ENV.key?("ENABLE_METRICS")
+                Rails.logger.warn("DEPRECATION: ENABLE_METRICS has been renamed to ENABLE_TENANT_METRICS. Please update environment variables.")
+              end
+              legacy_enabled
+            end
+  process_name = File.basename($PROGRAM_NAME.to_s)
+  in_sidekiq = process_name.include?('sidekiq') || (defined?(Sidekiq) && Sidekiq.server?)
+  in_rails_server = process_name.include?('rails') && Rails.env.development? && ARGV.any? { |a| a == 'server' || a == 's' }
+  in_web_process = process_name.include?('puma') || in_rails_server
+
+  unless enabled && in_web_process && !in_sidekiq
+    Rails.logger.info('Tenant metrics background updater disabled (requires ENABLE_TENANT_METRICS=true and web process)')
+    next
+  end
+
   loop do
     begin
       # Sleep for a while to avoid excessive DB queries
