@@ -12,7 +12,6 @@ class OrderReadyNotificationsJob < ApplicationJob
     notification_channels = order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
     transition_token ||= order.updated_at&.utc&.iso8601(6) || Time.current.utc.iso8601(6)
 
-    sms_sender = resolve_sms_sender(order)
     enqueue_errors = []
 
     enqueue_channel("email", order.id, transition_token, enqueue_errors) do
@@ -20,7 +19,7 @@ class OrderReadyNotificationsJob < ApplicationJob
     end if notification_channels["email"] != false && order.contact_email.present?
 
     enqueue_channel("sms", order.id, transition_token, enqueue_errors) do
-      SendOrderReadySmsJob.perform_later(order.id, sms_sender, transition_token)
+      SendOrderReadySmsJob.perform_later(order.id, transition_token)
     end if notification_channels["sms"] == true && order.contact_phone.present?
 
     enqueue_channel("pushover", order.id, transition_token, enqueue_errors) do
@@ -45,17 +44,6 @@ class OrderReadyNotificationsJob < ApplicationJob
     enqueue_errors << [channel, e]
   end
 
-  def resolve_sms_sender(order)
-    sender = order.restaurant.phone_number.presence ||
-             order.restaurant.admin_settings&.dig("sms_sender_id").presence ||
-             order.restaurant.name
-
-    if sender&.match?(/^[\+\d\-\s\(\)]+$/) && sender.gsub(/\D/, "").length >= 10
-      sender = sender.gsub(/\D/, "").gsub(/^1/, "")
-    end
-
-    sender
-  end
 
   def enqueue_marker_key(channel, order_id, transition_token)
     "order_ready_enqueue:#{channel}:#{order_id}:#{transition_token}"

@@ -89,7 +89,14 @@ tenant_job_duration = prometheus.histogram(
 # Update resource usage metrics periodically
 Thread.new do
   # Explicitly gate tenant metrics updates and run only in web process (not Sidekiq workers).
-  enabled = ActiveModel::Type::Boolean.new.cast(ENV.fetch('ENABLE_TENANT_METRICS', 'false'))
+  legacy_enabled = ActiveModel::Type::Boolean.new.cast(ENV["ENABLE_METRICS"])
+  tenant_enabled = ActiveModel::Type::Boolean.new.cast(ENV["ENABLE_TENANT_METRICS"])
+
+  if legacy_enabled && ENV["ENABLE_TENANT_METRICS"].blank?
+    Rails.logger.warn("DEPRECATION: ENABLE_METRICS has been renamed to ENABLE_TENANT_METRICS. Please update environment variables.")
+  end
+
+  enabled = tenant_enabled || legacy_enabled
   process_name = File.basename($PROGRAM_NAME.to_s)
   in_sidekiq = process_name.include?('sidekiq') || (defined?(Sidekiq) && Sidekiq.server?)
   in_rails_server = process_name.include?('rails') && Rails.env.development? && ARGV.any? { |a| a.start_with?('s', 'server') }
