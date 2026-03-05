@@ -357,7 +357,7 @@ class OrdersController < ApplicationController
                order,
                source: "manual_notify",
                raise_on_failure: false,
-               transition_token: Time.current.utc.iso8601(6)
+               transition_token: "manual-#{Time.current.to_i / 60}"
              )
             render json: {
               success: true,

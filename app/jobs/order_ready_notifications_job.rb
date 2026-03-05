@@ -26,12 +26,15 @@ class OrderReadyNotificationsJob < ApplicationJob
 
     enqueue_errors = []
 
+    record_enqueue_error = lambda do |channel, error|
+      enqueue_errors << [channel, error]
+    end
+
     if notification_channels["email"] != false && order.contact_email.present?
       begin
         SendOrderReadyEmailJob.perform_later(order.id, transition_token)
       rescue StandardError => e
-        Rails.logger.error("Failed to enqueue ready email for order #{order.id}: #{e.class} - #{e.message}")
-        enqueue_errors << e
+        record_enqueue_error.call("email", e)
       end
     end
 
@@ -39,8 +42,7 @@ class OrderReadyNotificationsJob < ApplicationJob
       begin
         SendOrderReadySmsJob.perform_later(order.id, sms_sender, transition_token)
       rescue StandardError => e
-        Rails.logger.error("Failed to enqueue ready SMS for order #{order.id}: #{e.class} - #{e.message}")
-        enqueue_errors << e
+        record_enqueue_error.call("sms", e)
       end
     end
 
@@ -48,15 +50,14 @@ class OrderReadyNotificationsJob < ApplicationJob
       begin
         SendOrderReadyPushoverJob.perform_later(order.id, transition_token)
       rescue StandardError => e
-        Rails.logger.error("Failed to enqueue ready Pushover for order #{order.id}: #{e.class} - #{e.message}")
-        enqueue_errors << e
+        record_enqueue_error.call("pushover", e)
       end
     end
 
     if enqueue_errors.any?
-      messages = enqueue_errors.map { |e| "#{e.class}: #{e.message}" }.join(" | ")
+      messages = enqueue_errors.map { |channel, error| "#{channel}=#{error.class}: #{error.message}" }.join(" | ")
       Rails.logger.error("OrderReadyNotificationsJob enqueue failures for order #{order.id}: #{messages}")
-      raise enqueue_errors.first
+      raise enqueue_errors.first.last
     end
   end
 end

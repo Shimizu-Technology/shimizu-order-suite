@@ -92,7 +92,7 @@ Thread.new do
   enabled = ActiveModel::Type::Boolean.new.cast(ENV.fetch('ENABLE_TENANT_METRICS', 'false'))
   process_name = File.basename($PROGRAM_NAME.to_s)
   in_sidekiq = process_name.include?('sidekiq') || (defined?(Sidekiq) && Sidekiq.server?)
-  in_web_process = process_name.include?('puma')
+  in_web_process = process_name.include?('puma') || (process_name.include?('rails') && Rails.env.development?)
 
   unless enabled && in_web_process && !in_sidekiq
     Rails.logger.info('Tenant metrics background updater disabled (requires ENABLE_TENANT_METRICS=true and web process)')
