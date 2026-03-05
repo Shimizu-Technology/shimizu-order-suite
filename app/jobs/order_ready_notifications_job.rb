@@ -55,7 +55,8 @@ class OrderReadyNotificationsJob < ApplicationJob
 
     if enqueue_errors.any?
       messages = enqueue_errors.map { |e| "#{e.class}: #{e.message}" }.join(" | ")
-      raise enqueue_errors.first.class, "Failed to enqueue #{enqueue_errors.size} channel(s): #{messages}"
+      Rails.logger.error("OrderReadyNotificationsJob enqueue failures for order #{order.id}: #{messages}")
+      raise enqueue_errors.first
     end
   end
 end
