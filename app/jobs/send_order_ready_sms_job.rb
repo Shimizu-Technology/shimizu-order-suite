@@ -13,7 +13,7 @@ class SendOrderReadySmsJob < ApplicationJob
     return unless notification_channels["sms"] == true
 
     idempotency_key = "order_ready_notified:sms:#{order.id}:#{transition_token}"
-    return if already_notified?(idempotency_key)
+    return unless claim_send_slot(idempotency_key)
 
     sms_sender = resolve_sms_sender(order)
 
@@ -21,16 +21,15 @@ class SendOrderReadySmsJob < ApplicationJob
           "is now ready for pickup! Thank you for choosing #{order.restaurant.name}."
 
     SendSmsJob.perform_now(to: order.contact_phone, body: msg, from: sms_sender)
-    mark_notified(idempotency_key)
   end
 
   private
 
-  def already_notified?(key)
-    Rails.cache.read(key)
+  def claim_send_slot(key)
+    Rails.cache.write(key, true, expires_in: 7.days, unless_exist: true)
   rescue StandardError => e
-    Rails.logger.warn("SMS idempotency read failed for #{key}: #{e.class} - #{e.message}")
-    false
+    Rails.logger.warn("SMS idempotency claim failed for #{key}: #{e.class} - #{e.message}")
+    true
   end
 
   def resolve_sms_sender(order)

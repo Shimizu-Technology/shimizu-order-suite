@@ -30,7 +30,15 @@ class OrderReadyNotificationsJob < ApplicationJob
 
     messages = enqueue_errors.map { |channel, error| "#{channel}=#{error.class}: #{error.message}" }.join(" | ")
     Rails.logger.error("OrderReadyNotificationsJob enqueue failures for order #{order.id}: #{messages}")
-    raise enqueue_errors.first.last
+
+    first_error = enqueue_errors.first.last
+    if enqueue_errors.length == 1
+      raise first_error
+    else
+      aggregate_error = RuntimeError.new("Multiple channel enqueue failures: #{messages}")
+      aggregate_error.set_backtrace(first_error.backtrace)
+      raise aggregate_error
+    end
   end
 
   private
@@ -38,10 +46,18 @@ class OrderReadyNotificationsJob < ApplicationJob
   def enqueue_channel(channel, order_id, transition_token, enqueue_errors)
     return if already_enqueued?(channel, order_id, transition_token)
 
-    yield
-    mark_enqueued(channel, order_id, transition_token)
-  rescue StandardError => e
-    enqueue_errors << [channel, e]
+    begin
+      yield
+    rescue StandardError => e
+      enqueue_errors << [channel, e]
+      return
+    end
+
+    begin
+      mark_enqueued(channel, order_id, transition_token)
+    rescue StandardError => e
+      Rails.logger.warn("OrderReadyNotificationsJob could not write enqueue marker for #{channel}/#{order_id}: #{e.class} - #{e.message}")
+    end
   end
 
 
