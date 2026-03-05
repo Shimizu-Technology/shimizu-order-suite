@@ -9,6 +9,9 @@ class SendOrderReadySmsJob < ApplicationJob
     return unless order.status == "ready"
     return unless order.contact_phone.present?
 
+    notification_channels = order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
+    return unless notification_channels["sms"] == true
+
     idempotency_key = "order_ready_notified:sms:#{order.id}:#{transition_token}"
     return if already_notified?(idempotency_key)
 

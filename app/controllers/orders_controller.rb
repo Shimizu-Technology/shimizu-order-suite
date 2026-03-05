@@ -353,11 +353,26 @@ class OrdersController < ApplicationController
       case notification_type
       when 'order_ready'
         if order.status == 'ready'
+          cooldown_key = "manual_notify_cooldown:order:#{order.id}"
+          cooldown_set = begin
+            Rails.cache.write(cooldown_key, true, expires_in: 60.seconds, unless_exist: true)
+          rescue StandardError => e
+            Rails.logger.warn("Manual notify cooldown cache write failed for order #{order.id}: #{e.class} - #{e.message}")
+            true
+          end
+
+          unless cooldown_set
+            return render json: {
+              success: false,
+              message: 'Please wait before resending this notification'
+            }, status: :too_many_requests
+          end
+
           if enqueue_order_ready_notifications(
                order,
                source: "manual_notify",
                raise_on_failure: false,
-               transition_token: "manual-#{Time.current.to_i / 60}"
+               transition_token: "manual-#{Time.current.utc.iso8601(6)}"
              )
             render json: {
               success: true,
