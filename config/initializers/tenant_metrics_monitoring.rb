@@ -92,11 +92,14 @@ Thread.new do
   legacy_enabled = ActiveModel::Type::Boolean.new.cast(ENV["ENABLE_METRICS"])
   tenant_enabled = ActiveModel::Type::Boolean.new.cast(ENV["ENABLE_TENANT_METRICS"])
 
-  if legacy_enabled && ENV["ENABLE_TENANT_METRICS"].blank?
-    Rails.logger.warn("DEPRECATION: ENABLE_METRICS has been renamed to ENABLE_TENANT_METRICS. Please update environment variables.")
-  end
-
-  enabled = tenant_enabled || legacy_enabled
+  enabled = if ENV.key?("ENABLE_TENANT_METRICS")
+              tenant_enabled
+            else
+              if legacy_enabled
+                Rails.logger.warn("DEPRECATION: ENABLE_METRICS has been renamed to ENABLE_TENANT_METRICS. Please update environment variables.")
+              end
+              legacy_enabled
+            end
   process_name = File.basename($PROGRAM_NAME.to_s)
   in_sidekiq = process_name.include?('sidekiq') || (defined?(Sidekiq) && Sidekiq.server?)
   in_rails_server = process_name.include?('rails') && Rails.env.development? && ARGV.any? { |a| a == 'server' || a == 's' }
