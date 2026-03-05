@@ -88,10 +88,14 @@ tenant_job_duration = prometheus.histogram(
 
 # Update resource usage metrics periodically
 Thread.new do
-  # Explicitly gate tenant metrics updates to avoid Redis pressure in production.
+  # Explicitly gate tenant metrics updates and run only in web process (not Sidekiq workers).
   enabled = ActiveModel::Type::Boolean.new.cast(ENV.fetch('ENABLE_TENANT_METRICS', 'false'))
-  unless enabled
-    Rails.logger.info('Tenant metrics background updater disabled (set ENABLE_TENANT_METRICS=true to enable)')
+  process_name = File.basename($PROGRAM_NAME.to_s)
+  in_sidekiq = process_name.include?('sidekiq') || (defined?(Sidekiq) && Sidekiq.server?)
+  in_web_process = process_name.include?('puma') || defined?(Puma)
+
+  unless enabled && in_web_process && !in_sidekiq
+    Rails.logger.info('Tenant metrics background updater disabled (requires ENABLE_TENANT_METRICS=true and web process)')
     next
   end
 
