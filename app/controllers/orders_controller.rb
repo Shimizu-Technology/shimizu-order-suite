@@ -353,7 +353,12 @@ class OrdersController < ApplicationController
       case notification_type
       when 'order_ready'
         if order.status == 'ready'
-          if enqueue_order_ready_notifications(order, source: "manual_notify", raise_on_failure: false)
+          if enqueue_order_ready_notifications(
+               order,
+               source: "manual_notify",
+               raise_on_failure: false,
+               transition_token: Time.current.utc.iso8601(6)
+             )
             render json: {
               success: true,
               message: 'Order ready notification queued successfully'
@@ -1322,8 +1327,8 @@ class OrdersController < ApplicationController
 
   # Queue order ready notifications via background jobs.
   # Fail-open by default so status transitions never 500 due to Redis/Sidekiq outages.
-  def enqueue_order_ready_notifications(order, source:, raise_on_failure: false)
-    transition_token = order.updated_at&.utc&.iso8601(6) || Time.current.utc.iso8601(6)
+  def enqueue_order_ready_notifications(order, source:, raise_on_failure: false, transition_token: nil)
+    transition_token ||= order.updated_at&.utc&.iso8601(6) || Time.current.utc.iso8601(6)
     OrderReadyNotificationsJob.perform_later(order.id, transition_token)
     Rails.logger.info("Queued order ready notifications for order #{order.id} (source=#{source}, transition_token=#{transition_token})")
     true
