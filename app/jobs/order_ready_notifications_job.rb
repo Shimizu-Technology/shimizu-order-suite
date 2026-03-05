@@ -1,5 +1,5 @@
 class OrderReadyNotificationsJob < ApplicationJob
-  queue_as :notifications
+  queue_as :default
 
   # Retry orchestration; per-channel jobs are idempotent and prevent duplicates.
   sidekiq_options retry: 8, expires_in: 24.hours
@@ -53,6 +53,9 @@ class OrderReadyNotificationsJob < ApplicationJob
       end
     end
 
-    raise enqueue_errors.first if enqueue_errors.any?
+    if enqueue_errors.any?
+      messages = enqueue_errors.map { |e| "#{e.class}: #{e.message}" }.join(" | ")
+      raise enqueue_errors.first.class, "Failed to enqueue #{enqueue_errors.size} channel(s): #{messages}"
+    end
   end
 end
