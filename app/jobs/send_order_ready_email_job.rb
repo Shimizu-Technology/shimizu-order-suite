@@ -4,7 +4,7 @@ class SendOrderReadyEmailJob < ApplicationJob
   sidekiq_options retry: 8, expires_in: 24.hours
 
   def perform(order_id, transition_token)
-    order = Order.find_by(id: order_id)
+    order = Order.includes(:restaurant).find_by(id: order_id)
     return unless order
     return unless order.status == "ready"
 
