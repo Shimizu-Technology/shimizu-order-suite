@@ -10,7 +10,7 @@ class SendOrderReadyPushoverJob < ApplicationJob
     return unless order.restaurant.pushover_enabled?
 
     idempotency_key = "order_ready_notified:pushover:#{order.id}:#{transition_token}"
-    return unless claim_send_slot(idempotency_key)
+    return if already_notified?(idempotency_key)
 
     message = "Order ##{order.order_number.presence || order.id} is now ready for pickup!\n\n"
     message += "Customer: #{order.contact_name}\n" if order.contact_name.present?
@@ -24,14 +24,22 @@ class SendOrderReadyPushoverJob < ApplicationJob
         sound: "siren"
       }
     )
+
+    mark_notified(idempotency_key)
   end
 
   private
 
-  def claim_send_slot(key)
-    Rails.cache.write(key, true, expires_in: 7.days, unless_exist: true)
+  def already_notified?(key)
+    Rails.cache.read(key)
   rescue StandardError => e
-    Rails.logger.warn("Pushover idempotency slot claim failed for #{key}: #{e.class} - #{e.message}")
-    true
+    Rails.logger.warn("Pushover idempotency read failed for #{key}: #{e.class} - #{e.message}")
+    false
+  end
+
+  def mark_notified(key)
+    Rails.cache.write(key, true, expires_in: 7.days)
+  rescue StandardError => e
+    Rails.logger.warn("Pushover idempotency write failed for #{key}: #{e.class} - #{e.message}")
   end
 end

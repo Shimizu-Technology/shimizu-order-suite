@@ -9,17 +9,24 @@ class SendOrderReadyEmailJob < ApplicationJob
     return unless order.status == "ready"
 
     idempotency_key = "order_ready_notified:email:#{order.id}:#{transition_token}"
-    return unless claim_send_slot(idempotency_key)
+    return if already_notified?(idempotency_key)
 
     OrderMailer.order_ready(order).deliver_now
+    mark_notified(idempotency_key)
   end
 
   private
 
-  def claim_send_slot(key)
-    Rails.cache.write(key, true, expires_in: 7.days, unless_exist: true)
+  def already_notified?(key)
+    Rails.cache.read(key)
   rescue StandardError => e
-    Rails.logger.warn("Email idempotency slot claim failed for #{key}: #{e.class} - #{e.message}")
-    true
+    Rails.logger.warn("Email idempotency read failed for #{key}: #{e.class} - #{e.message}")
+    false
+  end
+
+  def mark_notified(key)
+    Rails.cache.write(key, true, expires_in: 7.days)
+  rescue StandardError => e
+    Rails.logger.warn("Email idempotency write failed for #{key}: #{e.class} - #{e.message}")
   end
 end
