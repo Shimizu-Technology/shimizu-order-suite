@@ -88,9 +88,13 @@ tenant_job_duration = prometheus.histogram(
 
 # Update resource usage metrics periodically
 Thread.new do
-  # Only run in production or when explicitly enabled
-  next unless Rails.env.production? || ENV['ENABLE_METRICS'] == 'true'
-  
+  # Explicitly gate tenant metrics updates to avoid Redis pressure in production.
+  enabled = ActiveModel::Type::Boolean.new.cast(ENV.fetch('ENABLE_TENANT_METRICS', 'false'))
+  unless enabled
+    Rails.logger.info('Tenant metrics background updater disabled (set ENABLE_TENANT_METRICS=true to enable)')
+    next
+  end
+
   loop do
     begin
       # Sleep for a while to avoid excessive DB queries
