@@ -24,11 +24,14 @@ class OrderReadyNotificationsJob < ApplicationJob
 
     transition_token ||= order.updated_at&.utc&.iso8601(6) || Time.current.utc.iso8601(6)
 
+    enqueue_errors = []
+
     if notification_channels["email"] != false && order.contact_email.present?
       begin
         SendOrderReadyEmailJob.perform_later(order.id, transition_token)
       rescue StandardError => e
         Rails.logger.error("Failed to enqueue ready email for order #{order.id}: #{e.class} - #{e.message}")
+        enqueue_errors << e
       end
     end
 
@@ -37,6 +40,7 @@ class OrderReadyNotificationsJob < ApplicationJob
         SendOrderReadySmsJob.perform_later(order.id, sms_sender, transition_token)
       rescue StandardError => e
         Rails.logger.error("Failed to enqueue ready SMS for order #{order.id}: #{e.class} - #{e.message}")
+        enqueue_errors << e
       end
     end
 
@@ -45,7 +49,10 @@ class OrderReadyNotificationsJob < ApplicationJob
         SendOrderReadyPushoverJob.perform_later(order.id, transition_token)
       rescue StandardError => e
         Rails.logger.error("Failed to enqueue ready Pushover for order #{order.id}: #{e.class} - #{e.message}")
+        enqueue_errors << e
       end
     end
+
+    raise enqueue_errors.first if enqueue_errors.any?
   end
 end
