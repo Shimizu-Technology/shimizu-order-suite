@@ -10,54 +10,67 @@ class OrderReadyNotificationsJob < ApplicationJob
     return unless order.status == "ready"
 
     notification_channels = order.restaurant.admin_settings&.dig("notification_channels", "orders") || {}
-    restaurant_name = order.restaurant.name
-
-    # Priority: 1) Restaurant phone, 2) Admin SMS sender ID, 3) Restaurant name
-    sms_sender = order.restaurant.phone_number.presence ||
-                 order.restaurant.admin_settings&.dig("sms_sender_id").presence ||
-                 restaurant_name
-
-    # Format phone numbers for ClickSend (remove dashes, keep only digits)
-    if sms_sender&.match?(/^[\+\d\-\s\(\)]+$/) && sms_sender.gsub(/\D/, "").length >= 10
-      sms_sender = sms_sender.gsub(/\D/, "").gsub(/^1/, "")
-    end
-
     transition_token ||= order.updated_at&.utc&.iso8601(6) || Time.current.utc.iso8601(6)
 
+    sms_sender = resolve_sms_sender(order)
     enqueue_errors = []
 
-    record_enqueue_error = lambda do |channel, error|
-      enqueue_errors << [channel, error]
+    enqueue_channel("email", order.id, transition_token, enqueue_errors) do
+      SendOrderReadyEmailJob.perform_later(order.id, transition_token)
+    end if notification_channels["email"] != false && order.contact_email.present?
+
+    enqueue_channel("sms", order.id, transition_token, enqueue_errors) do
+      SendOrderReadySmsJob.perform_later(order.id, sms_sender, transition_token)
+    end if notification_channels["sms"] == true && order.contact_phone.present?
+
+    enqueue_channel("pushover", order.id, transition_token, enqueue_errors) do
+      SendOrderReadyPushoverJob.perform_later(order.id, transition_token)
+    end if order.restaurant.pushover_enabled?
+
+    return if enqueue_errors.empty?
+
+    messages = enqueue_errors.map { |channel, error| "#{channel}=#{error.class}: #{error.message}" }.join(" | ")
+    Rails.logger.error("OrderReadyNotificationsJob enqueue failures for order #{order.id}: #{messages}")
+    raise enqueue_errors.first.last
+  end
+
+  private
+
+  def enqueue_channel(channel, order_id, transition_token, enqueue_errors)
+    return if already_enqueued?(channel, order_id, transition_token)
+
+    yield
+    mark_enqueued(channel, order_id, transition_token)
+  rescue StandardError => e
+    enqueue_errors << [channel, e]
+  end
+
+  def resolve_sms_sender(order)
+    sender = order.restaurant.phone_number.presence ||
+             order.restaurant.admin_settings&.dig("sms_sender_id").presence ||
+             order.restaurant.name
+
+    if sender&.match?(/^[\+\d\-\s\(\)]+$/) && sender.gsub(/\D/, "").length >= 10
+      sender = sender.gsub(/\D/, "").gsub(/^1/, "")
     end
 
-    if notification_channels["email"] != false && order.contact_email.present?
-      begin
-        SendOrderReadyEmailJob.perform_later(order.id, transition_token)
-      rescue StandardError => e
-        record_enqueue_error.call("email", e)
-      end
-    end
+    sender
+  end
 
-    if notification_channels["sms"] == true && order.contact_phone.present?
-      begin
-        SendOrderReadySmsJob.perform_later(order.id, sms_sender, transition_token)
-      rescue StandardError => e
-        record_enqueue_error.call("sms", e)
-      end
-    end
+  def enqueue_marker_key(channel, order_id, transition_token)
+    "order_ready_enqueue:#{channel}:#{order_id}:#{transition_token}"
+  end
 
-    if order.restaurant.pushover_enabled?
-      begin
-        SendOrderReadyPushoverJob.perform_later(order.id, transition_token)
-      rescue StandardError => e
-        record_enqueue_error.call("pushover", e)
-      end
-    end
+  def already_enqueued?(channel, order_id, transition_token)
+    Rails.cache.read(enqueue_marker_key(channel, order_id, transition_token))
+  rescue StandardError => e
+    Rails.logger.warn("OrderReadyNotificationsJob enqueue marker read failed: #{e.class} - #{e.message}")
+    false
+  end
 
-    if enqueue_errors.any?
-      messages = enqueue_errors.map { |channel, error| "#{channel}=#{error.class}: #{error.message}" }.join(" | ")
-      Rails.logger.error("OrderReadyNotificationsJob enqueue failures for order #{order.id}: #{messages}")
-      raise enqueue_errors.first.last
-    end
+  def mark_enqueued(channel, order_id, transition_token)
+    Rails.cache.write(enqueue_marker_key(channel, order_id, transition_token), true, expires_in: 1.day)
+  rescue StandardError => e
+    Rails.logger.warn("OrderReadyNotificationsJob enqueue marker write failed: #{e.class} - #{e.message}")
   end
 end
