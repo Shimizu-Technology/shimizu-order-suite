@@ -95,7 +95,7 @@ Thread.new do
   enabled = if ENV.key?("ENABLE_TENANT_METRICS")
               tenant_enabled
             else
-              if legacy_enabled
+              if ENV.key?("ENABLE_METRICS")
                 Rails.logger.warn("DEPRECATION: ENABLE_METRICS has been renamed to ENABLE_TENANT_METRICS. Please update environment variables.")
               end
               legacy_enabled

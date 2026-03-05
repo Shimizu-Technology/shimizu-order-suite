@@ -76,7 +76,7 @@ class OrderReadyNotificationsJob < ApplicationJob
     write_ok = Rails.cache.write(enqueue_marker_key(channel, order_id, transition_token), true, expires_in: 1.day)
     return if write_ok
 
-    raise "OrderReadyNotificationsJob enqueue marker write returned false for #{channel}/#{order_id}/#{transition_token}"
+    Rails.logger.warn("OrderReadyNotificationsJob enqueue marker write returned false for #{channel}/#{order_id}/#{transition_token}")
   rescue StandardError => e
     Rails.logger.error("OrderReadyNotificationsJob enqueue marker write failed: #{e.class} - #{e.message}")
     raise

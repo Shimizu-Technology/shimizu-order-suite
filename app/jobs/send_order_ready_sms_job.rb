@@ -20,6 +20,8 @@ class SendOrderReadySmsJob < ApplicationJob
     msg = "Hi #{order.contact_name.presence || 'Customer'}, your order ##{order.order_number.presence || order.id} " \
           "is now ready for pickup! Thank you for choosing #{order.restaurant.name}."
 
+    # Intentionally synchronous to preserve single-job idempotency boundaries.
+    # Using perform_later here would add another queue hop and separate retry surface.
     SendSmsJob.perform_now(to: order.contact_phone, body: msg, from: sms_sender)
   end
 
