@@ -581,7 +581,9 @@ class OrdersController < ApplicationController
     # return it instead of creating a duplicate.
     transaction_id = new_params[:transaction_id].presence
     if transaction_id.present?
-      existing_order = Order.find_by(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
+      existing_order = Order.where(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
+                           .where.not(payment_status: ["canceled", "refunded"])
+                           .first
       if existing_order.present?
         Rails.logger.warn("Idempotency hit: returning existing order #{existing_order.id} for transaction_id #{transaction_id}")
         return render json: existing_order, status: :ok
@@ -593,7 +595,9 @@ class OrdersController < ApplicationController
       @order = order_service.create_order(new_params)
     rescue ActiveRecord::RecordNotUnique
       if transaction_id.present?
-        existing_order = Order.find_by(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
+        existing_order = Order.where(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
+                             .where.not(payment_status: ["canceled", "refunded"])
+                             .first
         if existing_order.present?
           Rails.logger.warn("Idempotency race hit: returning existing order #{existing_order.id} for transaction_id #{transaction_id}")
           return render json: existing_order, status: :ok
