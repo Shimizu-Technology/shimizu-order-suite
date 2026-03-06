@@ -602,7 +602,11 @@ class OrdersController < ApplicationController
           Rails.logger.warn("Idempotency race hit: returning existing order #{existing_order.id} for transaction_id #{transaction_id}")
           return render json: existing_order, status: :ok
         end
+
+        Rails.logger.error("RecordNotUnique for transaction_id #{transaction_id} but no non-canceled/refunded order found")
+        return render json: { error: "Duplicate transaction detected. Please contact support." }, status: :conflict
       end
+
       raise
     end
 
