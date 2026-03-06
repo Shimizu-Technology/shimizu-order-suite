@@ -593,8 +593,9 @@ class OrdersController < ApplicationController
     # Create the order using OrderService for proper tenant isolation
     begin
       @order = order_service.create_order(new_params)
-    rescue ActiveRecord::RecordNotUnique
-      if transaction_id.present?
+    rescue ActiveRecord::RecordNotUnique => e
+      idempotency_index = "idx_orders_unique_restaurant_transaction_id_real"
+      if transaction_id.present? && e.message.include?(idempotency_index)
         existing_order = Order.where(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
                              .where.not(payment_status: ["canceled", "refunded"])
                              .first
@@ -603,7 +604,7 @@ class OrdersController < ApplicationController
           return render json: existing_order, status: :ok
         end
 
-        Rails.logger.error("RecordNotUnique for transaction_id #{transaction_id} but no non-canceled/refunded order found")
+        Rails.logger.error("RecordNotUnique on #{idempotency_index} for transaction_id #{transaction_id} but no non-canceled/refunded order found")
         return render json: { error: "Duplicate transaction detected. Please contact support." }, status: :conflict
       end
 
