@@ -577,8 +577,40 @@ class OrdersController < ApplicationController
       end
     end
 
+    # Idempotency guard: if an order already exists for this restaurant+transaction_id,
+    # return it instead of creating a duplicate.
+    transaction_id = new_params[:transaction_id].presence
+    if transaction_id.present?
+      existing_order = Order.where(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
+                           .where.not(payment_status: ["canceled", "refunded"])
+                           .first
+      if existing_order.present?
+        Rails.logger.warn("Idempotency hit: returning existing order #{existing_order.id} for transaction_id #{transaction_id}")
+        return render json: existing_order, status: :ok
+      end
+    end
+
     # Create the order using OrderService for proper tenant isolation
-    @order = order_service.create_order(new_params)
+    begin
+      @order = order_service.create_order(new_params)
+    rescue ActiveRecord::RecordNotUnique => e
+      idempotency_index = "idx_orders_unique_restaurant_transaction_id_real"
+      if transaction_id.present? && e.message.include?(idempotency_index)
+        existing_order = Order.where(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
+                             .where.not(payment_status: ["canceled", "refunded"])
+                             .first
+        if existing_order.present?
+          Rails.logger.warn("Idempotency race hit: returning existing order #{existing_order.id} for transaction_id #{transaction_id}")
+          return render json: existing_order, status: :ok
+        end
+
+        Rails.logger.error("RecordNotUnique on #{idempotency_index} for transaction_id #{transaction_id} but no non-canceled/refunded order found")
+        return render json: { error: "Duplicate transaction detected. Please contact support." }, status: :conflict
+      end
+
+      raise
+    end
+
     @order.status = "pending"
     # The staff_created flag will be set automatically by the before_create callback
     # based on the staff_modal virtual attribute
