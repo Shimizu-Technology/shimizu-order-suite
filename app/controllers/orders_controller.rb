@@ -580,7 +580,7 @@ class OrdersController < ApplicationController
     # Idempotency guard: if an order already exists for this restaurant+transaction_id,
     # return it instead of creating a duplicate.
     transaction_id = new_params[:transaction_id].presence
-    if transaction_id.present?
+    if transaction_id.present? && transaction_id.start_with?("pi_")
       existing_order = Order.where(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
                            .where.not(payment_status: ["canceled", "refunded"])
                            .first
@@ -595,7 +595,7 @@ class OrdersController < ApplicationController
       @order = order_service.create_order(new_params)
     rescue ActiveRecord::RecordNotUnique => e
       idempotency_index = "idx_orders_unique_restaurant_transaction_id_real"
-      if transaction_id.present? && e.message.include?(idempotency_index)
+      if transaction_id.present? && transaction_id.start_with?("pi_") && e.message.include?(idempotency_index)
         existing_order = Order.where(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
                              .where.not(payment_status: ["canceled", "refunded"])
                              .first
