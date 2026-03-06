@@ -577,8 +577,31 @@ class OrdersController < ApplicationController
       end
     end
 
+    # Idempotency guard: if an order already exists for this restaurant+transaction_id,
+    # return it instead of creating a duplicate.
+    transaction_id = new_params[:transaction_id].presence
+    if transaction_id.present?
+      existing_order = Order.find_by(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
+      if existing_order.present?
+        Rails.logger.warn("Idempotency hit: returning existing order #{existing_order.id} for transaction_id #{transaction_id}")
+        return render json: existing_order, status: :ok
+      end
+    end
+
     # Create the order using OrderService for proper tenant isolation
-    @order = order_service.create_order(new_params)
+    begin
+      @order = order_service.create_order(new_params)
+    rescue ActiveRecord::RecordNotUnique
+      if transaction_id.present?
+        existing_order = Order.find_by(restaurant_id: new_params[:restaurant_id], transaction_id: transaction_id)
+        if existing_order.present?
+          Rails.logger.warn("Idempotency race hit: returning existing order #{existing_order.id} for transaction_id #{transaction_id}")
+          return render json: existing_order, status: :ok
+        end
+      end
+      raise
+    end
+
     @order.status = "pending"
     # The staff_created flag will be set automatically by the before_create callback
     # based on the staff_modal virtual attribute
