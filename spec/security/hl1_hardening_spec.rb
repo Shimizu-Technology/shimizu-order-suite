@@ -315,6 +315,22 @@ RSpec.describe "HL1 hardening fixes" do
       )
     end
 
+    it "accepts retrieved PaymentIntents with symbol-keyed restaurant metadata" do
+      tagged_intent = OpenStruct.new(
+        id: "pi_symbol_metadata",
+        metadata: { restaurant_id: restaurant.id.to_s }
+      )
+
+      allow(Stripe::PaymentIntent).to receive(:retrieve)
+        .with("pi_symbol_metadata", { api_key: "sk_test_redacted" })
+        .and_return(tagged_intent)
+
+      result = described_class.new(restaurant).retrieve_payment_intent("pi_symbol_metadata")
+
+      expect(result[:success]).to eq(true)
+      expect(result[:payment_intent]).to eq(tagged_intent)
+    end
+
     it "rejects retrieved PaymentIntents without restaurant metadata" do
       untagged_intent = OpenStruct.new(
         id: "pi_untagged",

@@ -308,6 +308,7 @@ class TenantStripeService < TenantScopedService
     metadata = payment_intent.respond_to?(:metadata) ? payment_intent.metadata : nil
     return {} unless metadata.present?
 
-    metadata.respond_to?(:to_h) ? metadata.to_h : metadata
+    raw_metadata = metadata.respond_to?(:to_h) ? metadata.to_h : metadata
+    raw_metadata.respond_to?(:transform_keys) ? raw_metadata.transform_keys(&:to_s) : raw_metadata
   end
 end
