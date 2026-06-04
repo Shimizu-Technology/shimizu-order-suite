@@ -167,6 +167,79 @@ RSpec.describe "HL1 hardening fixes" do
       expect(OrderPayment.count).to eq(0)
     end
 
+    it "rejects over-requested menu item stock before persisting the order" do
+      expect do
+        post "/orders",
+             params: {
+               restaurant_id: restaurant.id,
+               order: {
+                 items: [
+                   {
+                     id: menu_item.id,
+                     name: menu_item.name,
+                     price: menu_item.price,
+                     quantity: menu_item.stock_quantity + 1
+                   }
+                 ],
+                 total: 10.99,
+                 contact_name: "Test Guest",
+                 contact_email: "guest@example.com",
+                 contact_phone: "+16711234567",
+                 vip_code: "VIP-ROLLBACK",
+                 payment_method: "credit_card",
+                 location_id: location.id
+               }
+             },
+             headers: {
+               "X-Frontend-ID" => "hafaloha",
+               "X-Frontend-Restaurant-ID" => restaurant.id.to_s
+             }
+      end.not_to change(Order, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to eq("Insufficient stock")
+      expect(json["details"]).to include(
+        "#{menu_item.name}: only #{menu_item.stock_quantity} available (requested #{menu_item.stock_quantity + 1})"
+      )
+    end
+
+    it "rejects menu item IDs from another restaurant before persisting the order" do
+      other_restaurant = create(:restaurant)
+      other_menu = create(:menu, restaurant: other_restaurant)
+      other_item = create(:menu_item, menu: other_menu)
+
+      expect do
+        post "/orders",
+             params: {
+               restaurant_id: restaurant.id,
+               order: {
+                 items: [
+                   {
+                     id: other_item.id,
+                     name: other_item.name,
+                     price: other_item.price,
+                     quantity: 1
+                   }
+                 ],
+                 total: 10.99,
+                 contact_name: "Test Guest",
+                 contact_email: "guest@example.com",
+                 contact_phone: "+16711234567",
+                 vip_code: "VIP-ROLLBACK",
+                 payment_method: "credit_card",
+                 location_id: location.id
+               }
+             },
+             headers: {
+               "X-Frontend-ID" => "hafaloha",
+               "X-Frontend-Restaurant-ID" => restaurant.id.to_s
+             }
+      end.not_to change(Order, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to eq("Menu items not found: #{other_item.id}")
+    end
+
     it "does not deduct later merchandise items when an earlier merchandise item fails" do
       collection = MerchandiseCollection.create!(restaurant: restaurant, name: "Shirts")
       merch_item = MerchandiseItem.create!(merchandise_collection: collection, name: "Logo Shirt", base_price: 20)

@@ -1003,6 +1003,27 @@ class OrdersController < ApplicationController
     end
   end
 
+  def menu_items_for_current_restaurant(item_ids)
+    return MenuItem.none if item_ids.blank? || current_restaurant.blank?
+
+    MenuItem.unscoped
+            .joins(:menu)
+            .where(id: item_ids, menus: { restaurant_id: current_restaurant.id })
+  end
+
+  def unavailable_options_for_item(menu_item, option_ids)
+    return Option.none if menu_item.blank? || option_ids.blank? || current_restaurant.blank?
+
+    Option.unscoped
+          .joins(option_group: { menu_item: :menu })
+          .where(
+            id: option_ids,
+            is_available: false,
+            option_groups: { menu_item_id: menu_item.id },
+            menus: { restaurant_id: current_restaurant.id }
+          )
+  end
+
   def tracked_inventory_options_for_item(item, tracking_group)
     selected_options = []
 
@@ -1284,7 +1305,7 @@ class OrdersController < ApplicationController
 
     if order_items.present?
       item_ids = order_items.map { |item| (item[:id] || item["id"]).to_i }.select { |id| id > 0 }.uniq
-      menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
+      menu_items_by_id = menu_items_for_current_restaurant(item_ids).index_by(&:id)
 
       missing_ids = item_ids - menu_items_by_id.keys
       if missing_ids.any?
@@ -1342,7 +1363,7 @@ class OrdersController < ApplicationController
         selected_options = item[:selected_options] || item["selected_options"]
         if selected_options.is_a?(Array) && selected_options.any?
           option_ids = selected_options.map { |opt| opt[:id] || opt["id"] }.compact
-          Option.where(id: option_ids, is_available: false).each do |option|
+          unavailable_options_for_item(menu_item, option_ids).each do |option|
             unavailable_options << {
               item_name: menu_item&.name || "Unknown item",
               option_name: option.name,
