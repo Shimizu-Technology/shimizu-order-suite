@@ -1229,14 +1229,14 @@ class OrdersController < ApplicationController
       if variant.nil?
         result[:success] = false
         result[:errors] << "#{item_name}: variant not found"
-        next
+        break
       end
 
       remaining_stock = remaining_stock_by_variant_id.fetch(variant.id, variant.stock_quantity)
       if remaining_stock < quantity
         result[:success] = false
         result[:errors] << "#{item_name}: only #{remaining_stock} available (requested #{quantity})"
-        next
+        break
       end
 
       remaining_stock_by_variant_id[variant.id] = remaining_stock - quantity
