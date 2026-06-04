@@ -226,12 +226,17 @@ class OrdersController < ApplicationController
       return render json: { error: "transaction_id is required" }, status: :bad_request
     end
 
+    client_secret = params[:payment_intent_client_secret].presence || params[:client_secret].presence
+    unless valid_transaction_lookup_secret?(transaction_id, client_secret)
+      return render json: { error: "Valid payment intent client secret is required" }, status: :forbidden
+    end
+
     order = Order.where(restaurant_id: current_restaurant.id, transaction_id: transaction_id)
                  .where.not(payment_status: [ "canceled", "refunded" ])
                  .first
 
     if order.present?
-      render json: order, status: :ok
+      render json: public_order_confirmation_json(order), status: :ok
     else
       head :not_found
     end
@@ -952,6 +957,51 @@ class OrdersController < ApplicationController
   end
 
   private
+
+  def valid_transaction_lookup_secret?(transaction_id, client_secret)
+    return false unless transaction_id.to_s.start_with?("pi_") && client_secret.present?
+
+    result = TenantStripeService.new(current_restaurant).retrieve_payment_intent(transaction_id)
+    return false unless result[:success]
+
+    result[:payment_intent].client_secret == client_secret
+  rescue StandardError => e
+    Rails.logger.warn("Order transaction lookup validation failed for #{transaction_id}: #{e.class} - #{e.message}")
+    false
+  end
+
+  def public_order_confirmation_json(order)
+    {
+      id: order.id,
+      order_number: order.order_number,
+      status: order.status,
+      total: order.total,
+      items: public_order_items(order.items),
+      merchandise_items: public_order_items(order.merchandise_items),
+      created_at: order.created_at,
+      estimated_pickup_time: order.estimated_pickup_time,
+      location_name: order.location&.name,
+      location_address: order.location&.address,
+      requires_advance_notice: order.requires_advance_notice?,
+      max_advance_notice_hours: order.max_advance_notice_hours
+    }
+  end
+
+  def public_order_items(items)
+    Array(items).map do |item|
+      item_hash = item.respond_to?(:to_unsafe_h) ? item.to_unsafe_h : item
+      next item unless item_hash.respond_to?(:[])
+
+      {
+        id: item_hash["id"] || item_hash[:id],
+        name: item_hash["name"] || item_hash[:name],
+        price: item_hash["price"] || item_hash[:price],
+        quantity: item_hash["quantity"] || item_hash[:quantity],
+        size: item_hash["size"] || item_hash[:size],
+        color: item_hash["color"] || item_hash[:color]
+      }.compact
+    end
+  end
 
   def vip_code_unavailable_response(vip_access_code)
     if vip_access_code.max_uses && vip_access_code.current_uses >= vip_access_code.max_uses

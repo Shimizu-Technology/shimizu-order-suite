@@ -1,7 +1,7 @@
 class StripeController < ApplicationController
   include TenantIsolation
 
-  before_action :ensure_tenant_context, except: [ :webhook, :global_webhook ]
+  before_action :ensure_tenant_context, except: [ :webhook, :global_webhook, :confirm_intent ]
 
   # Create a payment intent for Stripe
   def create_intent
@@ -113,6 +113,20 @@ class StripeController < ApplicationController
 
   # Confirm a payment intent (if needed server-side)
   def confirm_intent
+    unless params[:restaurant_id].present?
+      render json: { error: "restaurant_id is required" }, status: :unprocessable_entity
+      return
+    end
+
+    restaurant = Restaurant.find_by(id: params[:restaurant_id])
+    unless restaurant
+      render json: { error: "Restaurant not found" }, status: :not_found
+      return
+    end
+
+    @current_restaurant = restaurant
+    ActiveRecord::Base.current_restaurant = restaurant
+
     id = params[:payment_intent_id]
     result = tenant_stripe_service.confirm_payment_intent(id)
 
@@ -126,6 +140,8 @@ class StripeController < ApplicationController
     else
       render json: { error: result[:errors].join(", ") }, status: result[:status] || :unprocessable_entity
     end
+  ensure
+    ActiveRecord::Base.current_restaurant = nil
   end
 
   # Handle Stripe webhooks

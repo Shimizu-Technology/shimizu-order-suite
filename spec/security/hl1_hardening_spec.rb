@@ -55,7 +55,10 @@ RSpec.describe "HL1 hardening fixes" do
         :restaurant,
         vip_enabled: true,
         admin_settings: {
-          "payment_gateway" => { "test_mode" => true }
+          "payment_gateway" => {
+            "test_mode" => true,
+            "secret_key" => "sk_test_redacted"
+          }
         }
       )
     end
@@ -82,7 +85,18 @@ RSpec.describe "HL1 hardening fixes" do
       )
     end
 
-    it "finds an existing order by Stripe transaction id for checkout recovery" do
+    it "rejects order lookup without a payment intent client secret" do
+      get "/orders/by_transaction",
+          params: { restaurant_id: restaurant.id, transaction_id: "pi_lookup_hl1" },
+          headers: {
+            "X-Frontend-ID" => "hafaloha",
+            "X-Frontend-Restaurant-ID" => restaurant.id.to_s
+          }
+
+      expect(response).to have_http_status(:forbidden)
+    end
+
+    it "finds an existing order by Stripe transaction id for checkout recovery without exposing PII" do
       order = create(
         :order,
         restaurant: restaurant,
@@ -91,8 +105,22 @@ RSpec.describe "HL1 hardening fixes" do
         payment_status: "completed"
       )
 
+      allow(Stripe::PaymentIntent).to receive(:retrieve)
+        .with("pi_lookup_hl1", { api_key: "sk_test_redacted" })
+        .and_return(
+          OpenStruct.new(
+            id: "pi_lookup_hl1",
+            client_secret: "pi_lookup_hl1_secret_redacted",
+            metadata: { "restaurant_id" => restaurant.id.to_s }
+          )
+        )
+
       get "/orders/by_transaction",
-          params: { restaurant_id: restaurant.id, transaction_id: "pi_lookup_hl1" },
+          params: {
+            restaurant_id: restaurant.id,
+            transaction_id: "pi_lookup_hl1",
+            payment_intent_client_secret: "pi_lookup_hl1_secret_redacted"
+          },
           headers: {
             "X-Frontend-ID" => "hafaloha",
             "X-Frontend-Restaurant-ID" => restaurant.id.to_s
@@ -100,6 +128,8 @@ RSpec.describe "HL1 hardening fixes" do
 
       expect(response).to have_http_status(:ok)
       expect(json["id"]).to eq(order.id)
+      expect(json).to include("items" => [], "merchandise_items" => [])
+      expect(json).not_to include("contact_name", "contact_email", "contact_phone", "special_instructions")
     end
 
     it "rolls back order, payment, and VIP usage when final inventory processing fails" do
