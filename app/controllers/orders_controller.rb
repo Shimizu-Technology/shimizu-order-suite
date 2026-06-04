@@ -219,7 +219,7 @@ class OrdersController < ApplicationController
     render json: order
   end
 
-  # GET /orders/by_transaction?transaction_id=pi_...
+  # POST /orders/by_transaction
   def by_transaction
     transaction_id = params[:transaction_id].presence || params[:payment_intent_id].presence
     unless transaction_id.present?
@@ -1003,6 +1003,34 @@ class OrdersController < ApplicationController
     end
   end
 
+  def tracked_inventory_options_for_item(item, tracking_group)
+    selected_options = []
+
+    customizations = item[:customizations] || item["customizations"] || {}
+    customizations.each do |key, value|
+      next unless key.to_s == tracking_group.id.to_s || key.to_s == tracking_group.name
+
+      Array(value).each do |selected_value|
+        selected_option = tracking_group.options.find_by(id: selected_value) ||
+                          tracking_group.options.find_by(name: selected_value)
+        selected_options << selected_option if selected_option
+      end
+    end
+
+    item_selected_options = item[:selected_options] || item["selected_options"]
+    if item_selected_options.is_a?(Array)
+      item_selected_options.each do |selected_option_data|
+        option_id = selected_option_data[:id] || selected_option_data["id"]
+        next unless option_id
+
+        selected_option = tracking_group.options.find_by(id: option_id)
+        selected_options << selected_option if selected_option
+      end
+    end
+
+    selected_options.uniq(&:id)
+  end
+
   def vip_code_unavailable_response(vip_access_code)
     if vip_access_code.max_uses && vip_access_code.current_uses >= vip_access_code.max_uses
       {
@@ -1328,47 +1356,17 @@ class OrdersController < ApplicationController
         tracking_group = menu_item.option_inventory_tracking_group
         next unless tracking_group
 
-        customizations = item[:customizations] || item["customizations"] || {}
-        customizations.each do |key, value|
-          next unless key.to_s == tracking_group.id.to_s || key.to_s == tracking_group.name
+        tracked_inventory_options_for_item(item, tracking_group).each do |selected_option|
+          available_stock = selected_option.available_stock
+          next unless available_stock < quantity
 
-          Array(value).each do |selected_value|
-            selected_option = tracking_group.options.find_by(id: selected_value) ||
-                              tracking_group.options.find_by(name: selected_value)
-            next unless selected_option
-
-            available_stock = selected_option.available_stock
-            if available_stock < quantity
-              insufficient_options << {
-                item_name: menu_item.name,
-                option_name: selected_option.name,
-                option_group: tracking_group.name,
-                available: available_stock,
-                requested: quantity
-              }
-            end
-          end
-        end
-
-        if selected_options.is_a?(Array)
-          selected_options.each do |selected_option_data|
-            option_id = selected_option_data[:id] || selected_option_data["id"]
-            next unless option_id
-
-            tracked_option = tracking_group.options.find_by(id: option_id)
-            next unless tracked_option
-
-            available_stock = tracked_option.available_stock
-            if available_stock < quantity
-              insufficient_options << {
-                item_name: menu_item.name,
-                option_name: tracked_option.name,
-                option_group: tracking_group.name,
-                available: available_stock,
-                requested: quantity
-              }
-            end
-          end
+          insufficient_options << {
+            item_name: menu_item.name,
+            option_name: selected_option.name,
+            option_group: tracking_group.name,
+            available: available_stock,
+            requested: quantity
+          }
         end
       end
 

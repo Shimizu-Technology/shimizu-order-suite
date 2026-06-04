@@ -288,7 +288,7 @@ Rails.application.routes.draw do
 
     collection do
       get :unacknowledged
-      get :by_transaction
+      post :by_transaction
       get :creators, to: "orders#order_creators"
     end
 

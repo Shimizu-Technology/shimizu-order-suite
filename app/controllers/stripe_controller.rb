@@ -113,6 +113,12 @@ class StripeController < ApplicationController
 
   # Confirm a payment intent (if needed server-side)
   def confirm_intent
+    id = params[:payment_intent_id].presence
+    unless id.present?
+      render json: { error: "payment_intent_id is required" }, status: :bad_request
+      return
+    end
+
     unless params[:restaurant_id].present?
       render json: { error: "restaurant_id is required" }, status: :unprocessable_entity
       return
@@ -127,7 +133,6 @@ class StripeController < ApplicationController
     @current_restaurant = restaurant
     ActiveRecord::Base.current_restaurant = restaurant
 
-    id = params[:payment_intent_id]
     result = tenant_stripe_service.confirm_payment_intent(id)
 
     if result[:success]

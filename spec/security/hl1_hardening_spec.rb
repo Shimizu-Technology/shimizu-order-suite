@@ -86,12 +86,12 @@ RSpec.describe "HL1 hardening fixes" do
     end
 
     it "rejects order lookup without a payment intent client secret" do
-      get "/orders/by_transaction",
-          params: { restaurant_id: restaurant.id, transaction_id: "pi_lookup_hl1" },
-          headers: {
-            "X-Frontend-ID" => "hafaloha",
-            "X-Frontend-Restaurant-ID" => restaurant.id.to_s
-          }
+      post "/orders/by_transaction",
+           params: { restaurant_id: restaurant.id, transaction_id: "pi_lookup_hl1" },
+           headers: {
+             "X-Frontend-ID" => "hafaloha",
+             "X-Frontend-Restaurant-ID" => restaurant.id.to_s
+           }
 
       expect(response).to have_http_status(:forbidden)
     end
@@ -115,16 +115,16 @@ RSpec.describe "HL1 hardening fixes" do
           )
         )
 
-      get "/orders/by_transaction",
-          params: {
-            restaurant_id: restaurant.id,
-            transaction_id: "pi_lookup_hl1",
-            payment_intent_client_secret: "pi_lookup_hl1_secret_redacted"
-          },
-          headers: {
-            "X-Frontend-ID" => "hafaloha",
-            "X-Frontend-Restaurant-ID" => restaurant.id.to_s
-          }
+      post "/orders/by_transaction",
+           params: {
+             restaurant_id: restaurant.id,
+             transaction_id: "pi_lookup_hl1",
+             payment_intent_client_secret: "pi_lookup_hl1_secret_redacted"
+           },
+           headers: {
+             "X-Frontend-ID" => "hafaloha",
+             "X-Frontend-Restaurant-ID" => restaurant.id.to_s
+           }
 
       expect(response).to have_http_status(:ok)
       expect(json["id"]).to eq(order.id)
@@ -193,6 +193,13 @@ RSpec.describe "HL1 hardening fixes" do
       expect(result[:success]).to eq(false)
       expect(result[:errors]).to include("Missing shirt: variant not found")
       expect(variant.reload.stock_quantity).to eq(3)
+    end
+
+    it "rejects Stripe confirmation requests without a payment intent id" do
+      post "/stripe/confirm_intent", params: { restaurant_id: restaurant.id }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(json["error"]).to eq("payment_intent_id is required")
     end
   end
 
