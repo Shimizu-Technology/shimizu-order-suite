@@ -124,15 +124,8 @@ class TenantStripeService < TenantScopedService
     end
 
     payment_intent = Stripe::PaymentIntent.retrieve(id, { api_key: secret_key })
-    intent_restaurant_id = payment_intent_metadata(payment_intent)["restaurant_id"]
-
-    if intent_restaurant_id.present? && intent_restaurant_id.to_s != @restaurant.id.to_s
-      return {
-        success: false,
-        errors: [ "Payment intent does not belong to this restaurant" ],
-        status: :forbidden
-      }
-    end
+    tenant_validation = validate_payment_intent_tenant(payment_intent)
+    return tenant_validation unless tenant_validation[:success]
 
     {
       success: true,
@@ -158,15 +151,8 @@ class TenantStripeService < TenantScopedService
     end
 
     payment_intent = Stripe::PaymentIntent.retrieve(id, { api_key: secret_key })
-    intent_restaurant_id = payment_intent_metadata(payment_intent)["restaurant_id"]
-
-    if intent_restaurant_id.present? && intent_restaurant_id.to_s != @restaurant.id.to_s
-      return {
-        success: false,
-        errors: [ "Payment intent does not belong to this restaurant" ],
-        status: :forbidden
-      }
-    end
+    tenant_validation = validate_payment_intent_tenant(payment_intent)
+    return tenant_validation unless tenant_validation[:success]
 
     if payment_intent.status == "requires_confirmation"
       payment_intent = payment_intent.confirm({}, { api_key: secret_key })
@@ -294,6 +280,28 @@ class TenantStripeService < TenantScopedService
 
   def stripe_api_key(payment_settings)
     payment_settings["secret_key"]
+  end
+
+  def validate_payment_intent_tenant(payment_intent)
+    intent_restaurant_id = payment_intent_metadata(payment_intent)["restaurant_id"]
+
+    unless intent_restaurant_id.present?
+      return {
+        success: false,
+        errors: [ "Payment intent is missing restaurant metadata" ],
+        status: :forbidden
+      }
+    end
+
+    if intent_restaurant_id.to_s != @restaurant.id.to_s
+      return {
+        success: false,
+        errors: [ "Payment intent does not belong to this restaurant" ],
+        status: :forbidden
+      }
+    end
+
+    { success: true }
   end
 
   def payment_intent_metadata(payment_intent)

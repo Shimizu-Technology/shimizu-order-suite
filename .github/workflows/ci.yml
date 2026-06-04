@@ -35,7 +35,24 @@ jobs:
           bundler-cache: true
 
       - name: Lint code for consistent style
-        run: bin/rubocop -f github
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+            mapfile -t ruby_files < <(
+              git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" -- \
+                '*.rb' '*.rake' 'Gemfile' '.rubocop.yml' |
+              grep -v '^db/schema\.rb$' || true
+            )
+
+            if [[ ${#ruby_files[@]} -eq 0 ]]; then
+              echo "No Ruby files changed; skipping RuboCop."
+            else
+              bin/rubocop -f github "${ruby_files[@]}"
+            fi
+          else
+            bin/rubocop -f github
+          fi
 
   test:
     runs-on: ubuntu-latest

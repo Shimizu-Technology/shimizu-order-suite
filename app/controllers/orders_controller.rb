@@ -3,7 +3,7 @@
 class OrdersController < ApplicationController
   include TenantIsolation
 
-  before_action :authorize_request, except: [ :create, :show ]
+  before_action :authorize_request, except: [ :create, :show, :by_transaction ]
   before_action :ensure_tenant_context
 
   # GET /orders
@@ -217,6 +217,24 @@ class OrdersController < ApplicationController
     order = Order.find(params[:id])
     authorize order
     render json: order
+  end
+
+  # GET /orders/by_transaction?transaction_id=pi_...
+  def by_transaction
+    transaction_id = params[:transaction_id].presence || params[:payment_intent_id].presence
+    unless transaction_id.present?
+      return render json: { error: "transaction_id is required" }, status: :bad_request
+    end
+
+    order = Order.where(restaurant_id: current_restaurant.id, transaction_id: transaction_id)
+                 .where.not(payment_status: [ "canceled", "refunded" ])
+                 .first
+
+    if order.present?
+      render json: order, status: :ok
+    else
+      head :not_found
+    end
   end
 
   # GET /orders/new_since/:id
@@ -596,7 +614,18 @@ class OrdersController < ApplicationController
 
         vip_access_code.use! if defined?(vip_access_code) && vip_access_code
 
-        create_initial_order_payment!(@order, test_mode)
+        payment_result = create_initial_order_payment(@order, test_mode)
+        unless payment_result[:success]
+          transaction_result = {
+            success: false,
+            json: {
+              error: "Payment record creation failed",
+              details: payment_result[:errors]
+            },
+            status: :unprocessable_entity
+          }
+          raise ActiveRecord::Rollback
+        end
 
         inventory_result = process_initial_order_inventory!(@order, test_mode)
         unless inventory_result[:success]
@@ -946,21 +975,23 @@ class OrdersController < ApplicationController
     end
   end
 
-  def create_initial_order_payment!(order, test_mode)
-    return unless order.payment_method.present? && order.payment_amount.present? && order.payment_amount.to_f > 0
+  def create_initial_order_payment(order, test_mode)
+    return { success: true, errors: [] } unless order.payment_method.present? && order.payment_amount.present? && order.payment_amount.to_f > 0
 
     payment_id = order.payment_id || order.transaction_id
 
     # For Stripe payments, ensure payment_id starts with 'pi_' for test mode
     if order.payment_method == "stripe" && test_mode && (!payment_id || !payment_id.start_with?("pi_"))
       payment_id = "pi_test_#{SecureRandom.hex(16)}"
-      order.update!(payment_id: payment_id)
+      unless order.update(payment_id: payment_id)
+        return { success: false, errors: order.errors.full_messages.presence || [ "Unable to record test payment id" ] }
+      end
       Rails.logger.info("Generated Stripe-like payment_id for test mode: #{payment_id}")
     end
 
     payment_details = normalize_initial_payment_details(order)
 
-    payment = order.order_payments.create!(
+    payment = order.order_payments.create(
       payment_type: "initial",
       amount: order.payment_amount,
       payment_method: order.payment_method,
@@ -970,7 +1001,15 @@ class OrdersController < ApplicationController
       description: "Initial payment",
       payment_details: payment_details
     )
+
+    unless payment.persisted?
+      errors = payment.errors.full_messages.presence || [ "Initial payment could not be recorded" ]
+      Rails.logger.error("Initial OrderPayment failed for order #{order.id}: #{errors}")
+      return { success: false, errors: errors }
+    end
+
     Rails.logger.info("Created initial OrderPayment record: #{payment.inspect}")
+    { success: true, errors: [] }
   end
 
   def normalize_initial_payment_details(order)
@@ -1055,6 +1094,9 @@ class OrdersController < ApplicationController
   def process_initial_merchandise_inventory!(order, result)
     return unless order.merchandise_items.present?
 
+    deductions = []
+    remaining_stock_by_variant_id = {}
+
     order.merchandise_items.each do |item|
       variant_id = item[:merchandise_variant_id] || item["merchandise_variant_id"] || item[:variant_id] || item["variant_id"]
       quantity = (item[:quantity] || item["quantity"] || 1).to_i
@@ -1071,14 +1113,23 @@ class OrdersController < ApplicationController
         next
       end
 
-      if variant.stock_quantity < quantity
+      remaining_stock = remaining_stock_by_variant_id.fetch(variant.id, variant.stock_quantity)
+      if remaining_stock < quantity
         result[:success] = false
-        result[:errors] << "#{item_name}: only #{variant.stock_quantity} available (requested #{quantity})"
+        result[:errors] << "#{item_name}: only #{remaining_stock} available (requested #{quantity})"
         next
       end
 
+      remaining_stock_by_variant_id[variant.id] = remaining_stock - quantity
+      deductions << { variant: variant, quantity: quantity }
+    end
+
+    return unless result[:success]
+
+    deductions.each do |deduction|
+      variant = deduction[:variant]
       variant.reduce_stock!(
-        quantity,
+        deduction[:quantity],
         false, # Don't allow negative stock
         order,
         @current_user

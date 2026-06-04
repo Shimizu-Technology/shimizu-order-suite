@@ -82,6 +82,26 @@ RSpec.describe "HL1 hardening fixes" do
       )
     end
 
+    it "finds an existing order by Stripe transaction id for checkout recovery" do
+      order = create(
+        :order,
+        restaurant: restaurant,
+        location: location,
+        transaction_id: "pi_lookup_hl1",
+        payment_status: "completed"
+      )
+
+      get "/orders/by_transaction",
+          params: { restaurant_id: restaurant.id, transaction_id: "pi_lookup_hl1" },
+          headers: {
+            "X-Frontend-ID" => "hafaloha",
+            "X-Frontend-Restaurant-ID" => restaurant.id.to_s
+          }
+
+      expect(response).to have_http_status(:ok)
+      expect(json["id"]).to eq(order.id)
+    end
+
     it "rolls back order, payment, and VIP usage when final inventory processing fails" do
       expect do
         post "/orders",
@@ -115,6 +135,34 @@ RSpec.describe "HL1 hardening fixes" do
       expect(json["error"]).to eq("Inventory processing failed")
       expect(vip_code.reload.current_uses).to eq(0)
       expect(OrderPayment.count).to eq(0)
+    end
+
+    it "does not deduct later merchandise items when an earlier merchandise item fails" do
+      collection = MerchandiseCollection.create!(restaurant: restaurant, name: "Shirts")
+      merch_item = MerchandiseItem.create!(merchandise_collection: collection, name: "Logo Shirt", base_price: 20)
+      variant = MerchandiseVariant.create!(
+        merchandise_item: merch_item,
+        size: "M",
+        color: "Black",
+        stock_quantity: 3,
+        price_adjustment: 0
+      )
+      order = create(
+        :order,
+        restaurant: restaurant,
+        location: location,
+        merchandise_items: [
+          { "merchandise_variant_id" => -1, "name" => "Missing shirt", "quantity" => 1 },
+          { "merchandise_variant_id" => variant.id, "name" => "Logo Shirt", "quantity" => 1 }
+        ]
+      )
+      result = { success: true, errors: [], low_stock_variants: [] }
+
+      OrdersController.new.send(:process_initial_merchandise_inventory!, order, result)
+
+      expect(result[:success]).to eq(false)
+      expect(result[:errors]).to include("Missing shirt: variant not found")
+      expect(variant.reload.stock_quantity).to eq(3)
     end
   end
 
@@ -155,6 +203,23 @@ RSpec.describe "HL1 hardening fixes" do
         payment_intent_id: "pi_test_hl1",
         payment_method_types: [ "card" ]
       )
+    end
+
+    it "rejects retrieved PaymentIntents without restaurant metadata" do
+      untagged_intent = OpenStruct.new(
+        id: "pi_untagged",
+        metadata: {}
+      )
+
+      allow(Stripe::PaymentIntent).to receive(:retrieve)
+        .with("pi_untagged", { api_key: "sk_test_redacted" })
+        .and_return(untagged_intent)
+
+      result = described_class.new(restaurant).retrieve_payment_intent("pi_untagged")
+
+      expect(result[:success]).to eq(false)
+      expect(result[:status]).to eq(:forbidden)
+      expect(result[:errors]).to include("Payment intent is missing restaurant metadata")
     end
 
     it "rejects retrieved PaymentIntents from another restaurant" do
