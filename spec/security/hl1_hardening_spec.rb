@@ -307,6 +307,42 @@ RSpec.describe "HL1 hardening fixes" do
       expect(json["error"]).to eq("Menu items not found: #{other_item.id}")
     end
 
+    it "rejects cross-tenant menu item IDs during update prevalidation" do
+      admin = create(:user, :admin, restaurant: restaurant)
+      order = create(:order, restaurant: restaurant, location: location, items: [])
+      other_restaurant = create(:restaurant)
+      other_menu = create(:menu, restaurant: other_restaurant)
+      other_item = create(:menu_item, menu: other_menu, enable_stock_tracking: true, stock_quantity: 0)
+      other_group = create(:option_group, menu_item: other_item, enable_inventory_tracking: true)
+      other_option = create(:option, option_group: other_group, stock_quantity: 0, damaged_quantity: 0)
+
+      patch "/orders/#{order.id}",
+            params: {
+              restaurant_id: restaurant.id,
+              order: {
+                items: [
+                  {
+                    id: other_item.id,
+                    name: other_item.name,
+                    price: other_item.price,
+                    quantity: 1,
+                    customizations: { other_group.id.to_s => [ other_option.id ] }
+                  }
+                ]
+              }
+            },
+            headers: {
+              "Authorization" => "Bearer #{TokenService.generate_token(admin, restaurant.id)}",
+              "X-Frontend-ID" => "hafaloha",
+              "X-Frontend-Restaurant-ID" => restaurant.id.to_s,
+              "X-Restaurant-ID" => restaurant.id.to_s
+            }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to eq("Menu items not found: #{other_item.id}")
+      expect(order.reload.items).to eq([])
+    end
+
     it "rejects cumulative merchandise stock overages before persisting the order" do
       collection = MerchandiseCollection.create!(restaurant: restaurant, name: "Tumblers")
       merch_item = MerchandiseItem.create!(merchandise_collection: collection, name: "Logo Tumbler", base_price: 20)

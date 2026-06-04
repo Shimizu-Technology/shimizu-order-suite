@@ -742,67 +742,51 @@ class OrdersController < ApplicationController
       # Get updated item list
       new_items = permitted_params[:items]
 
-      # Load menu items for validation
-      item_ids = new_items.map { |i| i[:id] || i["id"] }.compact.uniq
-      menu_items_by_id = MenuItem.where(id: item_ids).index_by(&:id)
+      # Load menu items for validation scoped to the active restaurant. This
+      # prevents authenticated users from probing cross-tenant option inventory
+      # through update error messages.
+      item_ids = new_items.map { |i| (i[:id] || i["id"]).to_i }.select { |id| id > 0 }.uniq
+      menu_items_by_id = menu_items_for_current_restaurant(item_ids).index_by(&:id)
 
+      missing_ids = item_ids - menu_items_by_id.keys
+      if missing_ids.any?
+        return render json: { error: "Menu items not found: #{missing_ids.join(', ')}" },
+                      status: :unprocessable_entity
+      end
+
+      requested_option_quantities = {}
       new_items.each do |item|
-        item_id = item[:id] || item["id"]
+        item_id = (item[:id] || item["id"]).to_i
         menu_item = menu_items_by_id[item_id]
         next unless menu_item&.uses_option_level_inventory?
 
-        # Get the option inventory tracking group
         tracking_group = menu_item.option_inventory_tracking_group
         next unless tracking_group
 
-        # Extract customizations and quantity
-        customizations = item[:customizations] || item["customizations"] || {}
         quantity_ordered = (item[:quantity] || item["quantity"] || 1).to_i
-
-        # Check inventory for customizations
-        customizations.each do |key, value|
-          if key.to_s == tracking_group.id.to_s || key.to_s == tracking_group.name
-            selected_option = tracking_group.options.find_by(id: value) || tracking_group.options.find_by(name: value)
-
-            if selected_option
-              available_stock = selected_option.available_stock
-
-              if available_stock < quantity_ordered
-                insufficient_options << {
-                  item_name: menu_item.name,
-                  option_name: selected_option.name,
-                  option_group: tracking_group.name,
-                  available: available_stock,
-                  requested: quantity_ordered
-                }
-              end
-            end
-          end
+        tracked_inventory_options_for_item(item, tracking_group).each do |selected_option|
+          requested_option_quantities[selected_option.id] ||= {
+            item_name: menu_item.name,
+            option: selected_option,
+            option_group: tracking_group.name,
+            quantity: 0
+          }
+          requested_option_quantities[selected_option.id][:quantity] += quantity_ordered
         end
+      end
 
-        # Check selected_options array format
-        selected_options = item[:selected_options] || item["selected_options"]
-        if selected_options.is_a?(Array)
-          selected_options.each do |selected_option_data|
-            option_id = selected_option_data[:id] || selected_option_data["id"]
-            next unless option_id
+      requested_option_quantities.each_value do |request|
+        available_stock = request[:option].available_stock
+        requested_quantity = request[:quantity]
+        next unless available_stock < requested_quantity
 
-            tracked_option = tracking_group.options.find_by(id: option_id)
-            if tracked_option
-              available_stock = tracked_option.available_stock
-
-              if available_stock < quantity_ordered
-                insufficient_options << {
-                  item_name: menu_item.name,
-                  option_name: tracked_option.name,
-                  option_group: tracking_group.name,
-                  available: available_stock,
-                  requested: quantity_ordered
-                }
-              end
-            end
-          end
-        end
+        insufficient_options << {
+          item_name: request[:item_name],
+          option_name: request[:option].name,
+          option_group: request[:option_group],
+          available: available_stock,
+          requested: requested_quantity
+        }
       end
 
       if insufficient_options.any?
