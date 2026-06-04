@@ -96,6 +96,38 @@ RSpec.describe "HL1 hardening fixes" do
       expect(response).to have_http_status(:forbidden)
     end
 
+    it "rate limits transaction lookup before calling Stripe" do
+      allow(Rails).to receive(:cache).and_return(ActiveSupport::Cache::MemoryStore.new)
+      stub_const("OrdersController::TRANSACTION_LOOKUP_RATE_LIMIT", 1)
+      stub_const("OrdersController::TRANSACTION_LOOKUP_RATE_WINDOW", 5.minutes)
+
+      allow(Stripe::PaymentIntent).to receive(:retrieve)
+        .with("pi_rate_limit_hl1", { api_key: "sk_test_redacted" })
+        .and_return(
+          OpenStruct.new(
+            id: "pi_rate_limit_hl1",
+            client_secret: "pi_rate_limit_hl1_secret_redacted",
+            metadata: { "restaurant_id" => restaurant.id.to_s }
+          )
+        )
+
+      2.times do
+        post "/orders/by_transaction",
+             params: {
+               restaurant_id: restaurant.id,
+               transaction_id: "pi_rate_limit_hl1",
+               payment_intent_client_secret: "pi_rate_limit_hl1_secret_redacted"
+             },
+             headers: {
+               "X-Frontend-ID" => "hafaloha",
+               "X-Frontend-Restaurant-ID" => restaurant.id.to_s
+             }
+      end
+
+      expect(response).to have_http_status(:too_many_requests)
+      expect(Stripe::PaymentIntent).to have_received(:retrieve).once
+    end
+
     it "finds an existing order by Stripe transaction id for checkout recovery without exposing PII" do
       order = create(
         :order,

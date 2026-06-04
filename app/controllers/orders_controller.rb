@@ -3,6 +3,9 @@
 class OrdersController < ApplicationController
   include TenantIsolation
 
+  TRANSACTION_LOOKUP_RATE_LIMIT = ENV.fetch("ORDER_TRANSACTION_LOOKUP_RATE_LIMIT", 30).to_i
+  TRANSACTION_LOOKUP_RATE_WINDOW = ENV.fetch("ORDER_TRANSACTION_LOOKUP_RATE_WINDOW", 300).to_i.seconds
+
   before_action :authorize_request, except: [ :create, :show, :by_transaction ]
   before_action :ensure_tenant_context
 
@@ -227,6 +230,15 @@ class OrdersController < ApplicationController
     end
 
     client_secret = params[:payment_intent_client_secret].presence || params[:client_secret].presence
+    unless client_secret.present?
+      return render json: { error: "Valid payment intent client secret is required" }, status: :forbidden
+    end
+
+    if transaction_lookup_rate_limited?
+      return render json: { error: "Too many transaction lookup attempts. Please try again later." },
+                    status: :too_many_requests
+    end
+
     unless valid_transaction_lookup_secret?(transaction_id, client_secret)
       return render json: { error: "Valid payment intent client secret is required" }, status: :forbidden
     end
@@ -957,6 +969,30 @@ class OrdersController < ApplicationController
   end
 
   private
+
+  def transaction_lookup_rate_limited?
+    window_seconds = TRANSACTION_LOOKUP_RATE_WINDOW.to_i
+    window_key = Time.current.to_i / window_seconds
+    cache_key = [
+      "orders",
+      "by_transaction",
+      "rate_limit",
+      current_restaurant&.id || "unknown_restaurant",
+      request.remote_ip.presence || request.ip.presence || "unknown_ip",
+      window_key
+    ].join(":")
+
+    count = Rails.cache.increment(cache_key, 1, expires_in: TRANSACTION_LOOKUP_RATE_WINDOW)
+    unless count
+      count = Rails.cache.read(cache_key).to_i + 1
+      Rails.cache.write(cache_key, count, expires_in: TRANSACTION_LOOKUP_RATE_WINDOW)
+    end
+
+    count > TRANSACTION_LOOKUP_RATE_LIMIT
+  rescue StandardError => e
+    Rails.logger.warn("Order transaction lookup rate limit check failed: #{e.class} - #{e.message}")
+    false
+  end
 
   def valid_transaction_lookup_secret?(transaction_id, client_secret)
     return false unless transaction_id.to_s.start_with?("pi_") && client_secret.present?
