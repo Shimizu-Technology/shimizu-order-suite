@@ -1319,13 +1319,25 @@ class OrdersController < ApplicationController
       max_required_notice = menu_items_by_id.values.map(&:advance_notice_hours).compact.max || 0
       pickup_time_value = order_payload[:estimated_pickup_time] || order_payload["estimated_pickup_time"] ||
                           order_payload[:pickup_time] || order_payload["pickup_time"]
-      if max_required_notice >= 24 && pickup_time_value.present?
-        requested_pickup_time = pickup_time_value.is_a?(Time) ? pickup_time_value : Time.zone.parse(pickup_time_value.to_s)
+      if max_required_notice >= 24
+        unless pickup_time_value.present?
+          return {
+            success: false,
+            error: "Pickup time is required for items needing #{max_required_notice} hours advance notice",
+            status: :unprocessable_entity
+          }
+        end
+
+        requested_pickup_time = begin
+          pickup_time_value.is_a?(Time) ? pickup_time_value : Time.zone.parse(pickup_time_value.to_s)
+        rescue ArgumentError
+          nil
+        end
         unless requested_pickup_time
           return { success: false, error: "Invalid pickup time", status: :unprocessable_entity }
         end
 
-        earliest_allowed = Time.current + 24.hours
+        earliest_allowed = Time.current + max_required_notice.hours
         if requested_pickup_time < earliest_allowed
           return {
             success: false,
@@ -1335,7 +1347,26 @@ class OrdersController < ApplicationController
         end
       end
 
+      requested_item_quantities = Hash.new(0)
+      order_items.each do |item|
+        item_id = (item[:id] || item["id"]).to_i
+        next unless item_id > 0
+
+        requested_item_quantities[item_id] += (item[:quantity] || item["quantity"] || 1).to_i
+      end
+
       stock_errors = []
+      requested_item_quantities.each do |item_id, requested_quantity|
+        menu_item = menu_items_by_id[item_id]
+        next unless menu_item&.enable_stock_tracking
+
+        available = menu_item.available_quantity || 0
+        if available < requested_quantity
+          stock_errors << "#{menu_item.name}: only #{available} available (requested #{requested_quantity})"
+        end
+      end
+
+      requested_option_quantities = {}
       unavailable_options = []
       items_with_unavailable_required_groups = []
       insufficient_options = []
@@ -1344,13 +1375,6 @@ class OrdersController < ApplicationController
         item_id = (item[:id] || item["id"]).to_i
         menu_item = menu_items_by_id[item_id]
         quantity = (item[:quantity] || item["quantity"] || 1).to_i
-
-        if menu_item&.enable_stock_tracking
-          available = menu_item.available_quantity || 0
-          if available < quantity
-            stock_errors << "#{menu_item.name}: only #{available} available (requested #{quantity})"
-          end
-        end
 
         if menu_item&.has_required_groups_with_unavailable_options?
           items_with_unavailable_required_groups << {
@@ -1378,17 +1402,28 @@ class OrdersController < ApplicationController
         next unless tracking_group
 
         tracked_inventory_options_for_item(item, tracking_group).each do |selected_option|
-          available_stock = selected_option.available_stock
-          next unless available_stock < quantity
-
-          insufficient_options << {
+          requested_option_quantities[selected_option.id] ||= {
             item_name: menu_item.name,
-            option_name: selected_option.name,
+            option: selected_option,
             option_group: tracking_group.name,
-            available: available_stock,
-            requested: quantity
+            quantity: 0
           }
+          requested_option_quantities[selected_option.id][:quantity] += quantity
         end
+      end
+
+      requested_option_quantities.each_value do |request|
+        available_stock = request[:option].available_stock
+        requested_quantity = request[:quantity]
+        next unless available_stock < requested_quantity
+
+        insufficient_options << {
+          item_name: request[:item_name],
+          option_name: request[:option].name,
+          option_group: request[:option_group],
+          available: available_stock,
+          requested: requested_quantity
+        }
       end
 
       if stock_errors.any?
@@ -1426,6 +1461,7 @@ class OrdersController < ApplicationController
     merchandise_items = order_payload[:merchandise_items] || order_payload["merchandise_items"] || []
     if merchandise_items.present?
       insufficient_items = []
+      requested_merchandise_quantities = {}
 
       merchandise_items.each do |item|
         variant_id = item[:merchandise_variant_id] || item["merchandise_variant_id"] || item[:variant_id] || item["variant_id"]
@@ -1437,13 +1473,27 @@ class OrdersController < ApplicationController
 
         if variant.nil?
           insufficient_items << { name: item_name, reason: "variant not found" }
-        elsif variant.stock_quantity < quantity
-          insufficient_items << {
-            name: "#{item_name} (#{variant.color}, #{variant.size})",
-            available: variant.stock_quantity,
-            requested: quantity
-          }
+          next
         end
+
+        requested_merchandise_quantities[variant.id] ||= {
+          item_name: item_name,
+          variant: variant,
+          quantity: 0
+        }
+        requested_merchandise_quantities[variant.id][:quantity] += quantity
+      end
+
+      requested_merchandise_quantities.each_value do |request|
+        variant = request[:variant]
+        quantity = request[:quantity]
+        next unless variant.stock_quantity < quantity
+
+        insufficient_items << {
+          name: "#{request[:item_name]} (#{variant.color}, #{variant.size})",
+          available: variant.stock_quantity,
+          requested: quantity
+        }
       end
 
       if insufficient_items.any?

@@ -203,6 +203,41 @@ RSpec.describe "HL1 hardening fixes" do
       )
     end
 
+    it "requires pickup time for items with advance-notice requirements before persisting the order" do
+      menu_item.update!(advance_notice_hours: 24)
+
+      expect do
+        post "/orders",
+             params: {
+               restaurant_id: restaurant.id,
+               order: {
+                 items: [
+                   {
+                     id: menu_item.id,
+                     name: menu_item.name,
+                     price: menu_item.price,
+                     quantity: 1
+                   }
+                 ],
+                 total: 10.99,
+                 contact_name: "Test Guest",
+                 contact_email: "guest@example.com",
+                 contact_phone: "+16711234567",
+                 vip_code: "VIP-ROLLBACK",
+                 payment_method: "credit_card",
+                 location_id: location.id
+               }
+             },
+             headers: {
+               "X-Frontend-ID" => "hafaloha",
+               "X-Frontend-Restaurant-ID" => restaurant.id.to_s
+             }
+      end.not_to change(Order, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to eq("Pickup time is required for items needing 24 hours advance notice")
+    end
+
     it "rejects menu item IDs from another restaurant before persisting the order" do
       other_restaurant = create(:restaurant)
       other_menu = create(:menu, restaurant: other_restaurant)
@@ -238,6 +273,48 @@ RSpec.describe "HL1 hardening fixes" do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(json["error"]).to eq("Menu items not found: #{other_item.id}")
+    end
+
+    it "rejects cumulative merchandise stock overages before persisting the order" do
+      collection = MerchandiseCollection.create!(restaurant: restaurant, name: "Tumblers")
+      merch_item = MerchandiseItem.create!(merchandise_collection: collection, name: "Logo Tumbler", base_price: 20)
+      variant = MerchandiseVariant.create!(
+        merchandise_item: merch_item,
+        size: "One Size",
+        color: "Blue",
+        stock_quantity: 3,
+        price_adjustment: 0
+      )
+
+      expect do
+        post "/orders",
+             params: {
+               restaurant_id: restaurant.id,
+               order: {
+                 merchandise_items: [
+                   { merchandise_variant_id: variant.id, name: "Logo Tumbler", quantity: 2 },
+                   { merchandise_variant_id: variant.id, name: "Logo Tumbler", quantity: 2 }
+                 ],
+                 total: 40.00,
+                 contact_name: "Test Guest",
+                 contact_email: "guest@example.com",
+                 contact_phone: "+16711234567",
+                 vip_code: "VIP-ROLLBACK",
+                 payment_method: "credit_card",
+                 location_id: location.id
+               }
+             },
+             headers: {
+               "X-Frontend-ID" => "hafaloha",
+               "X-Frontend-Restaurant-ID" => restaurant.id.to_s
+             }
+      end.not_to change(Order, :count)
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(json["error"]).to eq("Some items have insufficient stock")
+      expect(json["insufficient_items"]).to include(
+        hash_including("available" => 3, "requested" => 4)
+      )
     end
 
     it "does not deduct later merchandise items when an earlier merchandise item fails" do
