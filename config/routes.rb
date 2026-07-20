@@ -9,6 +9,7 @@ Rails.application.routes.draw do
   
   # Health check endpoints
   get "/health/check", to: "health#index"
+  get "/health/frontend", to: "health#frontend"
   get "/health/sidekiq", to: "health#sidekiq_stats"
   
   # Public endpoints (no authentication required)
