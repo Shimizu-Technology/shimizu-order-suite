@@ -58,4 +58,20 @@ RSpec.describe "Public restaurant details", type: :request do
     expect(settings.dig("payment_gateway", "secret_key")).to eq("server-secret")
     expect(settings.dig("web_push", "vapid_private_key")).to eq("private-vapid-key")
   end
+
+  it "keeps an empty payment gateway object when only private keys are stored" do
+    restaurant.update!(
+      admin_settings: {
+        "payment_gateway" => {
+          "secret_key" => "server-secret",
+          "webhook_secret" => "webhook-secret"
+        }
+      }
+    )
+
+    get "/restaurants/#{restaurant.id}"
+
+    expect(response).to have_http_status(:ok)
+    expect(json.fetch("admin_settings").fetch("payment_gateway")).to eq({})
+  end
 end

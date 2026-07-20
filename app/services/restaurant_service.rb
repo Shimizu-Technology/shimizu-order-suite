@@ -399,7 +399,7 @@ class RestaurantService
     public_settings = settings.slice(*PUBLIC_ADMIN_SETTING_KEYS)
     payment_gateway = settings.fetch("payment_gateway", {}).slice(*PUBLIC_PAYMENT_GATEWAY_KEYS)
 
-    public_settings["payment_gateway"] = payment_gateway if payment_gateway.present?
+    public_settings["payment_gateway"] = payment_gateway
     public_settings
   end
 end
