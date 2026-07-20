@@ -1,5 +1,26 @@
 # app/services/restaurant_service.rb
 class RestaurantService
+  PUBLIC_ADMIN_SETTING_KEYS = %w[
+    custom_pickup_google_maps_url
+    custom_pickup_hours
+    custom_pickup_instructions
+    fallback_image_url
+    hero_image_url
+    menu_layout_preferences
+    pickup_display
+    reservation_settings
+    reservations
+    spinner_image_url
+  ].freeze
+
+  PUBLIC_PAYMENT_GATEWAY_KEYS = %w[
+    client_id
+    environment
+    payment_processor
+    publishable_key
+    test_mode
+  ].freeze
+
   attr_reader :current_restaurant, :analytics
   
   def initialize(current_restaurant = nil, analytics_service = nil)
@@ -361,5 +382,24 @@ class RestaurantService
       has_multiple_locations:     locations.count > 1,
       default_location_id:        locations.find { |l| l.is_default? }&.id
     }
+  end
+
+  # Public restaurant pages need presentation settings and public payment
+  # identifiers, but never server credentials or notification secrets.
+  def public_restaurant_json(restaurant)
+    restaurant_json(restaurant).merge(
+      admin_settings: public_admin_settings(restaurant.admin_settings)
+    )
+  end
+
+  private
+
+  def public_admin_settings(admin_settings)
+    settings = (admin_settings || {}).deep_stringify_keys
+    public_settings = settings.slice(*PUBLIC_ADMIN_SETTING_KEYS)
+    payment_gateway = settings.fetch("payment_gateway", {}).slice(*PUBLIC_PAYMENT_GATEWAY_KEYS)
+
+    public_settings["payment_gateway"] = payment_gateway if payment_gateway.present?
+    public_settings
   end
 end

@@ -2,7 +2,8 @@
 class RestaurantsController < ApplicationController
   include TenantIsolation
   
-  before_action :authorize_request, except: [:show]
+  before_action :authorize_request, except: [ :show ]
+  before_action :optional_authorize, only: [ :show ]
   
   # Override global_access_permitted to allow public access to show
   def global_access_permitted?
@@ -29,7 +30,13 @@ class RestaurantsController < ApplicationController
     result = restaurant_service.get_restaurant(params[:id], current_user)
     
     if result[:success]
-      render json: restaurant_service.restaurant_json(result[:restaurant])
+      restaurant_json = if current_user&.admin_or_above?
+        restaurant_service.restaurant_json(result[:restaurant])
+      else
+        restaurant_service.public_restaurant_json(result[:restaurant])
+      end
+
+      render json: restaurant_json
     else
       render json: { errors: result[:errors] }, status: result[:status] || :not_found
     end
